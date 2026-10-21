@@ -42,6 +42,7 @@ import coil.compose.AsyncImage
 import gitee.leolin_me.erkepp.data.ActivityItem
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.toUserMessage
+import gitee.leolin_me.erkepp.ui.rememberCoverRequest
 import kotlinx.coroutines.launch
 
 /** 我的活动：走官方的 `activity/my-list`，与发现页的列表接口不是同一套。 */
@@ -156,13 +157,13 @@ private fun MyActivityRow(item: ActivityItem, onClick: () -> Unit) {
     ) {
         Box(
             modifier = Modifier
-                .size(width = 96.dp, height = 72.dp)
+                .size(width = ThumbnailWidthDp.dp, height = 72.dp)
                 .clip(RoundedCornerShape(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
             if (item.cover != null) {
                 AsyncImage(
-                    model = item.cover,
+                    model = rememberCoverRequest(item.cover, ThumbnailWidthDp, maxWidthPx = 320),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
@@ -205,3 +206,6 @@ private fun statusText(status: Int): String = when (status) {
 
 private fun formatHoursText(value: Double): String =
     if (value == value.toLong().toDouble()) value.toLong().toString() else String.format(java.util.Locale.US, "%.1f", value)
+
+/** 缩略图宽度（dp），同时用作封面解码宽度的基准。 */
+private const val ThumbnailWidthDp = 96

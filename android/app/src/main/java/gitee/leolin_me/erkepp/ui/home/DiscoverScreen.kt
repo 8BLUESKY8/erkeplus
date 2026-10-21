@@ -56,8 +56,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import androidx.compose.ui.platform.LocalContext
 import gitee.leolin_me.erkepp.AppLog
 import gitee.leolin_me.erkepp.R
 import gitee.leolin_me.erkepp.data.ActivityItem
@@ -66,6 +64,8 @@ import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.AppPreferences
 import gitee.leolin_me.erkepp.data.BlockRules
 import gitee.leolin_me.erkepp.data.toUserMessage
+import gitee.leolin_me.erkepp.ui.gridCardWidthDp
+import gitee.leolin_me.erkepp.ui.rememberCoverRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -93,7 +93,7 @@ fun DiscoverScreen(
     val showCategoryTags = preferences.showCategoryTags
     val selectedCategoryIds = preferences.selectedCategoryIds
     val preloadEnabled = preferences.preloadEnabled
-    val simpleMode = preferences.simpleMode
+    val showCover = preferences.showCover
     val titleLines = preferences.titleLines
     val blockedKeywords = preferences.blockedKeywords
     val blockedRegexes = preferences.blockedRegexes
@@ -429,7 +429,7 @@ fun DiscoverScreen(
                         showCount = showCount,
                         showOrganization = showOrganization,
                         customText = customText,
-                        simpleMode = simpleMode,
+                        showCover = showCover,
                         titleLines = titleLines,
                         onClick = { onOpenActivity(item.id) },
                     )
@@ -482,22 +482,18 @@ private fun ActivityCard(
     showCount: Boolean,
     showOrganization: Boolean,
     customText: String,
-    simpleMode: Boolean,
+    showCover: Boolean,
     titleLines: Int,
     onClick: () -> Unit,
 ) {
-    val context = LocalContext.current
-    val imageRequest = remember(item.cover) {
-        ImageRequest.Builder(context)
-            .data(item.cover)
-            .size(480, 360)
-            .crossfade(false)
-            .build()
-    }
+    val coverRequest = rememberCoverRequest(item.cover, gridCardWidthDp())
     Column(modifier = Modifier.clickable(onClick = onClick)) {
         Box {
-            if (simpleMode) {
-                Box(
+            if (showCover) {
+                AsyncImage(
+                    model = coverRequest,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(4f / 3f)
@@ -505,10 +501,7 @@ private fun ActivityCard(
                         .background(MaterialTheme.colorScheme.surfaceVariant),
                 )
             } else {
-                AsyncImage(
-                    model = imageRequest,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(4f / 3f)

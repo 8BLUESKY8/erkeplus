@@ -51,7 +51,7 @@ fun SettingsScreen(
     blockedKeywords: String,
     blockedRegexes: String,
     preloadEnabled: Boolean,
-    simpleMode: Boolean,
+    showCover: Boolean,
     titleLines: Int,
     onCategoriesEnabledChange: (Boolean) -> Unit,
     onShowCategoryTagsChange: (Boolean) -> Unit,
@@ -59,7 +59,7 @@ fun SettingsScreen(
     onBlockedKeywordsChange: (String) -> Unit,
     onBlockedRegexesChange: (String) -> Unit,
     onPreloadChange: (Boolean) -> Unit,
-    onSimpleModeChange: (Boolean) -> Unit,
+    onShowCoverChange: (Boolean) -> Unit,
     onTitleLinesChange: (Int) -> Unit,
     preferences: gitee.leolin_me.erkepp.data.AppPreferences,
     onLogout: () -> Unit,
@@ -166,10 +166,10 @@ fun SettingsScreen(
             onCheckedChange = onPreloadChange,
         )
         SettingSwitchRow(
-            title = "简洁模式",
-            subtitle = "不加载活动封面图，只保留文字，省流量也更流畅",
-            checked = simpleMode,
-            onCheckedChange = onSimpleModeChange,
+            title = "显示封面",
+            subtitle = "关闭后卡片只显示文字，省流量也更快",
+            checked = showCover,
+            onCheckedChange = onShowCoverChange,
         )
 
         Spacer(Modifier.height(12.dp))

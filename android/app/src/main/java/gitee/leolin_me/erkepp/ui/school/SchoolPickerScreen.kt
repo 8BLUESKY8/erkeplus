@@ -36,6 +36,7 @@ import coil.compose.AsyncImage
 import gitee.leolin_me.erkepp.data.School
 import gitee.leolin_me.erkepp.data.SchoolRepository
 import gitee.leolin_me.erkepp.data.toUserMessage
+import gitee.leolin_me.erkepp.ui.rememberCoverRequest
 import kotlinx.coroutines.delay
 
 /**
@@ -151,7 +152,7 @@ private fun SchoolRow(school: School, selected: Boolean, onClick: () -> Unit) {
             }
         } else {
             AsyncImage(
-                model = school.logoUrl,
+                model = rememberCoverRequest(school.logoUrl, 36, maxWidthPx = 144),
                 contentDescription = null,
                 modifier = Modifier.size(36.dp),
             )

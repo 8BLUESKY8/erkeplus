@@ -61,11 +61,11 @@ class AppPreferences(context: Context) {
             prefs.edit().putBoolean(KEY_PRELOAD, value).apply()
         }
 
-    /** 简洁模式：不加载图片。 */
-    var simpleMode: Boolean
-        get() = prefs.getBoolean(KEY_SIMPLE_MODE, false)
+    /** 卡片是否显示活动封面图。 */
+    var showCover: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_COVER, true)
         set(value) {
-            prefs.edit().putBoolean(KEY_SIMPLE_MODE, value).apply()
+            prefs.edit().putBoolean(KEY_SHOW_COVER, value).apply()
         }
 
     /** 卡片标题最多显示几行（1–3）。 */
@@ -153,7 +153,7 @@ class AppPreferences(context: Context) {
         const val KEY_BLOCKED_KEYWORDS = "blocked_keywords"
         const val KEY_BLOCKED_REGEXES = "blocked_regexes"
         const val KEY_PRELOAD = "preload_enabled"
-        const val KEY_SIMPLE_MODE = "simple_mode"
+        const val KEY_SHOW_COVER = "show_cover"
         const val KEY_TITLE_LINES = "title_lines"
         const val KEY_FILTER_STATUS = "filter_status"
         const val KEY_FILTER_SORT = "filter_sort"

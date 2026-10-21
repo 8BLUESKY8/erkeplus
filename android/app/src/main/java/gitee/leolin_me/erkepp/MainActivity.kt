@@ -98,7 +98,7 @@ class MainActivity : ComponentActivity() {
                 var blockedKeywords by remember { mutableStateOf(preferences.blockedKeywords) }
                 var blockedRegexes by remember { mutableStateOf(preferences.blockedRegexes) }
                 var preloadEnabled by remember { mutableStateOf(preferences.preloadEnabled) }
-                var simpleMode by remember { mutableStateOf(preferences.simpleMode) }
+                var showCover by remember { mutableStateOf(preferences.showCover) }
                 var titleLines by remember { mutableIntStateOf(preferences.titleLines) }
                 var showMyActivities by remember { mutableStateOf(false) }
 
@@ -219,7 +219,7 @@ class MainActivity : ComponentActivity() {
                                         blockedKeywords = blockedKeywords,
                                         blockedRegexes = blockedRegexes,
                                         preloadEnabled = preloadEnabled,
-                                        simpleMode = simpleMode,
+                                        showCover = showCover,
                                         titleLines = titleLines,
                                         onCategoriesEnabledChange = {
                                             categoriesEnabled = it
@@ -245,9 +245,9 @@ class MainActivity : ComponentActivity() {
                                             preloadEnabled = it
                                             preferences.preloadEnabled = it
                                         },
-                                        onSimpleModeChange = {
-                                            simpleMode = it
-                                            preferences.simpleMode = it
+                                        onShowCoverChange = {
+                                            showCover = it
+                                            preferences.showCover = it
                                         },
                                         onTitleLinesChange = {
                                             titleLines = it
