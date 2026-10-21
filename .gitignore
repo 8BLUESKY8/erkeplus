@@ -1,0 +1,20 @@
+android/build/
+android/out/
+android/test/build/
+*.apk
+
+# 签名文件与本地构建产物，绝不入库
+*.keystore
+*.jks
+*.p12
+
+# 本地临时文件
+*.log
+tem/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 本地签名配置（含口令，绝不入库）
+android/local-signing.sh
