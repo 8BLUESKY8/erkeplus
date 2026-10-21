@@ -28,8 +28,8 @@ android {
         applicationId = "gitee.leolin_me.erkepp"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     signingConfigs {
@@ -49,7 +49,13 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
-            isMinifyEnabled = false
+            // R8 压缩与资源收缩：dex 更小，冷启动要加载和校验的类更少
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }

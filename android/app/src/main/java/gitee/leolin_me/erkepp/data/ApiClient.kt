@@ -20,7 +20,8 @@ import java.util.concurrent.TimeUnit
  * GET 与 POST 都携带 `Authorization`（值为裸 JWT）。
  */
 class ApiClient(
-    private val deviceId: String,
+    // 传函数而不是值：设备号要读 SharedPreferences，放到第一次真正请求时再算，冷启动不背这个开销
+    private val deviceId: () -> String,
     private val baseUrl: String = AppConfig.API_BASE_URL,
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -51,7 +52,7 @@ class ApiClient(
         addQueryParameter("token", token.orEmpty())
         addQueryParameter("platform", AppConfig.PLATFORM)
         addQueryParameter("version", AppConfig.APP_VERSION)
-        addQueryParameter("device", deviceId)
+        addQueryParameter("device", deviceId())
         addQueryParameter("timestamp", System.currentTimeMillis().toString())
     }
 

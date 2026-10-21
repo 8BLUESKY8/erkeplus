@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -35,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.runtime.withFrameNanos
 import coil.Coil
 import coil.ImageLoader
 import coil.util.DebugLogger
@@ -78,9 +80,11 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Startup.mark("onCreate")
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         AppLog.init(this)
+        Startup.mark("AppLog.init")
 
         if (BuildConfig.DEBUG) {
             // 调试包打开 Coil 日志：用来核对预取的封面是否真的命中内存缓存
@@ -91,19 +95,35 @@ class MainActivity : ComponentActivity() {
                     .build(),
             )
         }
+        Startup.mark("coil")
 
         val sessionStore = SessionStore(this)
         val preferences = AppPreferences(this)
         val schoolStore = SchoolStore(this)
-        val apiClient = ApiClient(deviceId = DeviceId.get(this))
+        val apiClient = ApiClient(deviceId = { DeviceId.get(applicationContext) })
+        Startup.mark("deviceId")
         val authRepository = AuthRepository(apiClient)
         val resetRepository = PasswordResetRepository(apiClient)
         val schoolRepository = SchoolRepository(apiClient)
         val activityRepository = ActivityRepository(apiClient)
+        Startup.mark("repositories")
 
         setContent {
+            Startup.mark("setContent")
             ErkeppTheme {
-                var session by remember { mutableStateOf(sessionStore.load()) }
+                var warmUpPages by remember { mutableStateOf(false) }
+                LaunchedEffect(Unit) {
+                    withFrameNanos { }
+                    Startup.mark("first frame")
+                    // 首帧画完再把另外两页组合出来：启动只画发现页，滑动时它们已经就绪
+                    withFrameNanos { }
+                    warmUpPages = true
+                }
+                var session by remember {
+                    val loaded = sessionStore.load()
+                    Startup.mark("session.load")
+                    mutableStateOf(loaded)
+                }
                 var school by remember { mutableStateOf(schoolStore.load()) }
                 var webUrl by remember { mutableStateOf<String?>(null) }
                 var tab by rememberSaveable { mutableStateOf(MainTab.DISCOVER) }
@@ -220,7 +240,10 @@ class MainActivity : ComponentActivity() {
                                     beyondViewportPageCount = MainTab.entries.size,
                                     modifier = Modifier.weight(1f),
                                 ) { page ->
-                                    when (MainTab.entries[page]) {
+                                    if (page != 0 && !warmUpPages) {
+                                        // 另外两页稍后就绪，这里先占位，不参与首帧
+                                        Spacer(Modifier.fillMaxSize())
+                                    } else when (MainTab.entries[page]) {
                                         MainTab.DISCOVER -> DiscoverScreen(
                                             token = current.token,
                                             repository = activityRepository,
