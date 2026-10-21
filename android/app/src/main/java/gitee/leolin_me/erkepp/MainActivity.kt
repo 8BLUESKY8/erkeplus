@@ -42,6 +42,7 @@ import androidx.compose.runtime.withFrameNanos
 import coil.Coil
 import coil.ImageLoader
 import coil.util.DebugLogger
+import gitee.leolin_me.erkepp.data.ActivityActions
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.ApiClient
 import gitee.leolin_me.erkepp.data.AppPreferences
@@ -110,6 +111,7 @@ class MainActivity : ComponentActivity() {
         val resetRepository = PasswordResetRepository(apiClient)
         val schoolRepository = SchoolRepository(apiClient)
         val activityRepository = ActivityRepository(apiClient)
+        val activityActions = ActivityActions(apiClient)
         Startup.mark("repositories")
 
         setContent {
@@ -127,6 +129,19 @@ class MainActivity : ComponentActivity() {
                     val loaded = sessionStore.load()
                     Startup.mark("session.load")
                     mutableStateOf(loaded)
+                }
+                // 调试用：`am start ... --es probe homework_list` 可安全验证只读接口
+                val probe = remember { intent.getStringExtra("probe") }
+                LaunchedEffect(probe, session) {
+                    if (!BuildConfig.DEBUG || probe == null) return@LaunchedEffect
+                    val current = session ?: return@LaunchedEffect
+                    val detailId = intent.getLongExtra("detail_id", 0L)
+                    AppLog.d("probe", "start=$probe detail=$detailId")
+                    when (probe) {
+                        "homework_list" -> activityActions.homeworkList(current.token)
+                        "sign_count" -> if (detailId > 0) activityActions.signCount(current.token, detailId)
+                        else -> AppLog.d("probe", "unknown probe=$probe")
+                    }
                 }
                 var school by remember { mutableStateOf(schoolStore.load()) }
                 var webUrl by remember { mutableStateOf<String?>(null) }
@@ -372,6 +387,11 @@ class MainActivity : ComponentActivity() {
                                         runCatching {
                                             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                                         }
+                                    },
+                                    onOpenHomework = { id, viewing ->
+                                        detailActivityId = null
+                                        val route = if (viewing) "partyAssignmentinfor" else "partyAssignment"
+                                        webUrl = "https://${AppConfig.ALLOWED_HOST}/#/$route/$id"
                                     },
                                 )
                             }

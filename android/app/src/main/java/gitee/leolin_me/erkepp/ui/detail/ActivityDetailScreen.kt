@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -89,6 +90,7 @@ fun ActivityDetailScreen(
     onBack: () -> Unit,
     onOpenWeb: (Long) -> Unit,
     onOpenUrl: (String) -> Unit,
+    onOpenHomework: (Long, Boolean) -> Unit,
 ) {
     var detail by remember(activityId) { mutableStateOf<ActivityDetail?>(null) }
     var error by remember(activityId) { mutableStateOf<String?>(null) }
@@ -150,6 +152,7 @@ fun ActivityDetailScreen(
                 },
                 onOpenWeb = { onOpenWeb(activityId) },
                 onOpenUrl = onOpenUrl,
+                onOpenHomework = { onOpenHomework(activityId, detail!!.isPostHomework == 1) },
             )
         }
 
@@ -188,7 +191,10 @@ fun ActivityDetailScreen(
                         )
                         Spacer(Modifier.height(6.dp))
                     }
-                    Text(text = notice.plainText, style = MaterialTheme.typography.bodyMedium)
+                    // 公告里常有群号，允许长按选中复制
+                    SelectionContainer {
+                        Text(text = notice.plainText, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             },
             confirmButton = {
@@ -215,6 +221,7 @@ private fun DetailContent(
     onOpenNotices: () -> Unit,
     onOpenWeb: () -> Unit,
     onOpenUrl: (String) -> Unit,
+    onOpenHomework: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -412,6 +419,16 @@ private fun DetailContent(
                 .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
+            // 已报名且活动处于报名中 / 待开始 / 进行中 / 已结束时，官方会给出作业入口
+            if (detail.identity == 1 && detail.status in 5..8) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onOpenHomework,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (detail.isPostHomework == 1) "查看作业" else "交作业")
+                }
+                Spacer(Modifier.height(8.dp))
+            }
             Button(onClick = onOpenWeb, modifier = Modifier.fillMaxWidth()) {
                 Text(
                     when {

@@ -86,6 +86,8 @@ data class ActivityDetail(
     val applyStatus: Int,
     /** 1 已参加、2/3 管理员、0 未参加。 */
     val identity: Int = 0,
+    /** 是否已提交作业：1 已提交（查看作业）、0 未提交（交作业）。 */
+    val isPostHomework: Int = 0,
     /** 数据来自哪个接口：`non-member` 或 `participant`。 */
     val source: String,
 ) {
@@ -126,6 +128,7 @@ internal fun parseActivityDetail(data: JsonObject, source: String): ActivityDeta
     attendanceType = data.int("attendanceType"),
     limitType = (data.element("activityLimitType") as? JsonObject)?.int("type") ?: 0,
     applyStatus = data.int("applyStatus"),
+    isPostHomework = data.int("isPostHomework"),
     source = source,
 )
 

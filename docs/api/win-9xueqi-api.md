@@ -193,6 +193,38 @@
 `activity/enroll/cancel/person`、`activity/enroll/leave/person`、`activity/sign/repair`、
 `activity/sign/switch`、`activity/submit/homework/list`。
 
+## 只读查询（已实测）
+
+| 接口 | 参数 | 实测返回 |
+| --- | --- | --- |
+| `GET /activity/sign/count` | `id` | `{"signInCount":0,"signOutCount":0,"memberCount":30,"activityName":"..."}` |
+| `GET /activity/submit/homework/list` | `pageNum`、`pageSize` | `{"total":0,"pageSize":20,"list":[],"pageNum":1}` |
+
+## 写操作封装（已就绪，未接线）
+
+`data/ActivityActions.kt` 里封好了写接口，参数取自官方 H5 源码，**没有任何界面入口，
+也没有任何地方会自动调用**；一旦被调用，会把请求参数与原始响应写进日志（`[action]` 通道）。
+
+| 方法 | 接口 | 参数（H5 源码） |
+| --- | --- | --- |
+| 个人报名 | `POST activity/enroll/person` | `id`、`personMaterial?` |
+| 团队报名 | `POST activity/enroll/team` | `id`、`teamName`、`teamAvatar`、`teamMembers`、`teamMaterial?` |
+| 取消报名 | `POST activity/enroll/cancel/person` | `id` |
+| 补签 | `POST activity/sign/repair` | `activityId`、`userIds` |
+| 作业列表 | `GET activity/submit/homework/list` | `pageNum`、`pageSize` |
+| 签到人数 | `GET activity/sign/count` | `id` |
+
+调试只读接口（不产生任何写入）：
+
+```
+adb shell am start -n gitee.leolin_me.erkepp.debug/gitee.leolin_me.erkepp.MainActivity \
+  --es probe homework_list
+adb shell am start -n gitee.leolin_me.erkepp.debug/gitee.leolin_me.erkepp.MainActivity \
+  --es probe sign_count --el detail_id 574449
+```
+
+结果看 `adb shell run-as gitee.leolin_me.erkepp.debug cat files/logs/erkepp.log` 里的 `[action]` 行。
+
 ## 尚未验证
 
 - 报名、取消、签到等**写操作**（未验证，禁止先行接入）
