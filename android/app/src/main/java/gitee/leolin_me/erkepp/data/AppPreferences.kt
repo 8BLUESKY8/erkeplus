@@ -138,6 +138,13 @@ class AppPreferences(context: Context) {
             prefs.edit().putString(KEY_CARD_TEXT, value).apply()
         }
 
+    /** 开发者模式：显示加载计数等调试信息。 */
+    var developerMode: Boolean
+        get() = prefs.getBoolean(KEY_DEVELOPER, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_DEVELOPER, value).apply()
+        }
+
     private companion object {
         const val KEY_DISCLAIMER = "disclaimer_accepted_v1"
         const val KEY_CATEGORIES_ENABLED = "categories_enabled"
@@ -158,6 +165,7 @@ class AppPreferences(context: Context) {
         const val KEY_CARD_COUNT = "card_show_count"
         const val KEY_CARD_ORG = "card_show_org"
         const val KEY_CARD_TEXT = "card_custom_text"
+        const val KEY_DEVELOPER = "developer_mode"
 
         val DEFAULT_CATEGORIES = setOf(1440, 1441, 1444)
     }

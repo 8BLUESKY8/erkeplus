@@ -264,6 +264,16 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(16.dp))
         Text("关于", style = MaterialTheme.typography.titleSmall)
+        var developerMode by remember { mutableStateOf(preferences.developerMode) }
+        SettingSwitchRow(
+            title = "开发者模式",
+            subtitle = "显示已加载/总数/过滤后数量等调试信息",
+            checked = developerMode,
+            onCheckedChange = {
+                developerMode = it
+                preferences.developerMode = it
+            },
+        )
         TextButton(onClick = onShowDisclaimer, modifier = Modifier.padding(start = 0.dp)) {
             Text("免责声明与隐私说明")
         }

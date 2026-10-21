@@ -123,6 +123,8 @@ fun DiscoverScreen(
     var page by remember { mutableIntStateOf(1) }
     var loading by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
+    var endReached by remember { mutableStateOf(false) }
+    var autoFillCount by remember { mutableIntStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
     var categories by remember { mutableStateOf(listOf(0 to "全部")) }
     val visibleCategories = remember(categories, selectedCategoryIds) {
@@ -148,6 +150,8 @@ fun DiscoverScreen(
     fun reload() {
         val gen = generation + 1
         generation = gen
+        endReached = false
+        autoFillCount = 0
         AppLog.d(
             "discover",
             "reload status=$statusFilter sort=$sortType classify=$classifyId enrolled=$enrolledOnly search=$debouncedSearch hours=$hoursMin..$hoursMax",
@@ -174,7 +178,7 @@ fun DiscoverScreen(
     }
 
     fun loadMore() {
-        if (loadingMore || loading || items.size >= total) return
+        if (loadingMore || loading || endReached || items.size >= total) return
         val gen = generation
         scope.launch {
             loadingMore = true
@@ -189,6 +193,10 @@ fun DiscoverScreen(
                         items = (items + it.items).distinctBy { item -> item.id }
                         page = it.pageNum
                         total = it.total
+                        if (it.items.isEmpty() || items.size >= total) {
+                            endReached = true
+                            AppLog.d("discover", "endReached loaded=${items.size} total=$total")
+                        }
                     }
                 }
                 .onFailure {
@@ -242,10 +250,15 @@ fun DiscoverScreen(
         if (shouldLoadMore) loadMore()
     }
 
-    // 过滤后内容不足以撑满屏幕时，列表无法滚动，主动补下一页，避免"加载不出更多"
+    // 过滤后内容撑不满屏幕时补一页；最多补 2 次，避免死循环
     LaunchedEffect(gridState.canScrollForward, items.size, visibleItems.size) {
-        if (!loading && !loadingMore && items.size < total && !gridState.canScrollForward && visibleItems.isNotEmpty()) {
-            AppLog.d("discover", "auto-fill: no scroll room, loaded=${items.size} visible=${visibleItems.size} total=$total")
+        val laidOut = gridState.layoutInfo.totalItemsCount > 0
+        if (!loading && !loadingMore && !endReached && laidOut &&
+            items.size < total && !gridState.canScrollForward &&
+            visibleItems.size < 6 && autoFillCount < 2
+        ) {
+            autoFillCount++
+            AppLog.d("discover", "auto-fill #$autoFillCount loaded=${items.size} visible=${visibleItems.size} total=$total")
             loadMore()
         }
     }
@@ -294,23 +307,25 @@ fun DiscoverScreen(
             }
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "已加载 ${items.size} / 共 $total · 显示 ${visibleItems.size}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = if (sortType == 1) "最新" else "最热",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        if (preferences.developerMode) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "已加载 ${items.size} / 共 $total · 显示 ${visibleItems.size}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = if (sortType == 1) "最新" else "最热",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         LazyRow(
