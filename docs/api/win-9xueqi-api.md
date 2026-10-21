@@ -1,37 +1,73 @@
 # 官方站点接口实测记录
 
 - 目标站点：`https://win.9xueqi.com`
-- 验证日期：2026-10-21
-- 验证方式：在浏览器已登录会话中执行只读 `GET`，未提交任何写操作
-- 结论状态：**可用**，但参数必须逐接口锚定
+- 最近验证：2026-10-21（浏览器已登录会话内只读请求，未提交任何写操作）
+- 结论：原生首页与活动列表所需接口**全部可用**，参数已锚定
 
 ## 基础事实
 
 | 项 | 结论 |
 | --- | --- |
-| 技术栈 | Vue2 + Vant/VUX 的移动端 H5，hash 路由，200+ 页面 |
+| 技术栈 | Vue2 + Vant/VUX 的移动端 H5，hash 路由 |
 | 接口前缀 | `https://win.9xueqi.com/api/app/client/v1/` |
-| 请求体 | 统一 `params=<JSON>`，**双重 URL 编码**（`encodeURIComponent` 两次） |
-| 鉴权 | 请求头 `Authorization: <JWT>`，**无 `Bearer` 前缀**；token 同时以 query 参数携带 |
-| 公共参数 | `token`、`platform=3`、`version=2.0.5`、`device`、`timestamp` |
+| 参数编码 | `params=<JSON>`，**双重 URL 编码** |
+| 鉴权 | 请求头 `Authorization: <JWT>`；同时以 query 参数 `token` 携带。无 `Bearer` 前缀 |
+| 公共参数 | `platform=3`、`version=2.0.5`、`device`、`timestamp` |
 | 会话存储 | 仅 `localStorage.Token`，无 Cookie |
-| 验证码 | 未发现 |
-| 请求签名 | 未发现；站内 `Encrypt/Decrypt` 为恒等函数 |
-| 登录 | `POST /token`，字段 `schoolCode`、`code`、`password`、`openId`；成功返回 `data.access_token` |
+| 验证码 / 签名 | 均未发现 |
+| 登录 | `POST /token`，字段 `schoolCode`、`code`、`password`、`openId`，成功返回 `data.access_token` |
 
-## 已实测端点
+## 已验证端点
 
-| 端点 | 方法 | 结果 | 说明 |
+| 端点 | 参数 | 返回 | 用途 |
 | --- | --- | --- | --- |
-| `/student/user/my-info` | GET | `code:0` | 返回学号、学分等个人信息，字段真实可用 |
-| `/message/notice/un-read-count` | GET | `code:0` | 返回 `unReadCount` |
-| `/page/activity/list` | GET | `code:10002 参数错误` | 需完整参数（旧项目记录为 11 个必填项），待逐项锚定 |
-| `/student/credit/list` | GET | `code:404` | 路径不存在，旧项目中的同类记录不可信 |
-| `/score/list` | GET | `code:404` | 路径不存在 |
-| `/login/banner` | GET | `code:10000` | 空参数不成立，需按页面实际参数调用 |
+| `/student/user/my/info` | `{}` | `code:0`，含 `name`、`score`、`credit`、`hours`、`className`、`collegeName`、`majorName`、`grade`、`tabbarModules` | 首页个人信息 |
+| `/student/user/my-info` | `{}` | `code:0`，字段与上基本相同 | 我的页 |
+| `/message/notice/un-read-count` | `{}` | `{ unReadCount }` | 未读角标 |
+| `/activity/processing/statistics` | `{}` | 18 个待办计数（`waitingSignCount`、`activityAuditCount` 等） | 阅办页顶部 |
+| `/activity/processing/list` | `{}` | 数组，当前为空 | 阅办列表 |
+| `/user/modules` | `{}` | `mine`、`tabBar`、`schoolRestFul`、`stuData`、`stuActivity` | 首页九宫格与底部导航配置 |
+| `/dict/activity/choice-sort` | `{"moduleId":"1"}` | `code:0` | 活动排序选项 |
+| `/flow-template/list` | `{}` | `code:0` | 申报流程模板 |
+| `/login/banner` | `{}` | `code:0` | 登录页轮播 |
+| `/page/activity/list` | 见下 | `total`、`pageSize`、`list[]` | 活动列表 |
 
-## 待验证
+## `/page/activity/list` 参数（实测抓取）
 
-- `/page/activity/list` 的完整必填参数集合
-- 成绩页（`#/scoreReport`）的实际接口路径
-- 报名、签到等写操作端点（未验证，v0.2 之后再处理）
+```json
+{
+  "search": "",
+  "pageNum": 1,
+  "pageSize": 10,
+  "sortType": 1,
+  "activityTime": 1792512000000,
+  "classifyId": 0,
+  "status": "4,5,6,7",
+  "level": 0,
+  "organizationName": "",
+  "fieldType": "activity_iseErollment",
+  "keyWord": "switch"
+}
+```
+
+要点：
+
+- 共 11 个字段，缺任意一个都可能返回 `10002 参数错误`。
+- `activityTime` 是**当天 0 点的毫秒时间戳**，不是字符串日期。
+- `fieldType` 的值按其服务端拼写 `activity_iseErollment`（原文即含两个 e），不可“纠正”。
+- `status` 为逗号分隔的字符串，不是数组。
+
+## `/page/activity/list` 返回字段（列表项）
+
+`id`、`name`、`logo`、`classifyName`、`classifySecondName`、`hours`、`address`、`organizationName`、
+`startTime`、`endTime`、`enrollStartTime`、`enrollEndTime`、`enrollCount`、`peopleLimit`、
+`activityStatus`、`isAbleEnroll`、`isfull`、`isRecommend`、`limitType`、`gradeLimit`、`collegeLimit`、`genderLimit`、`honestLimit`。
+
+时间均为毫秒时间戳。`logo` 是阿里云 OSS 绝对地址。
+
+## 尚未验证
+
+- 活动详情（`#/ActivityShow/:id`）所用接口路径与参数
+- 报名、取消、签到等**写操作**（未验证，禁止先行接入）
+- 二课成绩页（`#/scoreReport`）实际接口
+- 学生组织、问卷、打卡等长尾页面
