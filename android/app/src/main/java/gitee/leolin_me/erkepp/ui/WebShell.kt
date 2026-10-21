@@ -20,6 +20,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +48,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import gitee.leolin_me.erkepp.AppConfig
+import gitee.leolin_me.erkepp.UrlPolicy
 
 /**
  * 外壳页面：一个受控的 WebView。
@@ -95,7 +97,7 @@ fun WebShell(
                     request: WebResourceRequest,
                 ): Boolean {
                     val uri = request.url
-                    if (isInternal(uri)) return false
+                    if (UrlPolicy.isAllowedHost(uri.host)) return false
                     openExternal(context, uri)
                     return true
                 }
@@ -157,7 +159,7 @@ fun WebShell(
                 }
 
                 override fun onPermissionRequest(request: PermissionRequest) {
-                    if (isInternal(request.origin)) {
+                    if (UrlPolicy.isAllowedHost(request.origin.host)) {
                         request.grant(request.resources)
                     } else {
                         request.deny()
@@ -227,7 +229,10 @@ fun WebShell(
 @Composable
 private fun ErrorPane(onRetry: () -> Unit, onOpenInBrowser: () -> Unit) {
     Box(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(24.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -250,10 +255,7 @@ private fun ErrorPane(onRetry: () -> Unit, onOpenInBrowser: () -> Unit) {
     }
 }
 
-private fun isInternal(uri: Uri): Boolean {
-    val host = uri.host ?: return false
-    return host == AppConfig.ALLOWED_HOST || host.endsWith(".${AppConfig.ALLOWED_HOST}")
-}
+private fun isInternal(uri: Uri): Boolean = UrlPolicy.isAllowedHost(uri.host)
 
 private fun openExternal(context: Context, uri: Uri) {
     try {
