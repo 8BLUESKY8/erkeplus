@@ -57,6 +57,7 @@ import gitee.leolin_me.erkepp.ui.DisclaimerDialog
 import gitee.leolin_me.erkepp.ui.ErkeppTheme
 import gitee.leolin_me.erkepp.ui.WebShell
 import gitee.leolin_me.erkepp.ui.detail.ActivityDetailScreen
+import gitee.leolin_me.erkepp.ui.detail.HomeworkScreen
 import gitee.leolin_me.erkepp.ui.home.DiscoverScreen
 import gitee.leolin_me.erkepp.ui.home.MyActivitiesScreen
 import gitee.leolin_me.erkepp.ui.home.ProfileScreen
@@ -140,6 +141,7 @@ class MainActivity : ComponentActivity() {
                     when (probe) {
                         "homework_list" -> activityActions.homeworkList(current.token)
                         "sign_count" -> if (detailId > 0) activityActions.signCount(current.token, detailId)
+                        "work_detail" -> if (detailId > 0) activityActions.workDetail(current.token, detailId)
                         else -> AppLog.d("probe", "unknown probe=$probe")
                     }
                 }
@@ -156,6 +158,9 @@ class MainActivity : ComponentActivity() {
                 // 支持 `am start ... --el detail_id 566506` 直接开详情，方便调试和截图
                 var detailActivityId by remember {
                     mutableStateOf(intent.getLongExtra("detail_id", 0L).takeIf { it > 0L })
+                }
+                var homeworkActivityId by remember {
+                    mutableStateOf(intent.getLongExtra("homework_id", 0L).takeIf { it > 0L })
                 }
 
                 // 旧版本会话缺少 rawProfile：启动时补拉一次 my-info，供网页注入使用
@@ -389,9 +394,32 @@ class MainActivity : ComponentActivity() {
                                         }
                                     },
                                     onOpenHomework = { id, viewing ->
-                                        detailActivityId = null
-                                        val route = if (viewing) "partyAssignmentinfor" else "partyAssignment"
-                                        webUrl = "https://${AppConfig.ALLOWED_HOST}/#/$route/$id"
+                                        if (viewing) {
+                                            // 查看作业用原生页：接口 `activity/query/work_3_0_1` 已实测
+                                            homeworkActivityId = id
+                                        } else {
+                                            detailActivityId = null
+                                            webUrl = "https://${AppConfig.ALLOWED_HOST}/#/assignment/$id"
+                                        }
+                                    },
+                                )
+                            }
+
+                            // 查看作业覆盖层
+                            val homeworkId = homeworkActivityId
+                            if (homeworkId != null) {
+                                HomeworkScreen(
+                                    activityId = homeworkId,
+                                    loader = { activityActions.work(current.token, homeworkId) },
+                                    onBack = { homeworkActivityId = null },
+                                    onEdit = {
+                                        homeworkActivityId = null
+                                        webUrl = "https://${AppConfig.ALLOWED_HOST}/#/assignment/$homeworkId"
+                                    },
+                                    onOpenUrl = { url ->
+                                        runCatching {
+                                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                        }
                                     },
                                 )
                             }

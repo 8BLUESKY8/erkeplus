@@ -225,6 +225,31 @@ adb shell am start -n gitee.leolin_me.erkepp.debug/gitee.leolin_me.erkepp.MainAc
 
 结果看 `adb shell run-as gitee.leolin_me.erkepp.debug cat files/logs/erkepp.log` 里的 `[action]` 行。
 
+## 作业（2026-10-21 实测）
+
+| 场景 | 路由 | 接口 |
+| --- | --- | --- |
+| 查看作业 | `#/assignmentinfor/:id` | `GET activity/query/work_3_0_1?activityId=` |
+| 交作业 / 修改作业 | `#/assignment/:id` | 写操作，未接入 |
+
+注意路由名和路径不是一回事：路由 name 叫 `partyAssignment` / `partyAssignmentinfor`，
+但路径是 `/assignment/:id` 与 `/assignmentinfor/:id`；组内还有另一套 `/partyAssignment*` 是党团活动用的。
+
+实测返回（活动 570315）：
+
+```json
+{"code":0,"data":{
+  "activityId":570315,
+  "introduce":"讲座让我深刻认识到……",
+  "attachment":[{"size":1175704,"name":"deepseek_xxx.png","id":8267529,"type":1,"url":"https://..."}],
+  "attachUrls":"https://...png,https://...png"
+}}
+```
+
+- 正文在 `introduce`，不是 `content`。
+- 作业附件只有 `type` 字段（活动详情的附件用 `attachmentType`），两者都要兼容。
+- 作业入口在官方只在这些情况下出现：活动已开始 / 已结束，或本人已提交过作业。
+
 ## 尚未验证
 
 - 报名、取消、签到等**写操作**（未验证，禁止先行接入）

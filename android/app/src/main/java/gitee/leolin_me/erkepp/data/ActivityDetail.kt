@@ -120,7 +120,7 @@ internal fun parseActivityDetail(data: JsonObject, source: String): ActivityDeta
     gradeNames = data.nameList("gradeList"),
     collegeNames = data.nameList("collegeList"),
     honestLimit = data.double("honestLimit"),
-    attachments = data.attachments("attachment"),
+    attachments = data.attachmentList("attachment"),
     managerName = (data.element("manager") as? JsonObject)?.text("name").orEmpty(),
     guidanceNames = data.nameList("guidanceList"),
     isSubmitWork = data.int("isSubmitWork"),
@@ -166,7 +166,7 @@ private fun JsonObject.nameList(key: String): List<String> {
     }
 }
 
-private fun JsonObject.attachments(key: String): List<ActivityAttachment> {
+internal fun JsonObject.attachmentList(key: String): List<ActivityAttachment> {
     val element = element(key) ?: return emptyList()
     val items: List<JsonElement> = when (element) {
         is kotlinx.serialization.json.JsonArray -> element.toList()
@@ -181,7 +181,8 @@ private fun JsonObject.attachments(key: String): List<ActivityAttachment> {
         val name = (item as? JsonObject)?.text("name").orEmpty().ifBlank {
             url.substringAfterLast('/').substringBefore('?')
         }
-        val type = (item as? JsonObject)?.int("attachmentType") ?: 0
+        // 详情里的附件用 attachmentType，作业里的附件只有 type，两者都认
+        val type = (item as? JsonObject)?.let { obj -> obj.int("attachmentType").takeIf { it != 0 } ?: obj.int("type") } ?: 0
         ActivityAttachment(name = name, url = url, type = type)
     }
 }

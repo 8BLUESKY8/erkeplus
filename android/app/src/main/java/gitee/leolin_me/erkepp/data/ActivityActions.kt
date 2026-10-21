@@ -48,6 +48,23 @@ class ActivityActions(private val api: ApiClient) {
             )
         }
 
+    /** 查看作业：官方 `#/assignmentinfor/:id` 页面用的就是这个接口。 */
+    suspend fun workDetail(token: String, activityId: Long): JsonElement? =
+        call("GET", "activity/query/work_3_0_1", token, "activityId=$activityId") {
+            api.get(
+                path = "activity/query/work_3_0_1",
+                params = buildJsonObject { put("activityId", JsonPrimitive(activityId)) },
+                token = token,
+            )
+        }
+
+    /** 同上，但把 `data` 解析成领域对象。 */
+    suspend fun work(token: String, activityId: Long): ActivityWork? {
+        val response = workDetail(token, activityId) ?: return null
+        val data = runCatching { (response as JsonObject)["data"] }.getOrNull()
+        return parseWork(data)
+    }
+
     // ---- 写操作：命名与日志就绪，但一处都不许接线 ----
 
     suspend fun enrollPerson(token: String, activityId: Long, personMaterial: String? = null): JsonElement? =

@@ -419,8 +419,8 @@ private fun DetailContent(
                 .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
-            // 已报名且活动处于报名中 / 待开始 / 进行中 / 已结束时，官方会给出作业入口
-            if (detail.identity == 1 && detail.status in 5..8) {
+            // 作业入口按官方实际行为给：活动已开始/已结束，或本人已交过作业（查看作业）
+            if (detail.identity == 1 && (detail.status == 7 || detail.status == 8 || detail.isPostHomework == 1)) {
                 androidx.compose.material3.OutlinedButton(
                     onClick = onOpenHomework,
                     modifier = Modifier.fillMaxWidth(),
