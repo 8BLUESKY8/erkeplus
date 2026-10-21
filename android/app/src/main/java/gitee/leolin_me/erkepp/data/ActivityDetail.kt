@@ -72,6 +72,20 @@ data class ActivityDetail(
     val attachments: List<ActivityAttachment>,
     /** 活动管理员姓名（官方详情页也会显示）。 */
     val managerName: String,
+    /** 指导老师，可能为空。 */
+    val guidanceNames: List<String>,
+    /** 是否需要提交作业：1 是，0 否。 */
+    val isSubmitWork: Int,
+    /** 报名审核标记，含义待真机确认。 */
+    val signAudit: Int,
+    /** 考勤方式枚举，含义待真机确认。 */
+    val attendanceType: Int,
+    /** 报名模式：0 个人报名，其它为团队报名。 */
+    val limitType: Int,
+    /** 报名审核状态，participant 接口才会给。 */
+    val applyStatus: Int,
+    /** 1 已参加、2/3 管理员、0 未参加。 */
+    val identity: Int = 0,
     /** 数据来自哪个接口：`non-member` 或 `participant`。 */
     val source: String,
 ) {
@@ -106,6 +120,12 @@ internal fun parseActivityDetail(data: JsonObject, source: String): ActivityDeta
     honestLimit = data.double("honestLimit"),
     attachments = data.attachments("attachment"),
     managerName = (data.element("manager") as? JsonObject)?.text("name").orEmpty(),
+    guidanceNames = data.nameList("guidanceList"),
+    isSubmitWork = data.int("isSubmitWork"),
+    signAudit = data.int("signAudit"),
+    attendanceType = data.int("attendanceType"),
+    limitType = (data.element("activityLimitType") as? JsonObject)?.int("type") ?: 0,
+    applyStatus = data.int("applyStatus"),
     source = source,
 )
 

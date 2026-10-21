@@ -13,6 +13,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -37,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -64,6 +67,7 @@ import gitee.leolin_me.erkepp.ui.formatHours
 import gitee.leolin_me.erkepp.ui.rememberCoverRequest
 import gitee.leolin_me.erkepp.ui.statusColor
 import gitee.leolin_me.erkepp.ui.statusLabel
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -144,6 +148,7 @@ fun ActivityDetailScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DetailContent(detail: ActivityDetail, onOpenWeb: () -> Unit, onOpenUrl: (String) -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -204,6 +209,11 @@ private fun DetailContent(detail: ActivityDetail, onOpenWeb: () -> Unit, onOpenU
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                }
+
+                if (detail.status == 5 && detail.enrollEndTime > System.currentTimeMillis()) {
+                    Spacer(Modifier.height(10.dp))
+                    CountdownChip(detail.enrollEndTime)
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -267,8 +277,25 @@ private fun DetailContent(detail: ActivityDetail, onOpenWeb: () -> Unit, onOpenU
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
-                        Spacer(Modifier.height(4.dp))
-                        detail.attachments.forEach { attachment ->
+                        Spacer(Modifier.height(6.dp))
+                        val images = detail.attachments.filter { it.type == 1 }
+                        if (images.isNotEmpty()) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                images.forEach { image ->
+                                    AsyncImage(
+                                        model = rememberCoverRequest(image.url, 84, maxWidthPx = 336),
+                                        contentDescription = image.name,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .size(84.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable { onOpenUrl(image.url) },
+                                    )
+                                }
+                            }
+                            if (detail.attachments.any { it.type != 1 }) Spacer(Modifier.height(8.dp))
+                        }
+                        detail.attachments.filterNot { it.type == 1 }.forEach { attachment ->
                             AttachmentRow(
                                 attachment = attachment,
                                 onClick = { onOpenUrl(attachment.url) },
@@ -288,7 +315,14 @@ private fun DetailContent(detail: ActivityDetail, onOpenWeb: () -> Unit, onOpenU
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
             Button(onClick = onOpenWeb, modifier = Modifier.fillMaxWidth()) {
-                Text(if (detail.status == 5) "去官方页面报名" else "在官方页面打开")
+                Text(
+                    when {
+                        detail.identity == 1 && detail.applyStatus == 2 -> "报名已通过 · 在官方页面查看"
+                        detail.identity == 1 -> "已报名 · 在官方页面查看"
+                        detail.status == 5 -> "去官方页面报名"
+                        else -> "在官方页面打开"
+                    },
+                )
             }
         }
     }
@@ -403,9 +437,63 @@ private fun ScheduleCard(detail: ActivityDetail) {
             IconLine(iconRes = R.drawable.ic_place, title = "联系方式", value = detail.contact)
         }
         if (detail.managerName.isNotBlank()) {
-            IconLine(iconRes = R.drawable.ic_place, title = "活动管理员", value = detail.managerName)
+            IconLine(iconRes = R.drawable.ic_person, title = "活动管理员", value = detail.managerName)
+        }
+        if (detail.guidanceNames.isNotEmpty()) {
+            IconLine(
+                iconRes = R.drawable.ic_person,
+                title = "指导老师",
+                value = detail.guidanceNames.joinToString("、"),
+            )
+        }
+        InfoLine(label = "报名方式", value = if (detail.limitType == 0) "个人报名" else "团队报名")
+        InfoLine(label = "报名审核", value = if (detail.signAudit == 1) "需要审核" else "无需审核")
+        if (detail.identity == 1) {
+            InfoLine(label = "报名状态", value = applyStatusText(detail.applyStatus))
+        }
+        if (detail.attendanceType == 1) {
+            InfoLine(label = "考勤标准", value = "签到 + 签退")
+        }
+        InfoLine(label = "提交作业", value = if (detail.isSubmitWork == 1) "需要提交" else "不需要")
+    }
+}
+
+/** 报名状态：已实测 `2` 为「报名已通过」，其余值暂时按「已报名」显示。 */
+private fun applyStatusText(applyStatus: Int): String = when (applyStatus) {
+    2 -> "报名已通过"
+    else -> "已报名"
+}
+
+/** 报名截止倒计时。30 秒刷新一次即可，不需要每秒跳。 */
+@Composable
+private fun CountdownChip(endTime: Long) {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(endTime) {
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(30_000L)
         }
     }
+    val remain = endTime - now
+    if (remain <= 0) return
+    val days = remain / 86_400_000L
+    val hours = (remain % 86_400_000L) / 3_600_000L
+    val minutes = (remain % 3_600_000L) / 60_000L
+    val text = buildString {
+        append("距报名结束 ")
+        if (days > 0) append("$days 天 ")
+        if (days > 0 || hours > 0) append("$hours 小时 ")
+        append("$minutes 分")
+    }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    )
 }
 
 @Composable

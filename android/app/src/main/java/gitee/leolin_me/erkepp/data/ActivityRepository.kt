@@ -103,14 +103,23 @@ class ActivityRepository(private val api: ApiClient) {
     /**
      * 活动详情。
      *
-     * 未参加的用户走 `activity/detail/non-member`，已参加的走 `activity/detail/participant`。
-     * 先按「未参加」请求，报错或没有数据再按「已参加」请求；
-     * 首次拿到真实数据时会把原始 JSON 写进日志，方便核对字段。
+     * 官方 H5 先调 `activity/member/identity` 判断身份，再决定进哪个详情页：
+     * identity 1 是已参加、2/3 是管理员、其它是未参加。这里照同样的顺序取数，
+     * 拿到原始响应会写进调试日志，方便核对字段。
      */
     suspend fun detail(token: String, id: Long): ActivityDetail {
         val params = buildJsonObject { put("id", JsonPrimitive(id)) }
+        val identity = runCatching { identity(token, id) }.getOrDefault(0)
+        AppLog.d("detail", "identity=$identity activityId=$id")
+
+        val paths = when (identity) {
+            1 -> listOf(PARTICIPANT, NON_MEMBER)
+            2, 3 -> listOf(MANAGER, NON_MEMBER)
+            else -> listOf(NON_MEMBER, PARTICIPANT)
+        }
+
         var lastFailure: Throwable? = null
-        for (path in DETAIL_PATHS) {
+        for (path in paths) {
             val response = runCatching { api.get(path, params, token) }
                 .onFailure { lastFailure = it }
                 .getOrNull() ?: continue
@@ -118,10 +127,11 @@ class ActivityRepository(private val api: ApiClient) {
             val parsed = runCatching {
                 response.requireSuccess()
                 val data = response.jsonObject["data"]
-                if (data == null || data is JsonNull) null else parseActivityDetail(data.jsonObject, source)
+                if (data == null || data is JsonNull) null
+                else parseActivityDetail(data.jsonObject, source).copy(identity = identity)
             }.onFailure { lastFailure = it }.getOrNull()
             if (parsed != null) {
-                AppLog.d("detail", "$path ok source=$source introduceLength=${parsed.introduceHtml.length}")
+                AppLog.d("detail", "$path ok source=$source identity=$identity")
                 AppLog.d("detail", "raw=${response.jsonObject["data"]}")
                 return parsed
             }
@@ -129,8 +139,21 @@ class ActivityRepository(private val api: ApiClient) {
         throw lastFailure ?: ApiException(-1, "活动详情不可用")
     }
 
+    /** 当前用户与这条活动的关系：1 已参加、2/3 管理员、其它未参加。 */
+    suspend fun identity(token: String, id: Long): Int {
+        val response = api.get(
+            path = "activity/member/identity",
+            params = buildJsonObject { put("activityId", JsonPrimitive(id)) },
+            token = token,
+        )
+        response.requireSuccess()
+        return response.jsonObject["data"]?.jsonObject?.get("identity")?.jsonPrimitive?.intOrNull ?: 0
+    }
+
     private companion object {
-        val DETAIL_PATHS = listOf("activity/detail/non-member", "activity/detail/participant")
+        const val NON_MEMBER = "activity/detail/non-member"
+        const val PARTICIPANT = "activity/detail/participant"
+        const val MANAGER = "activity/detail/manger"
     }
 }
 

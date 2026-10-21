@@ -112,13 +112,35 @@
 
 ## 活动详情（2026-10-21 实测）
 
-按用户与活动的关系分三个接口，参数都只有一个 `id`（活动 id）：
+按用户与活动的关系分三个接口，参数都只有一个 `id`（活动 id）。
+官方 H5 先调 `GET /activity/member/identity?activityId=<id>` 判定身份（返回 `data.identity`：
+1 已参加、2/3 管理员、其它未参加），再决定进哪个详情页；客户端照同样顺序取数。
 
 | 场景 | 接口 | 验证情况 |
 | --- | --- | --- |
-| 没参加 | `GET /activity/detail/non-member` | 已实测（Debug 包抓取原始响应） |
-| 已参加 | `GET /activity/detail/participant` | 未实测（客户端作回落分支） |
+| 身份判定 | `GET /activity/member/identity` | 已实测（参数是 `activityId`，不是 `id`） |
+| 没参加 | `GET /activity/detail/non-member` | 已实测 |
+| 已参加 | `GET /activity/detail/participant` | 已实测（活动 574449，identity=1） |
 | 管理员 | `GET /activity/detail/manger` | 未实测（服务端拼写就是 `manger`） |
+
+已参加响应里比未参加多的关键字段：
+
+| 字段 | 实测值 | 说明 |
+| --- | --- | --- |
+| `applyStatus` | `2` | 2 = 报名已通过；其它取值未验证 |
+| `status` | `5` | 活动状态（未参加接口叫 `activityStatus`） |
+| `isManager` | `0` | 是否管理员 |
+| `signInCount` / `signOutCount` | `0` | 签到 / 签退次数 |
+| `grantHours` | `0.0` | 已发放学时 |
+
+两个接口共有的字段里，实测确认含义的：
+
+| 字段 | 实测 | 结论 |
+| --- | --- | --- |
+| `signAudit` | `1` / `0` | 1 需要审核、0 无需审核（与官方页面「报名是否审核」一致） |
+| `attendanceType` | `1` | 1 = 签到 + 签退；其它取值未验证 |
+| `isSubmitWork` | `1` | 1 需要提交作业 |
+| `activityLimitType.type` | `0` | 0 = 个人报名；团队报名取值未验证 |
 
 实测样本（活动 `566506`，电话号码已脱敏，其余原样）：
 
