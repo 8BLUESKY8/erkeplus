@@ -1,20 +1,34 @@
+# Gradle
+android/.gradle/
+android/.gradle-home/
 android/build/
+android/app/build/
+android/local.properties
 android/out/
-android/test/build/
-*.apk
 
-# 签名文件与本地构建产物，绝不入库
-*.keystore
+# 签名与凭据：绝不入库
 *.jks
+*.keystore
 *.p12
+android/local-signing.sh
 
-# 本地临时文件
-*.log
+# 构建产物
+*.apk
+*.aab
+
+# 本地参考与临时材料（第三方原文、抓包、草稿）
 tem/
+.tools/
+docs/_local/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
 
 # Python 缓存
 __pycache__/
 *.pyc
 
-# 本地签名配置（含口令，绝不入库）
-android/local-signing.sh
+# 日志
+*.log
