@@ -54,6 +54,7 @@ import gitee.leolin_me.erkepp.R
 import gitee.leolin_me.erkepp.data.ActivityItem
 import gitee.leolin_me.erkepp.data.ActivityQuery
 import gitee.leolin_me.erkepp.data.ActivityRepository
+import gitee.leolin_me.erkepp.data.BlockRules
 import gitee.leolin_me.erkepp.data.toUserMessage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -77,6 +78,9 @@ fun DiscoverScreen(
     categoriesEnabled: Boolean,
     showCategoryTags: Boolean,
     selectedCategoryIds: Set<Int>,
+    blockedKeywords: String,
+    blockedRegexes: String,
+    preloadEnabled: Boolean,
     onOpenActivity: (Long) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -165,10 +169,18 @@ fun DiscoverScreen(
         reload()
     }
 
+    val blockRules = remember(blockedKeywords, blockedRegexes) {
+        BlockRules.parse(blockedKeywords, blockedRegexes)
+    }
+    val visibleItems = remember(items, blockRules) {
+        if (blockRules.isEmpty) items else items.filterNot { blockRules.isBlocked(it.name) }
+    }
+
     val shouldLoadMore by remember {
         derivedStateOf {
             val lastIndex = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            items.isNotEmpty() && lastIndex >= items.size - 4
+            val threshold = if (preloadEnabled) 8 else 2
+            items.isNotEmpty() && lastIndex >= items.size - threshold
         }
     }
 
@@ -250,6 +262,10 @@ fun DiscoverScreen(
                 Text("没有符合条件的活动", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
+            visibleItems.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("当前结果都被屏蔽规则过滤了", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
             else -> LazyVerticalGrid(
                 state = gridState,
                 columns = GridCells.Fixed(2),
@@ -258,7 +274,7 @@ fun DiscoverScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                items(items, key = { it.id }) { item ->
+                items(visibleItems, key = { it.id }) { item ->
                     ActivityCard(
                         item = item,
                         showCategoryTags = showCategoryTags,

@@ -18,6 +18,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +35,7 @@ import gitee.leolin_me.erkepp.data.PasswordResetRepository
 import gitee.leolin_me.erkepp.data.SchoolRepository
 import gitee.leolin_me.erkepp.data.SchoolStore
 import gitee.leolin_me.erkepp.data.SessionStore
+import gitee.leolin_me.erkepp.data.WebPrefill
 import gitee.leolin_me.erkepp.ui.DisclaimerDialog
 import gitee.leolin_me.erkepp.ui.ErkeppTheme
 import gitee.leolin_me.erkepp.ui.WebShell
@@ -86,6 +88,22 @@ class MainActivity : ComponentActivity() {
                 var categoriesEnabled by remember { mutableStateOf(preferences.categoriesEnabled) }
                 var showCategoryTags by remember { mutableStateOf(preferences.showCategoryTags) }
                 var selectedCategoryIds by remember { mutableStateOf(preferences.selectedCategoryIds) }
+                var blockedKeywords by remember { mutableStateOf(preferences.blockedKeywords) }
+                var blockedRegexes by remember { mutableStateOf(preferences.blockedRegexes) }
+                var preloadEnabled by remember { mutableStateOf(preferences.preloadEnabled) }
+
+                // 旧版本会话缺少 rawProfile：启动时补拉一次 my-info，供网页注入使用
+                LaunchedEffect(session) {
+                    val current = session ?: return@LaunchedEffect
+                    if (current.rawProfile.length < 10) {
+                        runCatching { authRepository.fetchProfile(current.token) }
+                            .onSuccess { (profile, raw) ->
+                                val refreshed = current.copy(profile = profile, rawProfile = raw)
+                                sessionStore.save(refreshed)
+                                session = refreshed
+                            }
+                    }
+                }
 
                 Surface(
                     modifier = Modifier
@@ -128,6 +146,7 @@ class MainActivity : ComponentActivity() {
                         webUrl != null -> WebShell(
                             modifier = Modifier.fillMaxSize(),
                             url = webUrl.orEmpty(),
+                            prefill = WebPrefill.build(current),
                             onPickFiles = { callback ->
                                 pendingFileCallback?.onReceiveValue(null)
                                 pendingFileCallback = callback
@@ -145,6 +164,9 @@ class MainActivity : ComponentActivity() {
                                         categoriesEnabled = categoriesEnabled,
                                         showCategoryTags = showCategoryTags,
                                         selectedCategoryIds = selectedCategoryIds,
+                                        blockedKeywords = blockedKeywords,
+                                        blockedRegexes = blockedRegexes,
+                                        preloadEnabled = preloadEnabled,
                                         onOpenActivity = { id ->
                                             webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
                                         },
@@ -162,6 +184,9 @@ class MainActivity : ComponentActivity() {
                                         categoriesEnabled = categoriesEnabled,
                                         showCategoryTags = showCategoryTags,
                                         selectedCategoryIds = selectedCategoryIds,
+                                        blockedKeywords = blockedKeywords,
+                                        blockedRegexes = blockedRegexes,
+                                        preloadEnabled = preloadEnabled,
                                         onCategoriesEnabledChange = {
                                             categoriesEnabled = it
                                             preferences.categoriesEnabled = it
@@ -173,6 +198,18 @@ class MainActivity : ComponentActivity() {
                                         onSelectedCategoriesChange = {
                                             selectedCategoryIds = it
                                             preferences.selectedCategoryIds = it
+                                        },
+                                        onBlockedKeywordsChange = {
+                                            blockedKeywords = it
+                                            preferences.blockedKeywords = it
+                                        },
+                                        onBlockedRegexesChange = {
+                                            blockedRegexes = it
+                                            preferences.blockedRegexes = it
+                                        },
+                                        onPreloadChange = {
+                                            preloadEnabled = it
+                                            preferences.preloadEnabled = it
                                         },
                                         onLogout = {
                                             sessionStore.clear()

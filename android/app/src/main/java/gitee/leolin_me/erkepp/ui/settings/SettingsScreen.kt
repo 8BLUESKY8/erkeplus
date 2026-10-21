@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,13 +47,20 @@ fun SettingsScreen(
     categoriesEnabled: Boolean,
     showCategoryTags: Boolean,
     selectedCategoryIds: Set<Int>,
+    blockedKeywords: String,
+    blockedRegexes: String,
+    preloadEnabled: Boolean,
     onCategoriesEnabledChange: (Boolean) -> Unit,
     onShowCategoryTagsChange: (Boolean) -> Unit,
     onSelectedCategoriesChange: (Set<Int>) -> Unit,
+    onBlockedKeywordsChange: (String) -> Unit,
+    onBlockedRegexesChange: (String) -> Unit,
+    onPreloadChange: (Boolean) -> Unit,
     onLogout: () -> Unit,
     onShowDisclaimer: () -> Unit,
 ) {
     var categories by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
+    var showLogoutConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         runCatching { repository.categories(token) }.onSuccess { categories = it }
@@ -112,6 +122,48 @@ fun SettingsScreen(
         HorizontalDivider()
 
         Spacer(Modifier.height(16.dp))
+        Text("内容屏蔽", style = MaterialTheme.typography.titleSmall)
+        Text(
+            text = "标题命中的活动不会出现在发现页。关键词按子串匹配，正则每行一条。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        OutlinedTextField(
+            value = blockedKeywords,
+            onValueChange = onBlockedKeywordsChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            label = { Text("屏蔽关键词") },
+            placeholder = { Text("例如：讲座、打卡") },
+            minLines = 2,
+            shape = RoundedCornerShape(12.dp),
+        )
+        OutlinedTextField(
+            value = blockedRegexes,
+            onValueChange = onBlockedRegexesChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            label = { Text("屏蔽正则") },
+            placeholder = { Text("例如：^\\d+天.*打卡$") },
+            minLines = 2,
+            shape = RoundedCornerShape(12.dp),
+        )
+
+        Spacer(Modifier.height(16.dp))
+        SettingSwitchRow(
+            title = "预加载下一页",
+            subtitle = "滚动接近底部前就提前请求，翻页更顺滑",
+            checked = preloadEnabled,
+            onCheckedChange = onPreloadChange,
+        )
+
+        Spacer(Modifier.height(16.dp))
+        HorizontalDivider()
+
+        Spacer(Modifier.height(16.dp))
         Text("账号", style = MaterialTheme.typography.titleSmall)
         Spacer(Modifier.height(8.dp))
         Text(
@@ -119,7 +171,7 @@ fun SettingsScreen(
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onLogout) {
+        OutlinedButton(onClick = { showLogoutConfirm = true }) {
             Text("退出登录")
         }
 
@@ -138,6 +190,29 @@ fun SettingsScreen(
         )
 
         Spacer(Modifier.height(32.dp))
+    }
+
+    if (showLogoutConfirm) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirm = false },
+            title = { Text("退出登录？") },
+            text = { Text("退出后本地登录凭证会被清除，需要重新输入学号和密码。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLogoutConfirm = false
+                        onLogout()
+                    },
+                ) {
+                    Text("退出")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirm = false }) {
+                    Text("取消")
+                }
+            },
+        )
     }
 }
 

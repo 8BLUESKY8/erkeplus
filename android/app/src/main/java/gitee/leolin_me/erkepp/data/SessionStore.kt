@@ -9,6 +9,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import java.util.UUID
 
 /** 设备标识：官方接口要求固定 device 参数，首次安装生成后保持不变。 */
@@ -55,11 +56,13 @@ class SessionStore(context: Context) {
             put("major", JsonPrimitive(session.profile.major))
             put("credit", JsonPrimitive(session.profile.credit))
             put("hours", JsonPrimitive(session.profile.hours))
+            put("userId", JsonPrimitive(session.profile.userId))
         }
         val root = buildJsonObject {
             put("token", JsonPrimitive(session.token))
             put("schoolCode", JsonPrimitive(session.school.code))
             put("schoolName", JsonPrimitive(session.school.name))
+            put("rawProfile", JsonPrimitive(session.rawProfile))
             put("profile", profile)
         }
         return json.encodeToString(JsonObject.serializer(), root)
@@ -75,6 +78,7 @@ class SessionStore(context: Context) {
                 code = root["schoolCode"]!!.jsonPrimitive.content,
                 name = root["schoolName"]!!.jsonPrimitive.content,
             ),
+            rawProfile = root["rawProfile"]?.jsonPrimitive?.contentOrNull ?: "{}",
             profile = UserProfile(
                 name = text("name"),
                 studentNo = text("studentNo"),
@@ -82,6 +86,7 @@ class SessionStore(context: Context) {
                 major = text("major"),
                 credit = profile["credit"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
                 hours = profile["hours"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+                userId = profile["userId"]?.jsonPrimitive?.longOrNull ?: 0L,
             ),
         )
     }

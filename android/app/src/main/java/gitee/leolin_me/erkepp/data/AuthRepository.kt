@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -15,12 +16,15 @@ data class UserProfile(
     val major: String,
     val credit: Double,
     val hours: Double,
+    val userId: Long = 0L,
 )
 
 data class Session(
     val token: String,
     val profile: UserProfile,
     val school: School,
+    /** 官方 my-info 原始 JSON，注入网页时作为 resv 使用。 */
+    val rawProfile: String = "{}",
 )
 
 class AuthRepository(private val api: ApiClient) {
@@ -41,22 +45,25 @@ class AuthRepository(private val api: ApiClient) {
             ?.takeIf { it.isNotBlank() }
             ?: throw ApiException(-1, "登录成功但未返回凭证")
 
-        return Session(token = token, profile = fetchProfile(token), school = school)
+        val (profile, raw) = fetchProfile(token)
+        return Session(token = token, profile = profile, school = school, rawProfile = raw)
     }
 
-    suspend fun fetchProfile(token: String): UserProfile {
+    suspend fun fetchProfile(token: String): Pair<UserProfile, String> {
         val response = api.get("student/user/my-info", JsonObject(emptyMap()), token)
         response.requireSuccess()
         val data = response.jsonObject["data"]?.jsonObject ?: throw ApiException(-1, "个人信息为空")
         fun text(key: String): String = data[key]?.jsonPrimitive?.contentOrNull.orEmpty()
         fun number(key: String): Double = data[key]?.jsonPrimitive?.doubleOrNull ?: 0.0
-        return UserProfile(
+        val profile = UserProfile(
             name = text("name"),
             studentNo = text("code"),
             college = text("collegeName"),
             major = text("majorName"),
             credit = number("credit"),
             hours = number("hours"),
+            userId = data["id"]?.jsonPrimitive?.intOrNull?.toLong() ?: 0L,
         )
+        return profile to data.toString()
     }
 }

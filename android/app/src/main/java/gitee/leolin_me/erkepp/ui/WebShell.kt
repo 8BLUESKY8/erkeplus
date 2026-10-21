@@ -50,6 +50,7 @@ import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import gitee.leolin_me.erkepp.AppConfig
 import gitee.leolin_me.erkepp.UrlPolicy
+import org.json.JSONObject
 
 /**
  * 外壳页面：一个受控的 WebView。
@@ -65,14 +66,18 @@ fun WebShell(
     onPickFiles: (ValueCallback<Array<Uri>>) -> Unit,
     modifier: Modifier = Modifier,
     url: String = AppConfig.HOME_URL,
+    prefill: Map<String, String> = emptyMap(),
     onClose: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val targetUrl = url
     var progress by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var errorUrl by remember { mutableStateOf<String?>(null) }
     var canGoBack by remember { mutableStateOf(false) }
     val refreshLayout = remember { mutableStateOf<SwipeRefreshLayout?>(null) }
+    // 网页详情依赖官方站点的 localStorage.Token；注入一次后重载，让页面启动时就能读到
+    val seeded = remember { mutableStateOf(false) }
 
     val webView = remember {
         WebView(context).apply {
@@ -116,6 +121,20 @@ fun WebShell(
                     progress = 100
                     canGoBack = view.canGoBack()
                     refreshLayout.value?.isRefreshing = false
+                    if (!seeded.value && prefill.isNotEmpty()) {
+                        seeded.value = true
+                        view.evaluateJavascript(storageScript(prefill)) {
+                            if (targetUrl.trimEnd('/') == AppConfig.HOME_URL.trimEnd('/')) {
+                                view.reload()
+                            } else {
+                                // 只改 hash 不会重新加载文档，必须再 reload 一次让 SPA 带着登录态重启
+                                view.evaluateJavascript(
+                                    "location.replace(${JSONObject.quote(targetUrl)});location.reload();",
+                                    null,
+                                )
+                            }
+                        }
+                    }
                 }
 
                 override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
@@ -174,7 +193,8 @@ fun WebShell(
                 enqueueDownload(context, url, userAgent, contentDisposition, mimeType)
             }
 
-            loadUrl(url)
+            // 需要注入登录态时，先停在同源首页，注入完成后再跳目标页
+            loadUrl(if (prefill.isNotEmpty()) AppConfig.HOME_URL else targetUrl)
         }
     }
 
@@ -268,6 +288,14 @@ private fun ErrorPane(onRetry: () -> Unit, onOpenInBrowser: () -> Unit) {
 }
 
 private fun isInternal(uri: Uri): Boolean = UrlPolicy.isAllowedHost(uri.host)
+
+/** 把登录态写进官方站点的 localStorage，使网页详情免登录。 */
+private fun storageScript(values: Map<String, String>): String {
+    val body = values.entries.joinToString(separator = "") { (key, value) ->
+        "localStorage.setItem(${JSONObject.quote(key)},${JSONObject.quote(value)});"
+    }
+    return "(function(){$body})()"
+}
 
 private fun openExternal(context: Context, uri: Uri) {
     try {
