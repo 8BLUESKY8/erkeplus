@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -43,6 +44,7 @@ import gitee.leolin_me.erkepp.ui.DisclaimerDialog
 import gitee.leolin_me.erkepp.ui.ErkeppTheme
 import gitee.leolin_me.erkepp.ui.WebShell
 import gitee.leolin_me.erkepp.ui.home.DiscoverScreen
+import gitee.leolin_me.erkepp.ui.home.MyActivitiesScreen
 import gitee.leolin_me.erkepp.ui.home.ProfileScreen
 import gitee.leolin_me.erkepp.ui.login.ForgotPasswordScreen
 import gitee.leolin_me.erkepp.ui.login.LoginScreen
@@ -95,6 +97,9 @@ class MainActivity : ComponentActivity() {
                 var blockedKeywords by remember { mutableStateOf(preferences.blockedKeywords) }
                 var blockedRegexes by remember { mutableStateOf(preferences.blockedRegexes) }
                 var preloadEnabled by remember { mutableStateOf(preferences.preloadEnabled) }
+                var simpleMode by remember { mutableStateOf(preferences.simpleMode) }
+                var titleLines by remember { mutableIntStateOf(preferences.titleLines) }
+                var showMyActivities by remember { mutableStateOf(false) }
 
                 // 旧版本会话缺少 rawProfile：启动时补拉一次 my-info，供网页注入使用
                 LaunchedEffect(session) {
@@ -161,10 +166,14 @@ class MainActivity : ComponentActivity() {
 
                         else -> {
                             BackHandler {
-                                if (tab == MainTab.DISCOVER) {
-                                    showExitConfirm = true
+                                if (tab != MainTab.DISCOVER) {
+                                    if (showMyActivities) {
+                                        showMyActivities = false
+                                    } else {
+                                        tab = MainTab.DISCOVER
+                                    }
                                 } else {
-                                    tab = MainTab.DISCOVER
+                                    showExitConfirm = true
                                 }
                             }
                             Column(modifier = Modifier.fillMaxSize()) {
@@ -179,15 +188,31 @@ class MainActivity : ComponentActivity() {
                                         blockedKeywords = blockedKeywords,
                                         blockedRegexes = blockedRegexes,
                                         preloadEnabled = preloadEnabled,
+                                        simpleMode = simpleMode,
+                                        titleLines = titleLines,
                                         onOpenActivity = { id ->
                                             webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
                                         },
                                     )
 
-                                    MainTab.PROFILE -> ProfileScreen(
-                                        session = current,
-                                        onOpenWeb = { webUrl = AppConfig.HOME_URL },
-                                    )
+                                    MainTab.PROFILE -> {
+                                        if (showMyActivities) {
+                                            MyActivitiesScreen(
+                                                token = current.token,
+                                                repository = activityRepository,
+                                                onBack = { showMyActivities = false },
+                                                onOpenActivity = { id ->
+                                                    webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
+                                                },
+                                            )
+                                        } else {
+                                            ProfileScreen(
+                                                session = current,
+                                                onOpenWeb = { webUrl = AppConfig.HOME_URL },
+                                                onOpenMyActivities = { showMyActivities = true },
+                                            )
+                                        }
+                                    }
 
                                     MainTab.SETTINGS -> SettingsScreen(
                                         session = current,
@@ -199,6 +224,8 @@ class MainActivity : ComponentActivity() {
                                         blockedKeywords = blockedKeywords,
                                         blockedRegexes = blockedRegexes,
                                         preloadEnabled = preloadEnabled,
+                                        simpleMode = simpleMode,
+                                        titleLines = titleLines,
                                         onCategoriesEnabledChange = {
                                             categoriesEnabled = it
                                             preferences.categoriesEnabled = it
@@ -222,6 +249,14 @@ class MainActivity : ComponentActivity() {
                                         onPreloadChange = {
                                             preloadEnabled = it
                                             preferences.preloadEnabled = it
+                                        },
+                                        onSimpleModeChange = {
+                                            simpleMode = it
+                                            preferences.simpleMode = it
+                                        },
+                                        onTitleLinesChange = {
+                                            titleLines = it
+                                            preferences.titleLines = it
                                         },
                                         onLogout = {
                                             sessionStore.clear()

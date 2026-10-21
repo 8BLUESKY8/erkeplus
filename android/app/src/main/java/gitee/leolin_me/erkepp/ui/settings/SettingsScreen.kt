@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -50,12 +51,16 @@ fun SettingsScreen(
     blockedKeywords: String,
     blockedRegexes: String,
     preloadEnabled: Boolean,
+    simpleMode: Boolean,
+    titleLines: Int,
     onCategoriesEnabledChange: (Boolean) -> Unit,
     onShowCategoryTagsChange: (Boolean) -> Unit,
     onSelectedCategoriesChange: (Set<Int>) -> Unit,
     onBlockedKeywordsChange: (String) -> Unit,
     onBlockedRegexesChange: (String) -> Unit,
     onPreloadChange: (Boolean) -> Unit,
+    onSimpleModeChange: (Boolean) -> Unit,
+    onTitleLinesChange: (Int) -> Unit,
     onLogout: () -> Unit,
     onShowDisclaimer: () -> Unit,
 ) {
@@ -159,6 +164,29 @@ fun SettingsScreen(
             checked = preloadEnabled,
             onCheckedChange = onPreloadChange,
         )
+        SettingSwitchRow(
+            title = "简洁模式",
+            subtitle = "不加载活动封面图，只保留文字，省流量也更流畅",
+            checked = simpleMode,
+            onCheckedChange = onSimpleModeChange,
+        )
+
+        Spacer(Modifier.height(12.dp))
+        Text("标题显示行数", style = MaterialTheme.typography.bodyLarge)
+        Text(
+            "超出部分截断并显示省略号",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+            listOf(1, 2, 3).forEach { lines ->
+                FilterChip(
+                    selected = titleLines == lines,
+                    onClick = { onTitleLinesChange(lines) },
+                    label = { Text("$lines 行") },
+                )
+            }
+        }
 
         Spacer(Modifier.height(16.dp))
         HorizontalDivider()

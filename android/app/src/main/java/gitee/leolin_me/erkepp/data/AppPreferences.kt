@@ -61,6 +61,20 @@ class AppPreferences(context: Context) {
             prefs.edit().putBoolean(KEY_PRELOAD, value).apply()
         }
 
+    /** 简洁模式：不加载图片。 */
+    var simpleMode: Boolean
+        get() = prefs.getBoolean(KEY_SIMPLE_MODE, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_SIMPLE_MODE, value).apply()
+        }
+
+    /** 卡片标题最多显示几行（1–3）。 */
+    var titleLines: Int
+        get() = prefs.getInt(KEY_TITLE_LINES, 2).coerceIn(1, 3)
+        set(value) {
+            prefs.edit().putInt(KEY_TITLE_LINES, value.coerceIn(1, 3)).apply()
+        }
+
     private companion object {
         const val KEY_DISCLAIMER = "disclaimer_accepted_v1"
         const val KEY_CATEGORIES_ENABLED = "categories_enabled"
@@ -69,6 +83,8 @@ class AppPreferences(context: Context) {
         const val KEY_BLOCKED_KEYWORDS = "blocked_keywords"
         const val KEY_BLOCKED_REGEXES = "blocked_regexes"
         const val KEY_PRELOAD = "preload_enabled"
+        const val KEY_SIMPLE_MODE = "simple_mode"
+        const val KEY_TITLE_LINES = "title_lines"
 
         val DEFAULT_CATEGORIES = setOf(1440, 1441, 1444)
     }

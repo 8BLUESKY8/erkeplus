@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -83,6 +84,8 @@ fun DiscoverScreen(
     blockedKeywords: String,
     blockedRegexes: String,
     preloadEnabled: Boolean,
+    simpleMode: Boolean,
+    titleLines: Int,
     onOpenActivity: (Long) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -93,6 +96,10 @@ fun DiscoverScreen(
     var statusFilter by rememberSaveable { mutableStateOf("5") }
     var classifyId by rememberSaveable { mutableIntStateOf(0) }
     var sortType by rememberSaveable { mutableIntStateOf(1) }
+    var enrolledOnly by rememberSaveable { mutableStateOf(false) }
+    var hoursMin by remember { mutableStateOf<Double?>(null) }
+    var hoursMax by remember { mutableStateOf<Double?>(null) }
+    var showHoursDialog by remember { mutableStateOf(false) }
 
     var items by remember { mutableStateOf<List<ActivityItem>>(emptyList()) }
     var total by remember { mutableIntStateOf(0) }
@@ -115,13 +122,19 @@ fun DiscoverScreen(
         search = debouncedSearch,
     )
 
+    suspend fun fetch(targetPage: Int) = if (enrolledOnly) {
+        repository.myList(token, targetPage)
+    } else {
+        repository.list(token, query(targetPage))
+    }
+
     fun reload() {
         val gen = generation + 1
         generation = gen
         scope.launch {
             loading = true
             error = null
-            runCatching { repository.list(token, query(1)) }
+            runCatching { fetch(1) }
                 .onSuccess {
                     if (gen == generation) {
                         items = it.items
@@ -140,7 +153,7 @@ fun DiscoverScreen(
         val gen = generation
         scope.launch {
             loadingMore = true
-            runCatching { repository.list(token, query(page + 1)) }
+            runCatching { fetch(page + 1) }
                 .onSuccess {
                     if (gen == generation) {
                         items = (items + it.items).distinctBy { item -> item.id }
@@ -167,7 +180,7 @@ fun DiscoverScreen(
         debouncedSearch = search
     }
 
-    LaunchedEffect(statusFilter, classifyId, sortType, debouncedSearch) {
+    LaunchedEffect(statusFilter, classifyId, sortType, debouncedSearch, enrolledOnly) {
         reload()
     }
 
@@ -175,9 +188,11 @@ fun DiscoverScreen(
         BlockRules.parse(blockedKeywords, blockedRegexes)
     }
     val query = debouncedSearch.trim()
-    val visibleItems = remember(items, blockRules, query) {
+    val visibleItems = remember(items, blockRules, query, hoursMin, hoursMax) {
         items.asSequence()
             .filter { query.isEmpty() || it.name.contains(query, ignoreCase = true) }
+            .filter { hoursMin == null || it.hours >= hoursMin!! }
+            .filter { hoursMax == null || it.hours <= hoursMax!! }
             .filterNot { blockRules.isBlocked(it.name) }
             .toList()
     }
@@ -216,41 +231,59 @@ fun DiscoverScreen(
             shape = RoundedCornerShape(22.dp),
         )
 
-        Row(
+        LazyRow(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            LazyRow(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(start = 16.dp, end = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(StatusOptions) { (value, label) ->
-                    FilterChip(
-                        selected = statusFilter == value,
-                        onClick = { statusFilter = value },
-                        label = { Text(label) },
-                    )
-                }
+            items(StatusOptions) { (value, label) ->
+                FilterChip(
+                    selected = !enrolledOnly && statusFilter == value,
+                    onClick = {
+                        enrolledOnly = false
+                        statusFilter = value
+                    },
+                    label = { Text(label, style = MaterialTheme.typography.bodySmall) },
+                )
             }
-            TextButton(onClick = { sortType = if (sortType == 1) 2 else 1 }) {
-                Text(if (sortType == 1) "最新" else "最热", style = MaterialTheme.typography.bodyMedium)
+            item {
+                FilterChip(
+                    selected = enrolledOnly,
+                    onClick = { enrolledOnly = !enrolledOnly },
+                    label = { Text("已报名", style = MaterialTheme.typography.bodySmall) },
+                )
             }
         }
 
         if (categoriesEnabled) {
-            LazyRow(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                items(visibleCategories) { (id, label) ->
-                    FilterChip(
-                        selected = classifyId == id,
-                        onClick = { classifyId = id },
-                        label = { Text(label) },
-                    )
+                LazyRow(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(start = 16.dp, end = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(visibleCategories) { (id, label) ->
+                        FilterChip(
+                            selected = classifyId == id,
+                            onClick = { classifyId = id },
+                            label = { Text(label) },
+                        )
+                    }
                 }
+                HoursButton(hoursMin, hoursMax) { showHoursDialog = true }
+                SortButton(sortType) { sortType = if (sortType == 1) 2 else 1 }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                HoursButton(hoursMin, hoursMax) { showHoursDialog = true }
+                SortButton(sortType) { sortType = if (sortType == 1) 2 else 1 }
             }
         }
 
@@ -291,6 +324,8 @@ fun DiscoverScreen(
                     ActivityCard(
                         item = item,
                         showCategoryTags = showCategoryTags,
+                        simpleMode = simpleMode,
+                        titleLines = titleLines,
                         onClick = { onOpenActivity(item.id) },
                     )
                 }
@@ -309,10 +344,29 @@ fun DiscoverScreen(
             }
         }
     }
+
+    if (showHoursDialog) {
+        HoursFilterDialog(
+            initialMin = hoursMin,
+            initialMax = hoursMax,
+            onDismiss = { showHoursDialog = false },
+            onApply = { min, max ->
+                hoursMin = min
+                hoursMax = max
+                showHoursDialog = false
+            },
+        )
+    }
 }
 
 @Composable
-private fun ActivityCard(item: ActivityItem, showCategoryTags: Boolean, onClick: () -> Unit) {
+private fun ActivityCard(
+    item: ActivityItem,
+    showCategoryTags: Boolean,
+    simpleMode: Boolean,
+    titleLines: Int,
+    onClick: () -> Unit,
+) {
     val context = LocalContext.current
     val imageRequest = remember(item.cover) {
         ImageRequest.Builder(context)
@@ -323,16 +377,26 @@ private fun ActivityCard(item: ActivityItem, showCategoryTags: Boolean, onClick:
     }
     Column(modifier = Modifier.clickable(onClick = onClick)) {
         Box {
-            AsyncImage(
-                model = imageRequest,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(4f / 3f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-            )
+            if (simpleMode) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(4f / 3f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                )
+            } else {
+                AsyncImage(
+                    model = imageRequest,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(4f / 3f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                )
+            }
             if (item.recommended) {
                 Badge(text = "推荐", modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
             }
@@ -347,7 +411,7 @@ private fun ActivityCard(item: ActivityItem, showCategoryTags: Boolean, onClick:
             text = item.name,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
-            maxLines = 2,
+            maxLines = titleLines,
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(4.dp))
@@ -363,7 +427,11 @@ private fun ActivityCard(item: ActivityItem, showCategoryTags: Boolean, onClick:
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = "${item.enrollCount}人报名 · ${item.organizationName}",
+            text = if (item.enrollCount > 0) {
+                "${item.enrollCount}人报名 · ${item.organizationName}"
+            } else {
+                item.organizationName
+            },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -405,3 +473,72 @@ private fun statusColor(status: Int): Color = when (status) {
 
 private fun formatHours(value: Double): String =
     if (value == value.toLong().toDouble()) value.toLong().toString() else String.format(java.util.Locale.US, "%.1f", value)
+
+@Composable
+private fun HoursButton(min: Double?, max: Double?, onClick: () -> Unit) {
+    TextButton(onClick = onClick) {
+        Text(
+            text = if (min == null && max == null) "学时" else "学时·",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+@Composable
+private fun SortButton(sortType: Int, onClick: () -> Unit) {
+    TextButton(onClick = onClick) {
+        Text(if (sortType == 1) "最新" else "最热", style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun HoursFilterDialog(
+    initialMin: Double?,
+    initialMax: Double?,
+    onDismiss: () -> Unit,
+    onApply: (Double?, Double?) -> Unit,
+) {
+    var minText by remember { mutableStateOf(initialMin?.let { formatHours(it) } ?: "") }
+    var maxText by remember { mutableStateOf(initialMax?.let { formatHours(it) } ?: "") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("按学时筛选") },
+        text = {
+            Column {
+                Text(
+                    "留空表示不限",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = minText,
+                        onValueChange = { input -> minText = input.filter { it.isDigit() || it == '.' } },
+                        label = { Text("最少") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = maxText,
+                        onValueChange = { input -> maxText = input.filter { it.isDigit() || it == '.' } },
+                        label = { Text("最多") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onApply(minText.toDoubleOrNull(), maxText.toDoubleOrNull()) }) {
+                Text("应用")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { onApply(null, null) }) {
+                Text("清除")
+            }
+        },
+    )
+}

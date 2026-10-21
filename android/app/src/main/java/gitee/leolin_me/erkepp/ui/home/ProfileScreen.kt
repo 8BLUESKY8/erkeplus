@@ -23,6 +23,7 @@ import gitee.leolin_me.erkepp.data.Session
 fun ProfileScreen(
     session: Session,
     onOpenWeb: () -> Unit,
+    onOpenMyActivities: () -> Unit,
 ) {
     val profile = session.profile
     Column(
@@ -60,6 +61,15 @@ fun ProfileScreen(
         }
 
         Spacer(Modifier.height(32.dp))
+
+        OutlinedButton(
+            onClick = onOpenMyActivities,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("我的活动")
+        }
+
+        Spacer(Modifier.height(8.dp))
 
         OutlinedButton(
             onClick = onOpenWeb,

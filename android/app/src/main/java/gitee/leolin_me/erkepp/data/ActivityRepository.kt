@@ -81,6 +81,22 @@ class ActivityRepository(private val api: ApiClient) {
         response.requireSuccess()
         return parseActivityPage(response, query.page)
     }
+
+    /** 我的活动（含已报名）。官方用独立接口，与活动列表不是同一套筛选。 */
+    suspend fun myList(token: String, page: Int, pageSize: Int = 20): ActivityPage {
+        val response = api.get(
+            path = "activity/my-list",
+            params = buildJsonObject {
+                put("pageNum", JsonPrimitive(page))
+                put("pageSize", JsonPrimitive(pageSize))
+                put("applyStatus", JsonPrimitive(""))
+                put("status", JsonPrimitive("1,2,3,4,5,6,7,8,9,10,11,12"))
+            },
+            token = token,
+        )
+        response.requireSuccess()
+        return parseActivityPage(response, page)
+    }
 }
 
 /** 活动列表参数：与官方活动页一致，共 11 个，缺项会返回 10002。 */
