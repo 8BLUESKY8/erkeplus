@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -23,10 +24,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -107,7 +110,7 @@ fun DiscoverScreen(
     var enrolledOnly by rememberSaveable { mutableStateOf(preferences.filterEnrolled) }
     var hoursMin by remember { mutableStateOf(preferences.filterHoursMin.toDoubleOrNull()) }
     var hoursMax by remember { mutableStateOf(preferences.filterHoursMax.toDoubleOrNull()) }
-    var showHoursDialog by remember { mutableStateOf(false) }
+    var showFilterSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(statusFilter, classifyId, sortType, enrolledOnly, hoursMin, hoursMax) {
         preferences.filterStatus = statusFilter
@@ -270,6 +273,11 @@ fun DiscoverScreen(
         }
     }
 
+    val activeFilterCount =
+        (if (classifyId != 0) 1 else 0) +
+            (if (hoursMin != null || hoursMax != null) 1 else 0) +
+            (if (sortType != 1) 1 else 0)
+
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
@@ -288,21 +296,22 @@ fun DiscoverScreen(
                 singleLine = true,
                 shape = RoundedCornerShape(22.dp),
             )
-            IconButton(onClick = { showHoursDialog = true }) {
+            IconButton(onClick = { showFilterSheet = true }) {
                 Icon(
                     painter = painterResource(R.drawable.ic_tune),
-                    contentDescription = "学时筛选",
-                    tint = if (hoursMin != null || hoursMax != null) {
+                    contentDescription = "筛选",
+                    tint = if (activeFilterCount > 0) {
                         MaterialTheme.colorScheme.primary
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
                 )
             }
-            IconButton(onClick = { sortType = if (sortType == 1) 2 else 1 }) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_sort),
-                    contentDescription = if (sortType == 1) "最新" else "最热",
+            if (activeFilterCount > 0) {
+                Text(
+                    text = "$activeFilterCount",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
         }
@@ -349,22 +358,6 @@ fun DiscoverScreen(
                     onClick = { enrolledOnly = !enrolledOnly },
                     label = { Text("已报名", style = MaterialTheme.typography.bodySmall) },
                 )
-            }
-        }
-
-        if (categoriesEnabled) {
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(visibleCategories) { (id, label) ->
-                    FilterChip(
-                        selected = classifyId == id,
-                        onClick = { classifyId = id },
-                        label = { Text(label) },
-                    )
-                }
             }
         }
 
@@ -430,16 +423,26 @@ fun DiscoverScreen(
         }
     }
 
-    if (showHoursDialog) {
-        HoursFilterDialog(
-            initialMin = hoursMin,
-            initialMax = hoursMax,
-            onDismiss = { showHoursDialog = false },
-            onApply = { min, max ->
+    if (showFilterSheet) {
+        FilterSheet(
+            categories = if (categoriesEnabled) visibleCategories else emptyList(),
+            classifyId = classifyId,
+            onClassifyChange = { classifyId = it },
+            sortType = sortType,
+            onSortChange = { sortType = it },
+            hoursMin = hoursMin,
+            hoursMax = hoursMax,
+            onHoursChange = { min, max ->
                 hoursMin = min
                 hoursMax = max
-                showHoursDialog = false
             },
+            onReset = {
+                classifyId = 0
+                sortType = 1
+                hoursMin = null
+                hoursMax = null
+            },
+            onDismiss = { showFilterSheet = false },
         )
     }
 }
@@ -587,7 +590,7 @@ private fun HoursFilterDialog(
     var minText by remember { mutableStateOf(initialMin?.let { formatHours(it) } ?: "") }
     var maxText by remember { mutableStateOf(initialMax?.let { formatHours(it) } ?: "") }
 
-    AlertDialog(
+    androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("按学时筛选") },
         text = {
@@ -627,4 +630,104 @@ private fun HoursFilterDialog(
             }
         },
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FilterSheet(
+    categories: List<Pair<Int, String>>,
+    classifyId: Int,
+    onClassifyChange: (Int) -> Unit,
+    sortType: Int,
+    onSortChange: (Int) -> Unit,
+    hoursMin: Double?,
+    hoursMax: Double?,
+    onHoursChange: (Double?, Double?) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var minText by remember { mutableStateOf(hoursMin?.let { formatHours(it) } ?: "") }
+    var maxText by remember { mutableStateOf(hoursMax?.let { formatHours(it) } ?: "") }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+        ) {
+            if (categories.isNotEmpty()) {
+                Text("分类", style = MaterialTheme.typography.titleSmall)
+                LazyRow(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(categories) { (id, label) ->
+                        FilterChip(
+                            selected = classifyId == id,
+                            onClick = { onClassifyChange(id) },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+
+            Text("学时范围", style = MaterialTheme.typography.titleSmall)
+            Row(
+                modifier = Modifier.padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = minText,
+                    onValueChange = { input -> minText = input.filter { it.isDigit() || it == '.' } },
+                    label = { Text("最少") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    value = maxText,
+                    onValueChange = { input -> maxText = input.filter { it.isDigit() || it == '.' } },
+                    label = { Text("最多") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            Text("排序", style = MaterialTheme.typography.titleSmall)
+            Row(
+                modifier = Modifier.padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = sortType == 1,
+                    onClick = { onSortChange(1) },
+                    label = { Text("最新") },
+                )
+                FilterChip(
+                    selected = sortType == 2,
+                    onClick = { onSortChange(2) },
+                    label = { Text("最热") },
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onReset) { Text("重置") }
+                Spacer(Modifier.width(8.dp))
+                TextButton(
+                    onClick = {
+                        onHoursChange(minText.toDoubleOrNull(), maxText.toDoubleOrNull())
+                        onDismiss()
+                    },
+                ) {
+                    Text("完成")
+                }
+            }
+        }
+    }
 }
