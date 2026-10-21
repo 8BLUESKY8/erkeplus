@@ -34,6 +34,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -49,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -265,10 +268,13 @@ fun DiscoverScreen(
             for (item in items) {
                 val cover = item.cover?.takeIf { it.isNotBlank() } ?: continue
                 if (prefetchedCovers.add(cover)) add(cover)
-                if (size >= 24) break
+                if (size >= 12) break
             }
         }
-        prefetchCovers(context, pending, coverWidthDp)
+        if (pending.isNotEmpty()) {
+            AppLog.d("discover", "prefetch ${pending.size} covers at ${coverWidthDp}dp")
+            prefetchCovers(context, pending, coverWidthDp)
+        }
     }
 
     // 滚动驱动：只要接近末尾就继续加载，直到没有更多
@@ -506,6 +512,13 @@ private fun ActivityCard(
     onClick: () -> Unit,
 ) {
     val coverRequest = rememberCoverRequest(item.cover, coverWidthDp)
+    // 图片解码好后淡入。直接「啪」一下贴上，滑动时会像图跟不上文字
+    var coverLoaded by remember(item.id) { mutableStateOf(false) }
+    val coverAlpha by animateFloatAsState(
+        targetValue = if (coverLoaded) 1f else 0f,
+        animationSpec = tween(durationMillis = 120),
+        label = "coverAlpha",
+    )
     Column(modifier = Modifier.clickable(onClick = onClick)) {
         Box {
             if (showCover) {
@@ -513,9 +526,18 @@ private fun ActivityCard(
                     model = coverRequest,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
+                    onSuccess = { coverLoaded = true },
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(4f / 3f)
+                        // 淡入结束后撤掉图层，避免每张图长期多一层合成
+                        .then(
+                            if (coverAlpha < 1f) {
+                                Modifier.graphicsLayer { alpha = coverAlpha }
+                            } else {
+                                Modifier
+                            },
+                        )
                         .clip(RoundedCornerShape(12.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant),
                 )

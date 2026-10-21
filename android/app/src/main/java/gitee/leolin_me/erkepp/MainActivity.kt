@@ -29,6 +29,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import coil.Coil
+import coil.ImageLoader
+import coil.util.DebugLogger
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.ApiClient
 import gitee.leolin_me.erkepp.data.AppPreferences
@@ -71,6 +74,16 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         AppLog.init(this)
+
+        if (BuildConfig.DEBUG) {
+            // 调试包打开 Coil 日志：用来核对预取的封面是否真的命中内存缓存
+            Coil.setImageLoader(
+                ImageLoader.Builder(this)
+                    .crossfade(false)
+                    .logger(DebugLogger())
+                    .build(),
+            )
+        }
 
         val sessionStore = SessionStore(this)
         val preferences = AppPreferences(this)
