@@ -356,7 +356,7 @@ fun DiscoverScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "已加载 ${items.size} / 共 $total · 显示 ${visibleItems.size}",
+                    text = "已加载 ${items.size} / 共 $total · 屏蔽 $blockedByRules · 显示 ${visibleItems.size}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
