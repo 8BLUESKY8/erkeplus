@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -65,6 +66,7 @@ import gitee.leolin_me.erkepp.data.AppPreferences
 import gitee.leolin_me.erkepp.data.BlockRules
 import gitee.leolin_me.erkepp.data.toUserMessage
 import gitee.leolin_me.erkepp.ui.gridCardWidthDp
+import gitee.leolin_me.erkepp.ui.prefetchCovers
 import gitee.leolin_me.erkepp.ui.rememberCoverRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -103,6 +105,9 @@ fun DiscoverScreen(
     val customText = preferences.cardCustomText
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyGridState()
+    val coverWidthDp = gridCardWidthDp()
+    val context = LocalContext.current
+    val prefetchedCovers = remember { mutableSetOf<String>() }
 
     var search by rememberSaveable { mutableStateOf("") }
     var debouncedSearch by remember { mutableStateOf("") }
@@ -252,6 +257,18 @@ fun DiscoverScreen(
                 .filterNot { blockRules.isBlocked(it.name) }
                 .toList()
         }
+    }
+
+    // 封面预取：新到的一批先解码进内存缓存，滚过去时不再临时解码，减少掉帧
+    LaunchedEffect(items, coverWidthDp) {
+        val pending = buildList {
+            for (item in items) {
+                val cover = item.cover?.takeIf { it.isNotBlank() } ?: continue
+                if (prefetchedCovers.add(cover)) add(cover)
+                if (size >= 24) break
+            }
+        }
+        prefetchCovers(context, pending, coverWidthDp)
     }
 
     // 滚动驱动：只要接近末尾就继续加载，直到没有更多
@@ -430,6 +447,7 @@ fun DiscoverScreen(
                         showOrganization = showOrganization,
                         customText = customText,
                         showCover = showCover,
+                        coverWidthDp = coverWidthDp,
                         titleLines = titleLines,
                         onClick = { onOpenActivity(item.id) },
                     )
@@ -483,10 +501,11 @@ private fun ActivityCard(
     showOrganization: Boolean,
     customText: String,
     showCover: Boolean,
+    coverWidthDp: Int,
     titleLines: Int,
     onClick: () -> Unit,
 ) {
-    val coverRequest = rememberCoverRequest(item.cover, gridCardWidthDp())
+    val coverRequest = rememberCoverRequest(item.cover, coverWidthDp)
     Column(modifier = Modifier.clickable(onClick = onClick)) {
         Box {
             if (showCover) {

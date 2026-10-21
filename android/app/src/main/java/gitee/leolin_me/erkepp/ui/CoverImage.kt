@@ -1,10 +1,12 @@
 package gitee.leolin_me.erkepp.ui
 
+import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import coil.Coil
 import coil.request.ImageRequest
 
 /** 封面解码宽度上限：手机上再大也看不出差别，只会白占内存。 */
@@ -27,11 +29,7 @@ fun rememberCoverRequest(
     val density = LocalDensity.current
     val widthPx = (widthDp * density.density).toInt().coerceIn(48, maxWidthPx)
     return remember(context, data, widthPx) {
-        ImageRequest.Builder(context)
-            .data(data)
-            .size(widthPx)
-            .crossfade(false)
-            .build()
+        buildCoverRequest(context, data, widthPx)
     }
 }
 
@@ -41,3 +39,23 @@ fun gridCardWidthDp(columns: Int = 2, outerPaddingDp: Int = 16, gapDp: Int = 12)
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     return ((screenWidthDp - outerPaddingDp * 2 - gapDp * (columns - 1)) / columns).coerceAtLeast(96)
 }
+
+/**
+ * 预取封面：先解码进内存缓存，滚到那里时直接画出来。
+ *
+ * 尺寸必须和卡片请求完全一致，否则内存缓存的键对不上，预取就白做了。
+ */
+fun prefetchCovers(context: Context, urls: List<String>, widthDp: Int) {
+    if (urls.isEmpty()) return
+    val widthPx = (widthDp * context.resources.displayMetrics.density).toInt()
+        .coerceIn(48, MAX_COVER_WIDTH_PX)
+    val loader = Coil.imageLoader(context)
+    urls.forEach { url -> loader.enqueue(buildCoverRequest(context, url, widthPx)) }
+}
+
+private fun buildCoverRequest(context: Context, data: Any?, widthPx: Int): ImageRequest =
+    ImageRequest.Builder(context)
+        .data(data)
+        .size(widthPx)
+        .crossfade(false)
+        .build()
