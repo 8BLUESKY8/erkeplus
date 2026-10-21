@@ -65,6 +65,23 @@
 
 时间均为毫秒时间戳。`logo` 是阿里云 OSS 绝对地址。
 
+## 未登录时的行为（2026-10-21 实测）
+
+所有业务接口在**不带 token** 时统一返回 `code:10001`「登陆失败，请重新登陆」，包括
+`/page/activity/list`、`/student/user/my/info`、`/user/modules`、`/message/notice/un-read-count`、`/dict/activity/choice-sort`。
+
+`/login/banner` 不带 token 可访问，但必须带 `schoolId` 参数，否则返回 `code:10000`。
+
+结论：**没有任何免登录内容**，登录是硬门槛。
+
+## 登录请求格式（来自站内 app.js 的请求拦截器，2026-10-21 核对）
+
+- `Content-Type: application/x-www-form-urlencoded`
+- 请求体：`params=<encodeURI(JSON.stringify({schoolCode, code, password, openId}))>`
+- 公共参数随请求携带：`token`、`platform=3`、`version=2.0.5`、`device`（固定 UUID）、`timestamp`
+- 成功：`code:0`，`data.access_token` 即 JWT
+- 无验证码；密码错误等业务错误通过 `code` 返回（如 30005/30006/30007 对应客服与微信绑定提示）
+
 ## 尚未验证
 
 - 活动详情（`#/ActivityShow/:id`）所用接口路径与参数
