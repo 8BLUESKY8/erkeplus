@@ -93,6 +93,8 @@ fun DiscoverScreen(
     var loadingMore by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var categories by remember { mutableStateOf(listOf(0 to "全部")) }
+    // 请求代号：筛选变化后，在途的旧请求结果一律丢弃，避免把旧数据拼进新列表
+    var generation by remember { mutableIntStateOf(0) }
 
     fun query(targetPage: Int) = ActivityQuery(
         page = targetPage,
@@ -103,32 +105,40 @@ fun DiscoverScreen(
     )
 
     fun reload() {
+        val gen = generation + 1
+        generation = gen
         scope.launch {
             loading = true
             error = null
             runCatching { repository.list(token, query(1)) }
                 .onSuccess {
-                    items = it.items
-                    total = it.total
-                    page = 1
+                    if (gen == generation) {
+                        items = it.items
+                        total = it.total
+                        page = 1
+                        gridState.requestScrollToItem(0)
+                    }
                 }
-                .onFailure { error = it.toUserMessage() }
-            loading = false
+                .onFailure { if (gen == generation) error = it.toUserMessage() }
+            if (gen == generation) loading = false
         }
     }
 
     fun loadMore() {
-        if (loadingMore || items.size >= total) return
+        if (loadingMore || loading || items.size >= total) return
+        val gen = generation
         scope.launch {
             loadingMore = true
             runCatching { repository.list(token, query(page + 1)) }
                 .onSuccess {
-                    items = items + it.items
-                    page = it.pageNum
-                    total = it.total
+                    if (gen == generation) {
+                        items = (items + it.items).distinctBy { item -> item.id }
+                        page = it.pageNum
+                        total = it.total
+                    }
                 }
-                .onFailure { error = it.toUserMessage() }
-            loadingMore = false
+                .onFailure { if (gen == generation) error = it.toUserMessage() }
+            if (gen == generation) loadingMore = false
         }
     }
 
@@ -312,7 +322,7 @@ private fun ActivityCard(item: ActivityItem, onClick: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = "${item.organizationName} · ${item.enrollCount}人报名",
+            text = "${item.enrollCount}人报名 · ${item.organizationName}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -346,9 +356,9 @@ private fun statusLabel(status: Int): String = when (status) {
 }
 
 private fun statusColor(status: Int): Color = when (status) {
-    5, 6 -> Color(0xCCB7791F)
-    7 -> Color(0xCC0E9668)
-    8 -> Color(0xCC7A7A7A)
+    5, 6 -> Color(0xCCC2410C)
+    7 -> Color(0xCC047857)
+    8 -> Color(0xCC6B7280)
     else -> Color(0xCC000000)
 }
 
