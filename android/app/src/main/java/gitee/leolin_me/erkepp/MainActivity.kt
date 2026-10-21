@@ -187,6 +187,7 @@ class MainActivity : ComponentActivity() {
                                         onOpenActivity = { id ->
                                             webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
                                         },
+                                        onOpenSettings = { tab = MainTab.SETTINGS },
                                     )
 
                                     MainTab.PROFILE -> {

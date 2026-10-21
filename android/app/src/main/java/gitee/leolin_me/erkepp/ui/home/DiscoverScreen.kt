@@ -86,6 +86,7 @@ fun DiscoverScreen(
     repository: ActivityRepository,
     preferences: AppPreferences,
     onOpenActivity: (Long) -> Unit,
+    onOpenSettings: () -> Unit = {},
 ) {
     val categoriesEnabled = preferences.categoriesEnabled
     val showCategoryTags = preferences.showCategoryTags
@@ -231,6 +232,9 @@ fun DiscoverScreen(
     val blockRules = remember(blockedKeywords, blockedRegexes) {
         BlockRules.parse(blockedKeywords, blockedRegexes)
     }
+    val blockedByRules = remember(items, blockRules) {
+        if (blockRules.isEmpty) 0 else items.count { blockRules.isBlocked(it.name) }
+    }
     val query = debouncedSearch.trim()
     val visibleItems = remember(items, blockRules, query, hoursMin, hoursMax) {
         items.asSequence()
@@ -253,12 +257,11 @@ fun DiscoverScreen(
         if (shouldLoadMore) loadMore()
     }
 
-    // 过滤后内容撑不满屏幕时补一页；最多补 2 次，避免死循环
+    // 过滤后内容撑不满屏幕时补页；只要还显示不到 12 条就继续补，最多 5 次
     LaunchedEffect(gridState.canScrollForward, items.size, visibleItems.size) {
         val laidOut = gridState.layoutInfo.totalItemsCount > 0
         if (!loading && !loadingMore && !endReached && laidOut &&
-            items.size < total && !gridState.canScrollForward &&
-            visibleItems.size < 6 && autoFillCount < 2
+            items.size < total && visibleItems.size < 12 && autoFillCount < 5
         ) {
             autoFillCount++
             AppLog.d("discover", "auto-fill #$autoFillCount loaded=${items.size} visible=${visibleItems.size} total=$total")
@@ -359,6 +362,18 @@ fun DiscoverScreen(
                     label = { Text("已报名", style = MaterialTheme.typography.bodySmall) },
                 )
             }
+        }
+
+        if (blockedByRules > 0) {
+            Text(
+                text = "屏蔽规则隐藏了 $blockedByRules 条，点此去设置",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenSettings() }
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+            )
         }
 
         when {
