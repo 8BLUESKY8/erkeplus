@@ -182,14 +182,7 @@ class MainActivity : ComponentActivity() {
                                     MainTab.DISCOVER -> DiscoverScreen(
                                         token = current.token,
                                         repository = activityRepository,
-                                        categoriesEnabled = categoriesEnabled,
-                                        showCategoryTags = showCategoryTags,
-                                        selectedCategoryIds = selectedCategoryIds,
-                                        blockedKeywords = blockedKeywords,
-                                        blockedRegexes = blockedRegexes,
-                                        preloadEnabled = preloadEnabled,
-                                        simpleMode = simpleMode,
-                                        titleLines = titleLines,
+                                        preferences = preferences,
                                         onOpenActivity = { id ->
                                             webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
                                         },
@@ -258,6 +251,7 @@ class MainActivity : ComponentActivity() {
                                             titleLines = it
                                             preferences.titleLines = it
                                         },
+                                        preferences = preferences,
                                         onLogout = {
                                             sessionStore.clear()
                                             session = null

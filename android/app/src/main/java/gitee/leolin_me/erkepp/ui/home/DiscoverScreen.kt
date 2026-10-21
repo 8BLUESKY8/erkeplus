@@ -25,6 +25,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -57,6 +58,7 @@ import gitee.leolin_me.erkepp.R
 import gitee.leolin_me.erkepp.data.ActivityItem
 import gitee.leolin_me.erkepp.data.ActivityQuery
 import gitee.leolin_me.erkepp.data.ActivityRepository
+import gitee.leolin_me.erkepp.data.AppPreferences
 import gitee.leolin_me.erkepp.data.BlockRules
 import gitee.leolin_me.erkepp.data.toUserMessage
 import kotlinx.coroutines.delay
@@ -78,28 +80,42 @@ private val StatusOptions = listOf(
 fun DiscoverScreen(
     token: String,
     repository: ActivityRepository,
-    categoriesEnabled: Boolean,
-    showCategoryTags: Boolean,
-    selectedCategoryIds: Set<Int>,
-    blockedKeywords: String,
-    blockedRegexes: String,
-    preloadEnabled: Boolean,
-    simpleMode: Boolean,
-    titleLines: Int,
+    preferences: AppPreferences,
     onOpenActivity: (Long) -> Unit,
 ) {
+    val categoriesEnabled = preferences.categoriesEnabled
+    val showCategoryTags = preferences.showCategoryTags
+    val selectedCategoryIds = preferences.selectedCategoryIds
+    val preloadEnabled = preferences.preloadEnabled
+    val simpleMode = preferences.simpleMode
+    val titleLines = preferences.titleLines
+    val blockedKeywords = preferences.blockedKeywords
+    val blockedRegexes = preferences.blockedRegexes
+    val showHours = preferences.cardShowHours
+    val showCount = preferences.cardShowCount
+    val showOrganization = preferences.cardShowOrganization
+    val customText = preferences.cardCustomText
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyGridState()
 
     var search by rememberSaveable { mutableStateOf("") }
     var debouncedSearch by remember { mutableStateOf("") }
-    var statusFilter by rememberSaveable { mutableStateOf("5") }
-    var classifyId by rememberSaveable { mutableIntStateOf(0) }
-    var sortType by rememberSaveable { mutableIntStateOf(1) }
-    var enrolledOnly by rememberSaveable { mutableStateOf(false) }
-    var hoursMin by remember { mutableStateOf<Double?>(null) }
-    var hoursMax by remember { mutableStateOf<Double?>(null) }
+    var statusFilter by rememberSaveable { mutableStateOf(preferences.filterStatus) }
+    var classifyId by rememberSaveable { mutableIntStateOf(preferences.filterClassify) }
+    var sortType by rememberSaveable { mutableIntStateOf(preferences.filterSort) }
+    var enrolledOnly by rememberSaveable { mutableStateOf(preferences.filterEnrolled) }
+    var hoursMin by remember { mutableStateOf(preferences.filterHoursMin.toDoubleOrNull()) }
+    var hoursMax by remember { mutableStateOf(preferences.filterHoursMax.toDoubleOrNull()) }
     var showHoursDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(statusFilter, classifyId, sortType, enrolledOnly, hoursMin, hoursMax) {
+        preferences.filterStatus = statusFilter
+        preferences.filterClassify = classifyId
+        preferences.filterSort = sortType
+        preferences.filterEnrolled = enrolledOnly
+        preferences.filterHoursMin = hoursMin?.let { formatHours(it) } ?: ""
+        preferences.filterHoursMax = hoursMax?.let { formatHours(it) } ?: ""
+    }
 
     var items by remember { mutableStateOf<List<ActivityItem>>(emptyList()) }
     var total by remember { mutableIntStateOf(0) }
@@ -217,19 +233,60 @@ fun DiscoverScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        OutlinedTextField(
-            value = search,
-            onValueChange = { search = it },
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 12.dp),
-            placeholder = { Text("搜索活动名称") },
-            leadingIcon = {
-                Icon(painter = painterResource(R.drawable.ic_search), contentDescription = null)
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(22.dp),
-        )
+                .padding(start = 16.dp, end = 8.dp, top = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = search,
+                onValueChange = { search = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("搜索活动名称") },
+                leadingIcon = {
+                    Icon(painter = painterResource(R.drawable.ic_search), contentDescription = null)
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(22.dp),
+            )
+            IconButton(onClick = { showHoursDialog = true }) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_tune),
+                    contentDescription = "学时筛选",
+                    tint = if (hoursMin != null || hoursMax != null) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+            IconButton(onClick = { sortType = if (sortType == 1) 2 else 1 }) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_sort),
+                    contentDescription = if (sortType == 1) "最新" else "最热",
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "$total 条",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = if (sortType == 1) "最新" else "最热",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
@@ -256,34 +313,18 @@ fun DiscoverScreen(
         }
 
         if (categoriesEnabled) {
-            Row(
+            LazyRow(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                LazyRow(
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(start = 16.dp, end = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(visibleCategories) { (id, label) ->
-                        FilterChip(
-                            selected = classifyId == id,
-                            onClick = { classifyId = id },
-                            label = { Text(label) },
-                        )
-                    }
+                items(visibleCategories) { (id, label) ->
+                    FilterChip(
+                        selected = classifyId == id,
+                        onClick = { classifyId = id },
+                        label = { Text(label) },
+                    )
                 }
-                HoursButton(hoursMin, hoursMax) { showHoursDialog = true }
-                SortButton(sortType) { sortType = if (sortType == 1) 2 else 1 }
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                HoursButton(hoursMin, hoursMax) { showHoursDialog = true }
-                SortButton(sortType) { sortType = if (sortType == 1) 2 else 1 }
             }
         }
 
@@ -324,6 +365,10 @@ fun DiscoverScreen(
                     ActivityCard(
                         item = item,
                         showCategoryTags = showCategoryTags,
+                        showHours = showHours,
+                        showCount = showCount,
+                        showOrganization = showOrganization,
+                        customText = customText,
                         simpleMode = simpleMode,
                         titleLines = titleLines,
                         onClick = { onOpenActivity(item.id) },
@@ -363,6 +408,10 @@ fun DiscoverScreen(
 private fun ActivityCard(
     item: ActivityItem,
     showCategoryTags: Boolean,
+    showHours: Boolean,
+    showCount: Boolean,
+    showOrganization: Boolean,
+    customText: String,
     simpleMode: Boolean,
     titleLines: Int,
     onClick: () -> Unit,
@@ -414,29 +463,43 @@ private fun ActivityCard(
             maxLines = titleLines,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = if (showCategoryTags && item.classifyName.isNotBlank()) {
-                "${formatHours(item.hours)}学时 · ${item.classifyName}"
-            } else {
-                "${formatHours(item.hours)}学时"
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = if (item.enrollCount > 0) {
-                "${item.enrollCount}人报名 · ${item.organizationName}"
-            } else {
-                item.organizationName
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        val metaFirst = buildList {
+            if (showHours) add("${formatHours(item.hours)}学时")
+            if (showCategoryTags && item.classifyName.isNotBlank()) add(item.classifyName)
+        }.joinToString(" · ")
+        val metaSecond = buildList {
+            if (showCount && item.enrollCount > 0) add("${item.enrollCount}人报名")
+            if (showOrganization && item.organizationName.isNotBlank()) add(item.organizationName)
+        }.joinToString(" · ")
+
+        if (metaFirst.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = metaFirst,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (metaSecond.isNotEmpty()) {
+            Text(
+                text = metaSecond,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (customText.isNotBlank()) {
+            Text(
+                text = customText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -473,23 +536,6 @@ private fun statusColor(status: Int): Color = when (status) {
 
 private fun formatHours(value: Double): String =
     if (value == value.toLong().toDouble()) value.toLong().toString() else String.format(java.util.Locale.US, "%.1f", value)
-
-@Composable
-private fun HoursButton(min: Double?, max: Double?, onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
-        Text(
-            text = if (min == null && max == null) "学时" else "学时·",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-    }
-}
-
-@Composable
-private fun SortButton(sortType: Int, onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
-        Text(if (sortType == 1) "最新" else "最热", style = MaterialTheme.typography.bodyMedium)
-    }
-}
 
 @Composable
 private fun HoursFilterDialog(

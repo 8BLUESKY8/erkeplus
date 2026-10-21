@@ -61,6 +61,7 @@ fun SettingsScreen(
     onPreloadChange: (Boolean) -> Unit,
     onSimpleModeChange: (Boolean) -> Unit,
     onTitleLinesChange: (Int) -> Unit,
+    preferences: gitee.leolin_me.erkepp.data.AppPreferences,
     onLogout: () -> Unit,
     onShowDisclaimer: () -> Unit,
 ) {
@@ -187,6 +188,61 @@ fun SettingsScreen(
                 )
             }
         }
+
+        Spacer(Modifier.height(16.dp))
+        HorizontalDivider()
+
+        Spacer(Modifier.height(16.dp))
+        Text("卡片显示内容", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "决定活动卡片上显示哪些信息",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        var showHours by remember { mutableStateOf(preferences.cardShowHours) }
+        var showCount by remember { mutableStateOf(preferences.cardShowCount) }
+        var showOrg by remember { mutableStateOf(preferences.cardShowOrganization) }
+        var customText by remember { mutableStateOf(preferences.cardCustomText) }
+
+        SettingSwitchRow(
+            title = "显示学时",
+            subtitle = "例如「5学时」",
+            checked = showHours,
+            onCheckedChange = {
+                showHours = it
+                preferences.cardShowHours = it
+            },
+        )
+        SettingSwitchRow(
+            title = "显示报名人数",
+            subtitle = "例如「1363人报名」",
+            checked = showCount,
+            onCheckedChange = {
+                showCount = it
+                preferences.cardShowCount = it
+            },
+        )
+        SettingSwitchRow(
+            title = "显示主办组织",
+            subtitle = "例如「校团委」",
+            checked = showOrg,
+            onCheckedChange = {
+                showOrg = it
+                preferences.cardShowOrganization = it
+            },
+        )
+        OutlinedTextField(
+            value = customText,
+            onValueChange = {
+                customText = it
+                preferences.cardCustomText = it
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("卡片附加文字（可留空）") },
+            placeholder = { Text("例如：我关注的类别") },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+        )
 
         Spacer(Modifier.height(16.dp))
         HorizontalDivider()

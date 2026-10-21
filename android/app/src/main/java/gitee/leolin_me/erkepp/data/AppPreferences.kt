@@ -75,6 +75,69 @@ class AppPreferences(context: Context) {
             prefs.edit().putInt(KEY_TITLE_LINES, value.coerceIn(1, 3)).apply()
         }
 
+    // ---- 发现页筛选记忆 ----
+    var filterStatus: String
+        get() = prefs.getString(KEY_FILTER_STATUS, "5").orEmpty()
+        set(value) {
+            prefs.edit().putString(KEY_FILTER_STATUS, value).apply()
+        }
+
+    var filterSort: Int
+        get() = prefs.getInt(KEY_FILTER_SORT, 1)
+        set(value) {
+            prefs.edit().putInt(KEY_FILTER_SORT, value).apply()
+        }
+
+    var filterClassify: Int
+        get() = prefs.getInt(KEY_FILTER_CLASSIFY, 0)
+        set(value) {
+            prefs.edit().putInt(KEY_FILTER_CLASSIFY, value).apply()
+        }
+
+    var filterEnrolled: Boolean
+        get() = prefs.getBoolean(KEY_FILTER_ENROLLED, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_FILTER_ENROLLED, value).apply()
+        }
+
+    var filterHoursMin: String
+        get() = prefs.getString(KEY_FILTER_HOURS_MIN, "").orEmpty()
+        set(value) {
+            prefs.edit().putString(KEY_FILTER_HOURS_MIN, value).apply()
+        }
+
+    var filterHoursMax: String
+        get() = prefs.getString(KEY_FILTER_HOURS_MAX, "").orEmpty()
+        set(value) {
+            prefs.edit().putString(KEY_FILTER_HOURS_MAX, value).apply()
+        }
+
+    // ---- 卡片显示内容 ----
+    var cardShowHours: Boolean
+        get() = prefs.getBoolean(KEY_CARD_HOURS, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_CARD_HOURS, value).apply()
+        }
+
+    var cardShowCount: Boolean
+        get() = prefs.getBoolean(KEY_CARD_COUNT, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_CARD_COUNT, value).apply()
+        }
+
+    var cardShowOrganization: Boolean
+        get() = prefs.getBoolean(KEY_CARD_ORG, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_CARD_ORG, value).apply()
+        }
+
+    /** 卡片附加的自定义文字，留空则不显示。 */
+    var cardCustomText: String
+        get() = prefs.getString(KEY_CARD_TEXT, "").orEmpty()
+        set(value) {
+            prefs.edit().putString(KEY_CARD_TEXT, value).apply()
+        }
+
     private companion object {
         const val KEY_DISCLAIMER = "disclaimer_accepted_v1"
         const val KEY_CATEGORIES_ENABLED = "categories_enabled"
@@ -85,6 +148,16 @@ class AppPreferences(context: Context) {
         const val KEY_PRELOAD = "preload_enabled"
         const val KEY_SIMPLE_MODE = "simple_mode"
         const val KEY_TITLE_LINES = "title_lines"
+        const val KEY_FILTER_STATUS = "filter_status"
+        const val KEY_FILTER_SORT = "filter_sort"
+        const val KEY_FILTER_CLASSIFY = "filter_classify"
+        const val KEY_FILTER_ENROLLED = "filter_enrolled"
+        const val KEY_FILTER_HOURS_MIN = "filter_hours_min"
+        const val KEY_FILTER_HOURS_MAX = "filter_hours_max"
+        const val KEY_CARD_HOURS = "card_show_hours"
+        const val KEY_CARD_COUNT = "card_show_count"
+        const val KEY_CARD_ORG = "card_show_org"
+        const val KEY_CARD_TEXT = "card_custom_text"
 
         val DEFAULT_CATEGORIES = setOf(1440, 1441, 1444)
     }
