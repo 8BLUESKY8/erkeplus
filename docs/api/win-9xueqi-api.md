@@ -110,9 +110,50 @@
 - 安徽理工的校徽原图仅 60×60，放大显示会发糊；这是平台侧素材问题，不是客户端取图错误。
 - `name` 字段可能带首尾换行，需要 trim。
 
+## 活动详情（2026-10-21 实测）
+
+按用户与活动的关系分三个接口，参数都只有一个 `id`（活动 id）：
+
+| 场景 | 接口 | 验证情况 |
+| --- | --- | --- |
+| 没参加 | `GET /activity/detail/non-member` | 已实测（Debug 包抓取原始响应） |
+| 已参加 | `GET /activity/detail/participant` | 未实测（客户端作回落分支） |
+| 管理员 | `GET /activity/detail/manger` | 未实测（服务端拼写就是 `manger`） |
+
+实测样本（活动 `566506`，电话号码已脱敏，其余原样）：
+
+```json
+{
+  "id": 566506, "name": "21天单词打卡", "activityStatus": 7,
+  "classifyName": "参与团支部层面开展的文体艺术活动",
+  "organizationName": "智能采矿25-2", "organizationAvatar": null,
+  "logo": "https://.../智育.jpg", "hours": 8.0, "definedHours": 2.0,
+  "credit": 98.33, "hoursToCreditRatio": 0.00,
+  "startTime": 1791388800000, "endTime": 1793289540000,
+  "enrollStartTime": 1790651400000, "enrollEndTime": 1791388740000,
+  "address": "百词斩", "contact": "130****3239",
+  "peopleLimit": 33, "joinMemberCount": 19,
+  "genderLimit": 0, "gradeList": [{"name": "2025级"}],
+  "collegeList": [{"name": "矿业工程学院"}], "honestLimit": null,
+  "manager": {"name": "刘昊辰", "id": 2197962},
+  "activityLimitType": {"type": 0}, "attachment": [],
+  "introduce": "为提高大家的学习热情……（纯文本）"
+}
+```
+
+字段注意点：
+
+- `introduce` **多数是纯文本**，不是 HTML；客户端按是否含标签决定用文本还是富文本渲染。
+- `credit` 不可当作「学分」使用：实测 `98.33` 与学时无关，含义未明，客户端不展示。
+- `peopleLimit` 为 0 表示不限人数，此时只显示已报名人数。
+- `attachment` 是**数组**，空数组即无附件。
+- `gradeList` / `collegeList` 是对象数组，取其中的 `name`。
+- 所有时间字段都是毫秒时间戳。
+- `honestLimit` 可能为 `null`。
+
 ## 尚未验证
 
-- 活动详情（`#/ActivityShow/:id`）所用接口路径与参数
 - 报名、取消、签到等**写操作**（未验证，禁止先行接入）
+- 已参加（`detail/participant`）与管理员（`detail/manger`）两个详情接口的实际响应
 - 二课成绩页（`#/scoreReport`）实际接口
 - 学生组织、问卷、打卡等长尾页面

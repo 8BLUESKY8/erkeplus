@@ -1,0 +1,127 @@
+package gitee.leolin_me.erkepp.data
+
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+
+/**
+ * 活动详情。
+ *
+ * 字段取自官方 H5 的「活动详情（未参加）」页面（`activity/detail/non-member`），
+ * 已参加的用户走 `activity/detail/participant`，两者字段大体一致。
+ */
+data class ActivityDetail(
+    val id: Long,
+    val name: String,
+    val cover: String?,
+    val status: Int,
+    val classifyName: String,
+    val organizationName: String,
+    val organizationAvatar: String?,
+    val hours: Double,
+    val credit: Double,
+    val hoursToCreditRatio: Double,
+    val startTime: Long,
+    val endTime: Long,
+    val enrollStartTime: Long,
+    val enrollEndTime: Long,
+    val address: String,
+    val contact: String,
+    val introduceHtml: String,
+    val peopleLimit: Int,
+    val joinMemberCount: Int,
+    val genderLimit: Int,
+    val gradeNames: List<String>,
+    val collegeNames: List<String>,
+    val honestLimit: Double,
+    val attachmentUrl: String?,
+    /** 活动管理员姓名（官方详情页也会显示）。 */
+    val managerName: String,
+    /** 数据来自哪个接口：`non-member` 或 `participant`。 */
+    val source: String,
+) {
+    /** 是否限制了参与人群，用于决定要不要显示「参与限制」一栏。 */
+    val hasRestriction: Boolean
+        get() = genderLimit != 0 || gradeNames.isNotEmpty() || collegeNames.isNotEmpty() || honestLimit > 0
+}
+
+internal fun parseActivityDetail(data: JsonObject, source: String): ActivityDetail = ActivityDetail(
+    id = data.long("id"),
+    name = data.text("name"),
+    cover = data.text("logo").takeIf { it.isNotBlank() },
+    status = data.int("activityStatus").takeIf { it != 0 } ?: data.int("status"),
+    classifyName = data.text("classifyName"),
+    organizationName = data.text("organizationName"),
+    organizationAvatar = data.text("organizationAvatar").takeIf { it.isNotBlank() },
+    hours = data.double("hours"),
+    credit = data.double("credit"),
+    hoursToCreditRatio = data.double("hoursToCreditRatio"),
+    startTime = data.long("startTime"),
+    endTime = data.long("endTime"),
+    enrollStartTime = data.long("enrollStartTime"),
+    enrollEndTime = data.long("enrollEndTime"),
+    address = data.text("address"),
+    contact = data.text("contact"),
+    introduceHtml = data.text("introduce"),
+    peopleLimit = data.int("peopleLimit"),
+    joinMemberCount = data.int("joinMemberCount"),
+    genderLimit = data.int("genderLimit"),
+    gradeNames = data.nameList("gradeList"),
+    collegeNames = data.nameList("collegeList"),
+    honestLimit = data.double("honestLimit"),
+    attachmentUrl = data.attachmentUrl("attachment"),
+    managerName = (data.element("manager") as? JsonObject)?.text("name").orEmpty(),
+    source = source,
+)
+
+private fun JsonObject.element(key: String): JsonElement? =
+    this[key]?.takeIf { it !is JsonNull }
+
+private fun JsonObject.text(key: String): String =
+    (element(key) as? JsonPrimitive)?.contentOrNull.orEmpty()
+
+private fun JsonObject.int(key: String): Int =
+    (element(key) as? JsonPrimitive)?.intOrNull ?: 0
+
+private fun JsonObject.long(key: String): Long {
+    val primitive = element(key) as? JsonPrimitive ?: return 0L
+    primitive.longOrNull?.let { return it }
+    // 少数字段可能给的是字符串，按数字再试一次
+    return primitive.contentOrNull?.toLongOrNull() ?: 0L
+}
+
+private fun JsonObject.double(key: String): Double {
+    val primitive = element(key) as? JsonPrimitive ?: return 0.0
+    primitive.doubleOrNull?.let { return it }
+    return primitive.contentOrNull?.toDoubleOrNull() ?: 0.0
+}
+
+/** 年级 / 学院列表既可能是字符串数组，也可能是对象数组，取 name 字段。 */
+private fun JsonObject.nameList(key: String): List<String> {
+    val array = (element(key) as? JsonElement)?.let { runCatching { it.jsonArray }.getOrNull() } ?: return emptyList()
+    return array.mapNotNull { item ->
+        when (item) {
+            is JsonPrimitive -> item.contentOrNull?.takeIf { it.isNotBlank() }
+            is JsonObject -> item.text("name").takeIf { it.isNotBlank() }
+            else -> null
+        }
+    }
+}
+
+private fun JsonObject.attachmentUrl(key: String): String? {
+    return when (val item = element(key)) {
+        null -> null
+        is JsonPrimitive -> item.contentOrNull?.takeIf { it.isNotBlank() }
+        is JsonObject -> item.text("url").ifBlank { item.text("path") }.ifBlank { item.text("fileUrl") }
+            .takeIf { it.isNotBlank() }
+        else -> null
+    }
+}

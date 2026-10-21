@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -53,6 +54,7 @@ import gitee.leolin_me.erkepp.data.WebPrefill
 import gitee.leolin_me.erkepp.ui.DisclaimerDialog
 import gitee.leolin_me.erkepp.ui.ErkeppTheme
 import gitee.leolin_me.erkepp.ui.WebShell
+import gitee.leolin_me.erkepp.ui.detail.ActivityDetailScreen
 import gitee.leolin_me.erkepp.ui.home.DiscoverScreen
 import gitee.leolin_me.erkepp.ui.home.MyActivitiesScreen
 import gitee.leolin_me.erkepp.ui.home.ProfileScreen
@@ -135,6 +137,10 @@ class MainActivity : ComponentActivity() {
 
                 var settingsSection by remember { mutableStateOf(SettingsSection.ROOT) }
                 var showMyActivities by remember { mutableStateOf(false) }
+                // 支持 `am start ... --el detail_id 566506` 直接开详情，方便调试和截图
+                var detailActivityId by remember {
+                    mutableStateOf(intent.getLongExtra("detail_id", 0L).takeIf { it > 0L })
+                }
 
                 // 旧版本会话缺少 rawProfile：启动时补拉一次 my-info，供网页注入使用
                 LaunchedEffect(session) {
@@ -252,6 +258,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
+                            Box(modifier = Modifier.fillMaxSize()) {
                             Column(modifier = Modifier.fillMaxSize()) {
                                 HorizontalPager(
                                     state = pagerState,
@@ -269,9 +276,7 @@ class MainActivity : ComponentActivity() {
                                             preferences = preferences,
                                             refreshTick = discoverRefreshTick,
                                             reenterTick = discoverReenterTick,
-                                            onOpenActivity = { id ->
-                                                webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
-                                            },
+                                            onOpenActivity = { id -> detailActivityId = id },
                                             onOpenBlockRules = {
                                                 settingsSection = SettingsSection.BLOCK_RULES
                                                 tab = MainTab.SETTINGS
@@ -284,9 +289,7 @@ class MainActivity : ComponentActivity() {
                                                     token = current.token,
                                                     repository = activityRepository,
                                                     onBack = { showMyActivities = false },
-                                                    onOpenActivity = { id ->
-                                                        webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
-                                                    },
+                                                    onOpenActivity = { id -> detailActivityId = id },
                                                 )
                                             } else {
                                                 ProfileScreen(
@@ -350,6 +353,22 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
                                 }
+                            }
+
+                            // 详情做成覆盖层：分页容器留在组合里，返回时列表不重载、位置不丢
+                            val detailId = detailActivityId
+                            if (detailId != null) {
+                                ActivityDetailScreen(
+                                    token = current.token,
+                                    repository = activityRepository,
+                                    activityId = detailId,
+                                    onBack = { detailActivityId = null },
+                                    onOpenWeb = { id ->
+                                        detailActivityId = null
+                                        webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
+                                    },
+                                )
+                            }
                             }
                         }
                     }

@@ -1,5 +1,6 @@
 package gitee.leolin_me.erkepp.data
 
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -10,6 +11,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import gitee.leolin_me.erkepp.AppLog
 import java.util.Calendar
 
 data class ActivityItem(
@@ -96,6 +98,39 @@ class ActivityRepository(private val api: ApiClient) {
         )
         response.requireSuccess()
         return parseActivityPage(response, page)
+    }
+
+    /**
+     * 活动详情。
+     *
+     * 未参加的用户走 `activity/detail/non-member`，已参加的走 `activity/detail/participant`。
+     * 先按「未参加」请求，报错或没有数据再按「已参加」请求；
+     * 首次拿到真实数据时会把原始 JSON 写进日志，方便核对字段。
+     */
+    suspend fun detail(token: String, id: Long): ActivityDetail {
+        val params = buildJsonObject { put("id", JsonPrimitive(id)) }
+        var lastFailure: Throwable? = null
+        for (path in DETAIL_PATHS) {
+            val response = runCatching { api.get(path, params, token) }
+                .onFailure { lastFailure = it }
+                .getOrNull() ?: continue
+            val source = path.substringAfterLast('/')
+            val parsed = runCatching {
+                response.requireSuccess()
+                val data = response.jsonObject["data"]
+                if (data == null || data is JsonNull) null else parseActivityDetail(data.jsonObject, source)
+            }.onFailure { lastFailure = it }.getOrNull()
+            if (parsed != null) {
+                AppLog.d("detail", "$path ok source=$source introduceLength=${parsed.introduceHtml.length}")
+                AppLog.d("detail", "raw=${response.jsonObject["data"]}")
+                return parsed
+            }
+        }
+        throw lastFailure ?: ApiException(-1, "活动详情不可用")
+    }
+
+    private companion object {
+        val DETAIL_PATHS = listOf("activity/detail/non-member", "activity/detail/participant")
     }
 }
 

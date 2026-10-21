@@ -69,9 +69,12 @@ import gitee.leolin_me.erkepp.data.AppPreferences
 import gitee.leolin_me.erkepp.data.BlockRules
 import gitee.leolin_me.erkepp.data.ReenterBehavior
 import gitee.leolin_me.erkepp.data.toUserMessage
+import gitee.leolin_me.erkepp.ui.formatHours
 import gitee.leolin_me.erkepp.ui.gridCardWidthDp
 import gitee.leolin_me.erkepp.ui.prefetchCovers
 import gitee.leolin_me.erkepp.ui.rememberCoverRequest
+import gitee.leolin_me.erkepp.ui.statusColor
+import gitee.leolin_me.erkepp.ui.statusLabel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -642,24 +645,6 @@ private fun Badge(text: String, modifier: Modifier = Modifier, color: Color = Co
         )
     }
 }
-
-private fun statusLabel(status: Int): String = when (status) {
-    5 -> "报名中"
-    6 -> "待开始"
-    7 -> "进行中"
-    8 -> "已结束"
-    else -> ""
-}
-
-private fun statusColor(status: Int): Color = when (status) {
-    5, 6 -> Color(0xCCC2410C)
-    7 -> Color(0xCC047857)
-    8 -> Color(0xCC6B7280)
-    else -> Color(0xCC000000)
-}
-
-private fun formatHours(value: Double): String =
-    if (value == value.toLong().toDouble()) value.toLong().toString() else String.format(java.util.Locale.US, "%.1f", value)
 
 @Composable
 private fun HoursFilterDialog(
