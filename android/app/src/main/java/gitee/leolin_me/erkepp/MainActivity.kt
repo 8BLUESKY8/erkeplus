@@ -4,6 +4,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.webkit.ValueCallback
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -12,12 +13,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -83,6 +86,7 @@ class MainActivity : ComponentActivity() {
                 var tab by rememberSaveable { mutableStateOf(MainTab.DISCOVER) }
                 var showForgot by remember { mutableStateOf(false) }
                 var showSchoolPicker by remember { mutableStateOf(false) }
+                var showExitConfirm by remember { mutableStateOf(false) }
                 var showDisclaimer by remember { mutableStateOf(!preferences.disclaimerAccepted) }
 
                 var categoriesEnabled by remember { mutableStateOf(preferences.categoriesEnabled) }
@@ -155,7 +159,15 @@ class MainActivity : ComponentActivity() {
                             onClose = { webUrl = null },
                         )
 
-                        else -> Column(modifier = Modifier.fillMaxSize()) {
+                        else -> {
+                            BackHandler {
+                                if (tab == MainTab.DISCOVER) {
+                                    showExitConfirm = true
+                                } else {
+                                    tab = MainTab.DISCOVER
+                                }
+                            }
+                            Column(modifier = Modifier.fillMaxSize()) {
                             Box(modifier = Modifier.weight(1f)) {
                                 when (tab) {
                                     MainTab.DISCOVER -> DiscoverScreen(
@@ -239,6 +251,30 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                }
+            }
+
+                if (showExitConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showExitConfirm = false },
+                        title = { Text("退出应用？") },
+                        text = { Text("按下退出后需要重新打开。") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showExitConfirm = false
+                                    finish()
+                                },
+                            ) {
+                                Text("退出")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showExitConfirm = false }) {
+                                Text("取消")
+                            }
+                        },
+                    )
                 }
 
                 if (showDisclaimer) {

@@ -50,6 +50,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 import gitee.leolin_me.erkepp.R
 import gitee.leolin_me.erkepp.data.ActivityItem
 import gitee.leolin_me.erkepp.data.ActivityQuery
@@ -172,8 +174,12 @@ fun DiscoverScreen(
     val blockRules = remember(blockedKeywords, blockedRegexes) {
         BlockRules.parse(blockedKeywords, blockedRegexes)
     }
-    val visibleItems = remember(items, blockRules) {
-        if (blockRules.isEmpty) items else items.filterNot { blockRules.isBlocked(it.name) }
+    val query = debouncedSearch.trim()
+    val visibleItems = remember(items, blockRules, query) {
+        items.asSequence()
+            .filter { query.isEmpty() || it.name.contains(query, ignoreCase = true) }
+            .filterNot { blockRules.isBlocked(it.name) }
+            .toList()
     }
 
     val shouldLoadMore by remember {
@@ -186,6 +192,13 @@ fun DiscoverScreen(
 
     LaunchedEffect(shouldLoadMore) {
         if (shouldLoadMore) loadMore()
+    }
+
+    // 搜索时如果当前页没有命中，自动往后翻几页，避免"搜不到"的错觉
+    LaunchedEffect(query, items.size) {
+        if (query.isNotEmpty() && visibleItems.isEmpty() && items.size < total && page < 5 && !loading && !loadingMore) {
+            loadMore()
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -263,7 +276,7 @@ fun DiscoverScreen(
             }
 
             visibleItems.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("当前结果都被屏蔽规则过滤了", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("没有匹配的活动（可能被搜索词或屏蔽规则过滤）", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             else -> LazyVerticalGrid(
@@ -274,7 +287,7 @@ fun DiscoverScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                items(visibleItems, key = { it.id }) { item ->
+                items(visibleItems, key = { it.id }, contentType = { "activity" }) { item ->
                     ActivityCard(
                         item = item,
                         showCategoryTags = showCategoryTags,
@@ -300,10 +313,18 @@ fun DiscoverScreen(
 
 @Composable
 private fun ActivityCard(item: ActivityItem, showCategoryTags: Boolean, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val imageRequest = remember(item.cover) {
+        ImageRequest.Builder(context)
+            .data(item.cover)
+            .size(480, 360)
+            .crossfade(false)
+            .build()
+    }
     Column(modifier = Modifier.clickable(onClick = onClick)) {
         Box {
             AsyncImage(
-                model = item.cover,
+                model = imageRequest,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

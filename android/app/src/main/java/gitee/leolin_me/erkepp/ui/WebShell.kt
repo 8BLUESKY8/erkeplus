@@ -28,12 +28,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +52,7 @@ import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import gitee.leolin_me.erkepp.AppConfig
 import gitee.leolin_me.erkepp.UrlPolicy
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 
 /**
@@ -78,6 +81,21 @@ fun WebShell(
     val refreshLayout = remember { mutableStateOf<SwipeRefreshLayout?>(null) }
     // 网页详情依赖官方站点的 localStorage.Token；注入一次后重载，让页面启动时就能读到
     val seeded = remember { mutableStateOf(false) }
+    // 注入期间先遮住 WebView，避免用户看到首页闪一下再跳详情
+    var ready by remember { mutableStateOf(prefill.isEmpty()) }
+    var awaitingTarget by remember { mutableStateOf(false) }
+    val targetFragment = remember(targetUrl) { targetUrl.substringAfter('#', "") }
+
+    // 跳转失败或超时也要放行，避免一直挡着加载层
+    LaunchedEffect(awaitingTarget) {
+        if (awaitingTarget) {
+            delay(8_000)
+            if (awaitingTarget) {
+                awaitingTarget = false
+                ready = true
+            }
+        }
+    }
 
     val webView = remember {
         WebView(context).apply {
@@ -121,9 +139,14 @@ fun WebShell(
                     progress = 100
                     canGoBack = view.canGoBack()
                     refreshLayout.value?.isRefreshing = false
+                    if (awaitingTarget && url.contains(targetFragment)) {
+                        awaitingTarget = false
+                        ready = true
+                    }
                     if (!seeded.value && prefill.isNotEmpty()) {
                         seeded.value = true
                         view.evaluateJavascript(storageScript(prefill)) {
+                            awaitingTarget = true
                             if (targetUrl.trimEnd('/') == AppConfig.HOME_URL.trimEnd('/')) {
                                 view.reload()
                             } else {
@@ -245,6 +268,17 @@ fun WebShell(
                 },
                 onOpenInBrowser = { openExternal(context, Uri.parse(failed)) },
             )
+        }
+
+        if (!ready) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
         }
 
         onClose?.let { close ->
