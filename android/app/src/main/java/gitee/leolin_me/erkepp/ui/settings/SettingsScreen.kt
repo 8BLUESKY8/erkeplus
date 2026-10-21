@@ -161,6 +161,12 @@ fun SettingsScreen(
                 checked = preferences.cardShowOrganization,
                 onCheckedChange = { preferences.cardShowOrganization = it },
             )
+            SettingSwitchRow(
+                title = "显示时间参考",
+                subtitle = "报名中显示报名截止；已截止显示开始时间；已开始显示结束时间",
+                checked = preferences.cardShowTime,
+                onCheckedChange = { preferences.cardShowTime = it },
+            )
             OutlinedTextField(
                 value = preferences.cardCustomText,
                 onValueChange = { preferences.cardCustomText = it },

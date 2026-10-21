@@ -175,6 +175,24 @@
 - 所有时间字段都是毫秒时间戳。
 - `honestLimit` 可能为 `null`。
 
+## 活动公告（2026-10-21 实测）
+
+| 场景 | 接口 | 参数 |
+| --- | --- | --- |
+| 未参加 | `GET /activity/noticeList` | `pageNum`、`pageSize`、`activityId` |
+| 已参加 / 管理员 | `GET /activity/noticeListNew` | 同上 |
+
+实测要点：
+
+- 已参加场景下 `noticeListNew` 会返回 `{"total":1,"list":[]}`，**有总数但没有列表**；
+  同样的活动用 `noticeList` 就能拿到 `list`。客户端两套都试，取到非空为止。
+- 列表元素字段：`id`、`content`（可能是 HTML）、`ctime`（毫秒时间戳）、`isPopup`（1 = 进详情页要弹窗）。
+- 没有 `title` 字段，弹窗标题只能用固定文案。
+
+写操作的接口清单（仅记录，未接入）：`activity/enroll/person`、`activity/enroll/team`、
+`activity/enroll/cancel/person`、`activity/enroll/leave/person`、`activity/sign/repair`、
+`activity/sign/switch`、`activity/submit/homework/list`。
+
 ## 尚未验证
 
 - 报名、取消、签到等**写操作**（未验证，禁止先行接入）

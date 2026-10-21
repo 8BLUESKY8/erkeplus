@@ -111,6 +111,7 @@ fun DiscoverScreen(
     val showHours = preferences.cardShowHours
     val showCount = preferences.cardShowCount
     val showOrganization = preferences.cardShowOrganization
+    val showTime = preferences.cardShowTime
     val customText = preferences.cardCustomText
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyGridState()
@@ -474,6 +475,7 @@ fun DiscoverScreen(
                         showHours = showHours,
                         showCount = showCount,
                         showOrganization = showOrganization,
+                        showTime = showTime,
                         customText = customText,
                         showCover = showCover,
                         coverWidthDp = coverWidthDp,
@@ -528,6 +530,7 @@ private fun ActivityCard(
     showHours: Boolean,
     showCount: Boolean,
     showOrganization: Boolean,
+    showTime: Boolean,
     customText: String,
     showCover: Boolean,
     coverWidthDp: Int,
@@ -595,9 +598,19 @@ private fun ActivityCard(
             if (showCategoryTags && item.classifyName.isNotBlank()) add(item.classifyName)
         }.joinToString(" · ")
         val metaSecond = buildList {
-            if (showCount && item.enrollCount > 0) add("${item.enrollCount}人报名")
+            if (showCount && item.enrollCount > 0) {
+                add(
+                    if (item.peopleLimit > 0) {
+                        "${item.enrollCount}/${item.peopleLimit}人报名"
+                    } else {
+                        "${item.enrollCount}人报名"
+                    },
+                )
+            }
             if (showOrganization && item.organizationName.isNotBlank()) add(item.organizationName)
         }.joinToString(" · ")
+
+        val timeHint = if (showTime) timeReference(item) else ""
 
         if (metaFirst.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
@@ -614,6 +627,15 @@ private fun ActivityCard(
                 text = metaSecond,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (timeHint.isNotEmpty()) {
+            Text(
+                text = timeHint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -645,6 +667,20 @@ private fun Badge(text: String, modifier: Modifier = Modifier, color: Color = Co
         )
     }
 }
+
+/**
+ * 卡片上的时间参考：报名中看报名截止，已截止看开始时间，已开始或结束看结束时间。
+ * 列表接口若没返回报名截止时间，会自然退到下一档。
+ */
+private fun timeReference(item: ActivityItem, now: Long = System.currentTimeMillis()): String = when {
+    item.enrollEndTime > now -> "报名截止 ${cardTime(item.enrollEndTime)}"
+    item.startTime > now -> "开始 ${cardTime(item.startTime)}"
+    item.endTime > 0 -> "结束 ${cardTime(item.endTime)}"
+    else -> ""
+}
+
+private fun cardTime(millis: Long): String =
+    java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(millis))
 
 @Composable
 private fun HoursFilterDialog(

@@ -1,6 +1,7 @@
 package gitee.leolin_me.erkepp.data
 
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -12,6 +13,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import gitee.leolin_me.erkepp.AppLog
+import gitee.leolin_me.erkepp.BuildConfig
 import java.util.Calendar
 
 data class ActivityItem(
@@ -23,7 +25,11 @@ data class ActivityItem(
     val classifySecondName: String?,
     val startTime: Long,
     val endTime: Long,
+    /** 报名截止时间；列表接口不一定返回，0 表示未知。 */
+    val enrollEndTime: Long,
     val enrollCount: Int,
+    /** 人数上限；0 表示不限。 */
+    val peopleLimit: Int,
     val organizationName: String,
     val status: Int,
     val recommended: Boolean,
@@ -150,12 +156,72 @@ class ActivityRepository(private val api: ApiClient) {
         return response.jsonObject["data"]?.jsonObject?.get("identity")?.jsonPrimitive?.intOrNull ?: 0
     }
 
+    /**
+     * 活动公告。
+     *
+     * 官方两套接口：已参加用 `activity/noticeListNew`，未参加用 `activity/noticeList`，
+     * 参数一致（`pageNum`、`pageSize`、`activityId`），返回 `data.list`。
+     */
+    suspend fun notices(token: String, id: Long, identity: Int): List<ActivityNotice> {
+        val params = buildJsonObject {
+            put("pageNum", JsonPrimitive(1))
+            put("pageSize", JsonPrimitive(50))
+            put("activityId", JsonPrimitive(id))
+        }
+        val paths = if (identity == 1 || identity == 2 || identity == 3) {
+            listOf("activity/noticeListNew", "activity/noticeList")
+        } else {
+            listOf("activity/noticeList", "activity/noticeListNew")
+        }
+        for (path in paths) {
+            val response = runCatching { api.get(path, params, token) }.getOrNull() ?: continue
+            val parsed = runCatching {
+                response.requireSuccess()
+                parseNotices(response.jsonObject["data"])
+            }.getOrNull() ?: continue
+            AppLog.d("notice", "$path count=${parsed.size}")
+            AppLog.d("notice", "raw=${response.jsonObject["data"]}")
+            // 有的活动 noticeListNew 只给 total 不给 list，空结果要继续试下一个接口
+            if (parsed.isNotEmpty()) return parsed
+        }
+        return emptyList()
+    }
+
     private companion object {
         const val NON_MEMBER = "activity/detail/non-member"
         const val PARTICIPANT = "activity/detail/participant"
         const val MANAGER = "activity/detail/manger"
     }
 }
+
+/** 公告列表解析：`data.list`，字段在不同接口里略有差异，做兼容取值。 */
+internal fun parseNotices(data: JsonElement?): List<ActivityNotice> {
+    if (data == null || data is JsonNull) return emptyList()
+    val list = data.jsonObject["list"]?.let { runCatching { it.jsonArray }.getOrNull() } ?: return emptyList()
+    return list.mapNotNull { element ->
+        val item = runCatching { element.jsonObject }.getOrNull() ?: return@mapNotNull null
+        val content = item.stringOrNull("content") ?: item.stringOrNull("noticeContent") ?: return@mapNotNull null
+        ActivityNotice(
+            id = item["id"]?.jsonPrimitive?.longOrNull ?: 0L,
+            title = item.stringOrNull("title") ?: item.stringOrNull("noticeTitle").orEmpty(),
+            content = content,
+            time = item.stringOrNull("createTime")
+                ?: item.stringOrNull("createdAt")
+                ?: item.stringOrNull("publishTime")
+                ?: item.millisText("ctime"),
+            isPopup = (item["isPopup"]?.jsonPrimitive?.intOrNull ?: 0) == 1,
+        )
+    }
+}
+
+private fun kotlinx.serialization.json.JsonObject.millisText(key: String): String {
+    val millis = this[key]?.jsonPrimitive?.longOrNull ?: return ""
+    return java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA)
+        .format(java.util.Date(millis))
+}
+
+private fun kotlinx.serialization.json.JsonObject.stringOrNull(key: String): String? =
+    this[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
 
 /** 活动列表参数：与官方活动页一致，共 11 个，缺项会返回 10002。 */
 internal fun buildActivityParams(query: ActivityQuery): JsonObject = buildJsonObject {
@@ -180,6 +246,10 @@ internal fun parseActivityPage(response: kotlinx.serialization.json.JsonElement,
     val data = dataElement.jsonObject
     val total = data["total"]?.jsonPrimitive?.intOrNull ?: 0
     val list = data["list"]?.jsonArray ?: return ActivityPage(total, pageNum, emptyList())
+    if (BuildConfig.DEBUG) {
+        // 列表字段并不是全部已知，留一条原始样本便于核对
+        runCatching { AppLog.d("discover", "listItem=${list.firstOrNull()}") }
+    }
     val items = list.mapNotNull { element ->
         val item = element.jsonObject
         val id = item["id"]?.jsonPrimitive?.longOrNull ?: return@mapNotNull null
@@ -192,7 +262,9 @@ internal fun parseActivityPage(response: kotlinx.serialization.json.JsonElement,
             classifySecondName = item["classifySecondName"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() },
             startTime = item["startTime"]?.jsonPrimitive?.longOrNull ?: 0L,
             endTime = item["endTime"]?.jsonPrimitive?.longOrNull ?: 0L,
+            enrollEndTime = item["enrollEndTime"]?.jsonPrimitive?.longOrNull ?: 0L,
             enrollCount = item["enrollCount"]?.jsonPrimitive?.intOrNull ?: 0,
+            peopleLimit = item["peopleLimit"]?.jsonPrimitive?.intOrNull ?: 0,
             organizationName = item["organizationName"]?.jsonPrimitive?.contentOrNull.orEmpty(),
             status = item["activityStatus"]?.jsonPrimitive?.intOrNull ?: 0,
             recommended = (item["isRecommend"]?.jsonPrimitive?.intOrNull ?: 0) == 1,

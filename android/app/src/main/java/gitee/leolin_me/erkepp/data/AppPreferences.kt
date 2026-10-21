@@ -70,6 +70,9 @@ class AppPreferences(context: Context) {
     var cardShowOrganization: Boolean by prefBoolean(KEY_CARD_ORG, true)
     var cardCustomText: String by prefString(KEY_CARD_TEXT, "")
 
+    /** 卡片是否显示时间参考（报名截止 / 活动开始 / 活动结束）。 */
+    var cardShowTime: Boolean by prefBoolean(KEY_CARD_TIME, true)
+
     /** 开发者模式：显示加载计数等调试信息。 */
     var developerMode: Boolean by prefBoolean(KEY_DEVELOPER, false)
 
@@ -87,6 +90,7 @@ class AppPreferences(context: Context) {
         cardShowCount = true
         cardShowOrganization = true
         cardCustomText = ""
+        cardShowTime = true
         filterStatus = "5"
         filterSort = 1
         filterClassify = 0
@@ -170,6 +174,7 @@ class AppPreferences(context: Context) {
         const val KEY_CARD_HOURS = "card_show_hours"
         const val KEY_CARD_COUNT = "card_show_count"
         const val KEY_CARD_ORG = "card_show_org"
+        const val KEY_CARD_TIME = "card_show_time"
         const val KEY_CARD_TEXT = "card_custom_text"
         const val KEY_DEVELOPER = "developer_mode"
 

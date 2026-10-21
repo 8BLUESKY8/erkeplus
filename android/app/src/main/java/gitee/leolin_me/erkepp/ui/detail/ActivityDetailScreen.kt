@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,6 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -61,6 +63,7 @@ import coil.compose.AsyncImage
 import gitee.leolin_me.erkepp.R
 import gitee.leolin_me.erkepp.data.ActivityAttachment
 import gitee.leolin_me.erkepp.data.ActivityDetail
+import gitee.leolin_me.erkepp.data.ActivityNotice
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.toUserMessage
 import gitee.leolin_me.erkepp.ui.formatHours
@@ -91,6 +94,9 @@ fun ActivityDetailScreen(
     var error by remember(activityId) { mutableStateOf<String?>(null) }
     var loading by remember(activityId) { mutableStateOf(true) }
     var reloadKey by remember(activityId) { mutableIntStateOf(0) }
+    var notices by remember(activityId) { mutableStateOf<List<ActivityNotice>>(emptyList()) }
+    var noticeIndex by remember(activityId) { mutableIntStateOf(0) }
+    var showNotices by remember(activityId) { mutableStateOf(false) }
 
     BackHandler(onBack = onBack)
 
@@ -98,7 +104,17 @@ fun ActivityDetailScreen(
         loading = true
         error = null
         runCatching { repository.detail(token, activityId) }
-            .onSuccess { detail = it }
+            .onSuccess { loaded ->
+                detail = loaded
+                // 公告失败不影响详情：拿不到就当没有公告
+                runCatching { repository.notices(token, activityId, loaded.identity) }
+                    .onSuccess {
+                        notices = it
+                        noticeIndex = 0
+                        // 官方用 isPopup 标记「进页面就弹」，有标记才主动弹，否则只在页面里留入口
+                        showNotices = it.any { notice -> notice.isPopup }
+                    }
+            }
             .onFailure { error = it.toUserMessage() }
         loading = false
     }
@@ -127,6 +143,11 @@ fun ActivityDetailScreen(
 
             else -> DetailContent(
                 detail = detail!!,
+                noticePreview = notices.firstOrNull()?.plainText,
+                onOpenNotices = {
+                    noticeIndex = 0
+                    showNotices = true
+                },
                 onOpenWeb = { onOpenWeb(activityId) },
                 onOpenUrl = onOpenUrl,
             )
@@ -146,11 +167,55 @@ fun ActivityDetailScreen(
             )
         }
     }
+
+    // 有公告就弹出来提醒，和官方一致；多条时依次翻
+    val notice = notices.getOrNull(noticeIndex)
+    if (showNotices && notice != null) {
+        AlertDialog(
+            onDismissRequest = { showNotices = false },
+            title = { Text(notice.title.ifBlank { "活动公告" }) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    if (notice.time.isNotBlank()) {
+                        Text(
+                            text = notice.time,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                    }
+                    Text(text = notice.plainText, style = MaterialTheme.typography.bodyMedium)
+                }
+            },
+            confirmButton = {
+                if (noticeIndex < notices.lastIndex) {
+                    TextButton(onClick = { noticeIndex++ }) {
+                        Text("下一条（${noticeIndex + 2}/${notices.size}）")
+                    }
+                } else {
+                    TextButton(onClick = { showNotices = false }) { Text("知道了") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNotices = false }) { Text("关闭") }
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DetailContent(detail: ActivityDetail, onOpenWeb: () -> Unit, onOpenUrl: (String) -> Unit) {
+private fun DetailContent(
+    detail: ActivityDetail,
+    noticePreview: String?,
+    onOpenNotices: () -> Unit,
+    onOpenWeb: () -> Unit,
+    onOpenUrl: (String) -> Unit,
+) {
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -220,6 +285,39 @@ private fun DetailContent(detail: ActivityDetail, onOpenWeb: () -> Unit, onOpenU
                 StatsCard(detail)
                 Spacer(Modifier.height(12.dp))
                 ScheduleCard(detail)
+
+                if (noticePreview != null) {
+                    Spacer(Modifier.height(12.dp))
+                    Card {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onOpenNotices),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "最新公告",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    text = noticePreview.replace("\n", " "),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "查看",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
 
                 if (detail.hasRestriction) {
                     Spacer(Modifier.height(12.dp))
@@ -451,17 +549,22 @@ private fun ScheduleCard(detail: ActivityDetail) {
         if (detail.identity == 1) {
             InfoLine(label = "报名状态", value = applyStatusText(detail.applyStatus))
         }
-        if (detail.attendanceType == 1) {
-            InfoLine(label = "考勤标准", value = "签到 + 签退")
-        }
-        InfoLine(label = "提交作业", value = if (detail.isSubmitWork == 1) "需要提交" else "不需要")
-    }
+        InfoLine(label = "考勤标准", value = attendanceLabel(detail.attendanceType))
+        InfoLine(label = "提交作业", value = if (detail.isSubmitWork == 1) "需要提交" else "不需要")    }
 }
 
 /** 报名状态：已实测 `2` 为「报名已通过」，其余值暂时按「已报名」显示。 */
 private fun applyStatusText(applyStatus: Int): String = when (applyStatus) {
     2 -> "报名已通过"
     else -> "已报名"
+}
+
+/** 考勤方式，取自官方详情页的枚举：1 签到+签退、2 签到、3 签退、其它无需考勤。 */
+private fun attendanceLabel(type: Int): String = when (type) {
+    1 -> "签到 + 签退"
+    2 -> "签到"
+    3 -> "签退"
+    else -> "无需考勤"
 }
 
 /** 报名截止倒计时。30 秒刷新一次即可，不需要每秒跳。 */
