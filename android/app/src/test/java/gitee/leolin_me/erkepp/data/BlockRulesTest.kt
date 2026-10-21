@@ -41,6 +41,7 @@ class BlockRulesTest {
     fun `invalid regex is dropped instead of crashing`() {
         val rules = BlockRules.parse("", "[unclosed")
         assertEquals(0, rules.patternCount)
+        assertEquals(1, rules.invalidPatternCount)
         assertFalse(rules.isBlocked("任意标题"))
     }
 

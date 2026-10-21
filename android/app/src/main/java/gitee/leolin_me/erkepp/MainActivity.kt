@@ -23,7 +23,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -50,6 +49,7 @@ import gitee.leolin_me.erkepp.ui.login.ForgotPasswordScreen
 import gitee.leolin_me.erkepp.ui.login.LoginScreen
 import gitee.leolin_me.erkepp.ui.school.SchoolPickerScreen
 import gitee.leolin_me.erkepp.ui.settings.SettingsScreen
+import gitee.leolin_me.erkepp.ui.settings.SettingsSection
 
 enum class MainTab(val label: String, val iconRes: Int) {
     DISCOVER("发现", R.drawable.ic_explore),
@@ -92,14 +92,7 @@ class MainActivity : ComponentActivity() {
                 var showExitConfirm by remember { mutableStateOf(false) }
                 var showDisclaimer by remember { mutableStateOf(!preferences.disclaimerAccepted) }
 
-                var categoriesEnabled by remember { mutableStateOf(preferences.categoriesEnabled) }
-                var showCategoryTags by remember { mutableStateOf(preferences.showCategoryTags) }
-                var selectedCategoryIds by remember { mutableStateOf(preferences.selectedCategoryIds) }
-                var blockedKeywords by remember { mutableStateOf(preferences.blockedKeywords) }
-                var blockedRegexes by remember { mutableStateOf(preferences.blockedRegexes) }
-                var preloadEnabled by remember { mutableStateOf(preferences.preloadEnabled) }
-                var showCover by remember { mutableStateOf(preferences.showCover) }
-                var titleLines by remember { mutableIntStateOf(preferences.titleLines) }
+                var settingsSection by remember { mutableStateOf(SettingsSection.ROOT) }
                 var showMyActivities by remember { mutableStateOf(false) }
 
                 // 旧版本会话缺少 rawProfile：启动时补拉一次 my-info，供网页注入使用
@@ -187,7 +180,10 @@ class MainActivity : ComponentActivity() {
                                         onOpenActivity = { id ->
                                             webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
                                         },
-                                        onOpenSettings = { tab = MainTab.SETTINGS },
+                                        onOpenBlockRules = {
+                                            settingsSection = SettingsSection.BLOCK_RULES
+                                            tab = MainTab.SETTINGS
+                                        },
                                     )
 
                                     MainTab.PROFILE -> {
@@ -213,47 +209,9 @@ class MainActivity : ComponentActivity() {
                                         session = current,
                                         token = current.token,
                                         repository = activityRepository,
-                                        categoriesEnabled = categoriesEnabled,
-                                        showCategoryTags = showCategoryTags,
-                                        selectedCategoryIds = selectedCategoryIds,
-                                        blockedKeywords = blockedKeywords,
-                                        blockedRegexes = blockedRegexes,
-                                        preloadEnabled = preloadEnabled,
-                                        showCover = showCover,
-                                        titleLines = titleLines,
-                                        onCategoriesEnabledChange = {
-                                            categoriesEnabled = it
-                                            preferences.categoriesEnabled = it
-                                        },
-                                        onShowCategoryTagsChange = {
-                                            showCategoryTags = it
-                                            preferences.showCategoryTags = it
-                                        },
-                                        onSelectedCategoriesChange = {
-                                            selectedCategoryIds = it
-                                            preferences.selectedCategoryIds = it
-                                        },
-                                        onBlockedKeywordsChange = {
-                                            blockedKeywords = it
-                                            preferences.blockedKeywords = it
-                                        },
-                                        onBlockedRegexesChange = {
-                                            blockedRegexes = it
-                                            preferences.blockedRegexes = it
-                                        },
-                                        onPreloadChange = {
-                                            preloadEnabled = it
-                                            preferences.preloadEnabled = it
-                                        },
-                                        onShowCoverChange = {
-                                            showCover = it
-                                            preferences.showCover = it
-                                        },
-                                        onTitleLinesChange = {
-                                            titleLines = it
-                                            preferences.titleLines = it
-                                        },
                                         preferences = preferences,
+                                        section = settingsSection,
+                                        onSectionChange = { settingsSection = it },
                                         onLogout = {
                                             sessionStore.clear()
                                             session = null
@@ -269,7 +227,12 @@ class MainActivity : ComponentActivity() {
                                 MainTab.entries.forEach { item ->
                                     NavigationBarItem(
                                         selected = tab == item,
-                                        onClick = { tab = item },
+                                        onClick = {
+                                            if (item == MainTab.SETTINGS) {
+                                                settingsSection = SettingsSection.ROOT
+                                            }
+                                            tab = item
+                                        },
                                         icon = {
                                             Icon(
                                                 painter = painterResource(item.iconRes),

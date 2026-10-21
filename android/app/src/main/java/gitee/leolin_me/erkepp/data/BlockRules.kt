@@ -9,6 +9,8 @@ package gitee.leolin_me.erkepp.data
 class BlockRules(
     private val keywords: List<String>,
     private val patterns: List<Regex>,
+    /** 原文里写坏了、解析时被丢弃的正则条数。 */
+    val invalidPatternCount: Int = 0,
 ) {
     val keywordCount: Int get() = keywords.size
     val patternCount: Int get() = patterns.size
@@ -28,12 +30,12 @@ class BlockRules(
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
                 .distinct()
-            val patterns = regexText.split(separators)
+            val rawPatterns = regexText.split(separators)
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
-                .mapNotNull { text -> runCatching { Regex(text) }.getOrNull() }
                 .distinct()
-            return BlockRules(keywords, patterns)
+            val patterns = rawPatterns.mapNotNull { text -> runCatching { Regex(text) }.getOrNull() }
+            return BlockRules(keywords, patterns, rawPatterns.size - patterns.size)
         }
     }
 }

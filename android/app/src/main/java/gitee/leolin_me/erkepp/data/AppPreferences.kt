@@ -1,149 +1,150 @@
 package gitee.leolin_me.erkepp.data
 
 import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import kotlin.properties.ReadWriteProperty
+import kotlin.reflect.KProperty
 
-/** 轻量的本地偏好设置（与登录态分开存放）。 */
+/**
+ * 轻量本地偏好设置（与登录态分开存放）。
+ *
+ * 每个字段本身就是 Compose 状态：界面直接读这个类，改了自动重组，写时自动落盘。
+ * 只有一份数据，所以不需要在 Activity 里再镜像一份，也不会出现两边不同步。
+ */
 class AppPreferences(context: Context) {
 
-    private val prefs = context.getSharedPreferences("erkepp_prefs", Context.MODE_PRIVATE)
+    private val store = context.getSharedPreferences("erkepp_prefs", Context.MODE_PRIVATE)
 
     /** 是否已确认首次启动的免责声明。 */
-    var disclaimerAccepted: Boolean
-        get() = prefs.getBoolean(KEY_DISCLAIMER, false)
-        set(value) {
-            prefs.edit().putBoolean(KEY_DISCLAIMER, value).apply()
-        }
+    var disclaimerAccepted: Boolean by prefBoolean(KEY_DISCLAIMER, false)
 
     /** 发现页是否显示分类筛选条。 */
-    var categoriesEnabled: Boolean
-        get() = prefs.getBoolean(KEY_CATEGORIES_ENABLED, true)
-        set(value) {
-            prefs.edit().putBoolean(KEY_CATEGORIES_ENABLED, value).apply()
-        }
+    var categoriesEnabled: Boolean by prefBoolean(KEY_CATEGORIES_ENABLED, true)
 
     /** 卡片上是否显示分类文字。 */
-    var showCategoryTags: Boolean
-        get() = prefs.getBoolean(KEY_CATEGORY_TAGS, true)
-        set(value) {
-            prefs.edit().putBoolean(KEY_CATEGORY_TAGS, value).apply()
-        }
+    var showCategoryTags: Boolean by prefBoolean(KEY_CATEGORY_TAGS, true)
 
     /** 用户在设置里勾选的分类入口；空集合表示不限制。 */
-    var selectedCategoryIds: Set<Int>
-        get() = prefs.getString(KEY_SELECTED_CATEGORIES, null)
-            ?.split(',')
-            ?.mapNotNull { it.toIntOrNull() }
-            ?.toSet()
-            ?: DEFAULT_CATEGORIES
-
-        set(value) {
-            prefs.edit().putString(KEY_SELECTED_CATEGORIES, value.joinToString(",")).apply()
-        }
+    var selectedCategoryIds: Set<Int> by prefCategories(KEY_SELECTED_CATEGORIES, DEFAULT_CATEGORIES)
 
     /** 屏蔽关键词原文（换行/逗号分隔）。 */
-    var blockedKeywords: String
-        get() = prefs.getString(KEY_BLOCKED_KEYWORDS, "").orEmpty()
-        set(value) {
-            prefs.edit().putString(KEY_BLOCKED_KEYWORDS, value).apply()
-        }
+    var blockedKeywords: String by prefString(KEY_BLOCKED_KEYWORDS, "")
 
     /** 屏蔽正则原文（换行/逗号分隔）。 */
-    var blockedRegexes: String
-        get() = prefs.getString(KEY_BLOCKED_REGEXES, "").orEmpty()
-        set(value) {
-            prefs.edit().putString(KEY_BLOCKED_REGEXES, value).apply()
-        }
+    var blockedRegexes: String by prefString(KEY_BLOCKED_REGEXES, "")
 
     /** 是否提前预加载下一页。 */
-    var preloadEnabled: Boolean
-        get() = prefs.getBoolean(KEY_PRELOAD, true)
-        set(value) {
-            prefs.edit().putBoolean(KEY_PRELOAD, value).apply()
-        }
+    var preloadEnabled: Boolean by prefBoolean(KEY_PRELOAD, true)
 
     /** 卡片是否显示活动封面图。 */
-    var showCover: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_COVER, true)
-        set(value) {
-            prefs.edit().putBoolean(KEY_SHOW_COVER, value).apply()
-        }
+    var showCover: Boolean by prefBoolean(KEY_SHOW_COVER, true)
+
+    private var titleLinesState by mutableStateOf(store.getInt(KEY_TITLE_LINES, 2).coerceIn(1, 3))
 
     /** 卡片标题最多显示几行（1–3）。 */
     var titleLines: Int
-        get() = prefs.getInt(KEY_TITLE_LINES, 2).coerceIn(1, 3)
+        get() = titleLinesState
         set(value) {
-            prefs.edit().putInt(KEY_TITLE_LINES, value.coerceIn(1, 3)).apply()
+            val clamped = value.coerceIn(1, 3)
+            if (titleLinesState == clamped) return
+            titleLinesState = clamped
+            store.edit().putInt(KEY_TITLE_LINES, clamped).apply()
         }
 
     // ---- 发现页筛选记忆 ----
-    var filterStatus: String
-        get() = prefs.getString(KEY_FILTER_STATUS, "5").orEmpty()
-        set(value) {
-            prefs.edit().putString(KEY_FILTER_STATUS, value).apply()
-        }
-
-    var filterSort: Int
-        get() = prefs.getInt(KEY_FILTER_SORT, 1)
-        set(value) {
-            prefs.edit().putInt(KEY_FILTER_SORT, value).apply()
-        }
-
-    var filterClassify: Int
-        get() = prefs.getInt(KEY_FILTER_CLASSIFY, 0)
-        set(value) {
-            prefs.edit().putInt(KEY_FILTER_CLASSIFY, value).apply()
-        }
-
-    var filterEnrolled: Boolean
-        get() = prefs.getBoolean(KEY_FILTER_ENROLLED, false)
-        set(value) {
-            prefs.edit().putBoolean(KEY_FILTER_ENROLLED, value).apply()
-        }
-
-    var filterHoursMin: String
-        get() = prefs.getString(KEY_FILTER_HOURS_MIN, "").orEmpty()
-        set(value) {
-            prefs.edit().putString(KEY_FILTER_HOURS_MIN, value).apply()
-        }
-
-    var filterHoursMax: String
-        get() = prefs.getString(KEY_FILTER_HOURS_MAX, "").orEmpty()
-        set(value) {
-            prefs.edit().putString(KEY_FILTER_HOURS_MAX, value).apply()
-        }
+    var filterStatus: String by prefString(KEY_FILTER_STATUS, "5")
+    var filterSort: Int by prefInt(KEY_FILTER_SORT, 1)
+    var filterClassify: Int by prefInt(KEY_FILTER_CLASSIFY, 0)
+    var filterEnrolled: Boolean by prefBoolean(KEY_FILTER_ENROLLED, false)
+    var filterHoursMin: String by prefString(KEY_FILTER_HOURS_MIN, "")
+    var filterHoursMax: String by prefString(KEY_FILTER_HOURS_MAX, "")
 
     // ---- 卡片显示内容 ----
-    var cardShowHours: Boolean
-        get() = prefs.getBoolean(KEY_CARD_HOURS, true)
-        set(value) {
-            prefs.edit().putBoolean(KEY_CARD_HOURS, value).apply()
-        }
-
-    var cardShowCount: Boolean
-        get() = prefs.getBoolean(KEY_CARD_COUNT, true)
-        set(value) {
-            prefs.edit().putBoolean(KEY_CARD_COUNT, value).apply()
-        }
-
-    var cardShowOrganization: Boolean
-        get() = prefs.getBoolean(KEY_CARD_ORG, true)
-        set(value) {
-            prefs.edit().putBoolean(KEY_CARD_ORG, value).apply()
-        }
-
-    /** 卡片附加的自定义文字，留空则不显示。 */
-    var cardCustomText: String
-        get() = prefs.getString(KEY_CARD_TEXT, "").orEmpty()
-        set(value) {
-            prefs.edit().putString(KEY_CARD_TEXT, value).apply()
-        }
+    var cardShowHours: Boolean by prefBoolean(KEY_CARD_HOURS, true)
+    var cardShowCount: Boolean by prefBoolean(KEY_CARD_COUNT, true)
+    var cardShowOrganization: Boolean by prefBoolean(KEY_CARD_ORG, true)
+    var cardCustomText: String by prefString(KEY_CARD_TEXT, "")
 
     /** 开发者模式：显示加载计数等调试信息。 */
-    var developerMode: Boolean
-        get() = prefs.getBoolean(KEY_DEVELOPER, false)
-        set(value) {
-            prefs.edit().putBoolean(KEY_DEVELOPER, value).apply()
+    var developerMode: Boolean by prefBoolean(KEY_DEVELOPER, false)
+
+    /** 恢复默认的显示与筛选设置。不动登录态，也不动免责声明确认。 */
+    fun resetDisplay() {
+        categoriesEnabled = true
+        showCategoryTags = true
+        selectedCategoryIds = DEFAULT_CATEGORIES
+        blockedKeywords = ""
+        blockedRegexes = ""
+        preloadEnabled = true
+        showCover = true
+        titleLines = 2
+        cardShowHours = true
+        cardShowCount = true
+        cardShowOrganization = true
+        cardCustomText = ""
+        filterStatus = "5"
+        filterSort = 1
+        filterClassify = 0
+        filterEnrolled = false
+        filterHoursMin = ""
+        filterHoursMax = ""
+    }
+
+    private fun prefBoolean(key: String, default: Boolean) = object : ReadWriteProperty<Any?, Boolean> {
+        private var state by mutableStateOf(store.getBoolean(key, default))
+
+        override fun getValue(thisRef: Any?, property: KProperty<*>): Boolean = state
+
+        override fun setValue(thisRef: Any?, property: KProperty<*>, value: Boolean) {
+            if (state == value) return
+            state = value
+            store.edit().putBoolean(key, value).apply()
         }
+    }
+
+    private fun prefInt(key: String, default: Int) = object : ReadWriteProperty<Any?, Int> {
+        private var state by mutableStateOf(store.getInt(key, default))
+
+        override fun getValue(thisRef: Any?, property: KProperty<*>): Int = state
+
+        override fun setValue(thisRef: Any?, property: KProperty<*>, value: Int) {
+            if (state == value) return
+            state = value
+            store.edit().putInt(key, value).apply()
+        }
+    }
+
+    private fun prefString(key: String, default: String) = object : ReadWriteProperty<Any?, String> {
+        private var state by mutableStateOf(store.getString(key, null) ?: default)
+
+        override fun getValue(thisRef: Any?, property: KProperty<*>): String = state
+
+        override fun setValue(thisRef: Any?, property: KProperty<*>, value: String) {
+            if (state == value) return
+            state = value
+            store.edit().putString(key, value).apply()
+        }
+    }
+
+    private fun prefCategories(key: String, default: Set<Int>) = object : ReadWriteProperty<Any?, Set<Int>> {
+        private var state by mutableStateOf(
+            store.getString(key, null)
+                ?.split(',')
+                ?.mapNotNull { it.toIntOrNull() }
+                ?.toSet()
+                ?: default,
+        )
+
+        override fun getValue(thisRef: Any?, property: KProperty<*>): Set<Int> = state
+
+        override fun setValue(thisRef: Any?, property: KProperty<*>, value: Set<Int>) {
+            if (state == value) return
+            state = value
+            store.edit().putString(key, value.joinToString(",")).apply()
+        }
+    }
 
     private companion object {
         const val KEY_DISCLAIMER = "disclaimer_accepted_v1"

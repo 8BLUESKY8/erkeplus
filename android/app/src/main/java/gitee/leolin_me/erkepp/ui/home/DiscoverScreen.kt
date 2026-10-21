@@ -89,7 +89,7 @@ fun DiscoverScreen(
     repository: ActivityRepository,
     preferences: AppPreferences,
     onOpenActivity: (Long) -> Unit,
-    onOpenSettings: () -> Unit = {},
+    onOpenBlockRules: () -> Unit = {},
 ) {
     val categoriesEnabled = preferences.categoriesEnabled
     val showCategoryTags = preferences.showCategoryTags
@@ -400,7 +400,7 @@ fun DiscoverScreen(
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onOpenSettings() }
+                    .clickable { onOpenBlockRules() }
                     .padding(horizontal = 16.dp, vertical = 2.dp),
             )
         }
