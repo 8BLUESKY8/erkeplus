@@ -7,15 +7,24 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.ApiClient
 import gitee.leolin_me.erkepp.data.AppPreferences
@@ -29,10 +38,17 @@ import gitee.leolin_me.erkepp.ui.DisclaimerDialog
 import gitee.leolin_me.erkepp.ui.ErkeppTheme
 import gitee.leolin_me.erkepp.ui.WebShell
 import gitee.leolin_me.erkepp.ui.home.DiscoverScreen
-import gitee.leolin_me.erkepp.ui.home.HomePlaceholder
+import gitee.leolin_me.erkepp.ui.home.ProfileScreen
 import gitee.leolin_me.erkepp.ui.login.ForgotPasswordScreen
 import gitee.leolin_me.erkepp.ui.login.LoginScreen
 import gitee.leolin_me.erkepp.ui.school.SchoolPickerScreen
+import gitee.leolin_me.erkepp.ui.settings.SettingsScreen
+
+enum class MainTab(val label: String, val iconRes: Int) {
+    DISCOVER("发现", R.drawable.ic_explore),
+    PROFILE("我的", R.drawable.ic_person),
+    SETTINGS("设置", R.drawable.ic_settings),
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -52,7 +68,7 @@ class MainActivity : ComponentActivity() {
         val preferences = AppPreferences(this)
         val schoolStore = SchoolStore(this)
         val apiClient = ApiClient(deviceId = DeviceId.get(this))
-        val repository = AuthRepository(apiClient)
+        val authRepository = AuthRepository(apiClient)
         val resetRepository = PasswordResetRepository(apiClient)
         val schoolRepository = SchoolRepository(apiClient)
         val activityRepository = ActivityRepository(apiClient)
@@ -62,10 +78,14 @@ class MainActivity : ComponentActivity() {
                 var session by remember { mutableStateOf(sessionStore.load()) }
                 var school by remember { mutableStateOf(schoolStore.load()) }
                 var webUrl by remember { mutableStateOf<String?>(null) }
-                var showProfile by remember { mutableStateOf(false) }
+                var tab by rememberSaveable { mutableStateOf(MainTab.DISCOVER) }
                 var showForgot by remember { mutableStateOf(false) }
                 var showSchoolPicker by remember { mutableStateOf(false) }
                 var showDisclaimer by remember { mutableStateOf(!preferences.disclaimerAccepted) }
+
+                var categoriesEnabled by remember { mutableStateOf(preferences.categoriesEnabled) }
+                var showCategoryTags by remember { mutableStateOf(preferences.showCategoryTags) }
+                var selectedCategoryIds by remember { mutableStateOf(preferences.selectedCategoryIds) }
 
                 Surface(
                     modifier = Modifier
@@ -93,18 +113,19 @@ class MainActivity : ComponentActivity() {
                         )
 
                         current == null -> LoginScreen(
-                            repository = repository,
+                            repository = authRepository,
                             school = school,
                             onSuccess = { newSession ->
                                 sessionStore.save(newSession)
                                 session = newSession
+                                tab = MainTab.DISCOVER
                             },
                             onForgotPassword = { showForgot = true },
                             onShowDisclaimer = { showDisclaimer = true },
                             onOpenSchoolPicker = { showSchoolPicker = true },
                         )
 
-                        current != null && webUrl != null -> WebShell(
+                        webUrl != null -> WebShell(
                             modifier = Modifier.fillMaxSize(),
                             url = webUrl.orEmpty(),
                             onPickFiles = { callback ->
@@ -115,24 +136,71 @@ class MainActivity : ComponentActivity() {
                             onClose = { webUrl = null },
                         )
 
-                        current != null && showProfile -> HomePlaceholder(
-                            session = current,
-                            onOpenWeb = { webUrl = AppConfig.HOME_URL },
-                            onBack = { showProfile = false },
-                            onLogout = {
-                                sessionStore.clear()
-                                session = null
-                            },
-                        )
+                        else -> Column(modifier = Modifier.fillMaxSize()) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                when (tab) {
+                                    MainTab.DISCOVER -> DiscoverScreen(
+                                        token = current.token,
+                                        repository = activityRepository,
+                                        categoriesEnabled = categoriesEnabled,
+                                        showCategoryTags = showCategoryTags,
+                                        selectedCategoryIds = selectedCategoryIds,
+                                        onOpenActivity = { id ->
+                                            webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
+                                        },
+                                    )
 
-                        current != null -> DiscoverScreen(
-                            token = current.token,
-                            repository = activityRepository,
-                            onOpenActivity = { id ->
-                                webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
-                            },
-                            onOpenProfile = { showProfile = true },
-                        )
+                                    MainTab.PROFILE -> ProfileScreen(
+                                        session = current,
+                                        onOpenWeb = { webUrl = AppConfig.HOME_URL },
+                                    )
+
+                                    MainTab.SETTINGS -> SettingsScreen(
+                                        session = current,
+                                        token = current.token,
+                                        repository = activityRepository,
+                                        categoriesEnabled = categoriesEnabled,
+                                        showCategoryTags = showCategoryTags,
+                                        selectedCategoryIds = selectedCategoryIds,
+                                        onCategoriesEnabledChange = {
+                                            categoriesEnabled = it
+                                            preferences.categoriesEnabled = it
+                                        },
+                                        onShowCategoryTagsChange = {
+                                            showCategoryTags = it
+                                            preferences.showCategoryTags = it
+                                        },
+                                        onSelectedCategoriesChange = {
+                                            selectedCategoryIds = it
+                                            preferences.selectedCategoryIds = it
+                                        },
+                                        onLogout = {
+                                            sessionStore.clear()
+                                            session = null
+                                            webUrl = null
+                                            tab = MainTab.DISCOVER
+                                        },
+                                        onShowDisclaimer = { showDisclaimer = true },
+                                    )
+                                }
+                            }
+
+                            NavigationBar(windowInsets = WindowInsets(0, 0, 0, 0)) {
+                                MainTab.entries.forEach { item ->
+                                    NavigationBarItem(
+                                        selected = tab == item,
+                                        onClick = { tab = item },
+                                        icon = {
+                                            Icon(
+                                                painter = painterResource(item.iconRes),
+                                                contentDescription = item.label,
+                                            )
+                                        },
+                                        label = { Text(item.label) },
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 

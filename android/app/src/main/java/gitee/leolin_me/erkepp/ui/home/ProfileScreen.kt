@@ -12,26 +12,17 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import gitee.leolin_me.erkepp.data.Session
 
-/**
- * 登录成功后的临时落地页。
- *
- * v0.2.0 会被真正的原生首页替换；当前只用来验证登录链路可走通，
- * 并提供进入官方页面的兜底入口。
- */
+/** 「我的」：个人信息与学分学时。 */
 @Composable
-fun HomePlaceholder(
+fun ProfileScreen(
     session: Session,
     onOpenWeb: () -> Unit,
-    onLogout: () -> Unit,
-    onBack: () -> Unit = {},
 ) {
     val profile = session.profile
     Column(
@@ -39,10 +30,7 @@ fun HomePlaceholder(
             .fillMaxSize()
             .padding(horizontal = 24.dp),
     ) {
-        TextButton(onClick = onBack, modifier = Modifier.padding(top = 4.dp)) {
-            Text("返回")
-        }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(28.dp))
         Text(
             text = "你好，${profile.name}",
             style = MaterialTheme.typography.headlineSmall,
@@ -80,18 +68,9 @@ fun HomePlaceholder(
             Text("打开完整功能（网页）")
         }
 
-        Spacer(Modifier.height(8.dp))
-
-        TextButton(
-            onClick = onLogout,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("退出登录")
-        }
-
         Spacer(Modifier.weight(1f))
         Text(
-            text = "原生首页建设中，当前仅验证登录与个人信息。",
+            text = "更多个人数据将随原生页面逐步替换。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 24.dp),

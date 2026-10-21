@@ -74,8 +74,10 @@ private val StatusOptions = listOf(
 fun DiscoverScreen(
     token: String,
     repository: ActivityRepository,
+    categoriesEnabled: Boolean,
+    showCategoryTags: Boolean,
+    selectedCategoryIds: Set<Int>,
     onOpenActivity: (Long) -> Unit,
-    onOpenProfile: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyGridState()
@@ -93,6 +95,9 @@ fun DiscoverScreen(
     var loadingMore by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var categories by remember { mutableStateOf(listOf(0 to "全部")) }
+    val visibleCategories = remember(categories, selectedCategoryIds) {
+        categories.filter { it.first == 0 || selectedCategoryIds.isEmpty() || it.first in selectedCategoryIds }
+    }
     // 请求代号：筛选变化后，在途的旧请求结果一律丢弃，避免把旧数据拼进新列表
     var generation by remember { mutableIntStateOf(0) }
 
@@ -147,6 +152,10 @@ fun DiscoverScreen(
             .onSuccess { if (it.isNotEmpty()) categories = it }
     }
 
+    LaunchedEffect(selectedCategoryIds) {
+        if (classifyId != 0 && classifyId !in selectedCategoryIds) classifyId = 0
+    }
+
     LaunchedEffect(search) {
         delay(400)
         debouncedSearch = search
@@ -168,27 +177,12 @@ fun DiscoverScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 8.dp, top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "发现",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onOpenProfile) { Text("我的") }
-        }
-
         OutlinedTextField(
             value = search,
             onValueChange = { search = it },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 12.dp),
             placeholder = { Text("搜索活动名称") },
             leadingIcon = {
                 Icon(painter = painterResource(R.drawable.ic_search), contentDescription = null)
@@ -197,39 +191,41 @@ fun DiscoverScreen(
             shape = RoundedCornerShape(22.dp),
         )
 
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(StatusOptions) { (value, label) ->
-                FilterChip(
-                    selected = statusFilter == value,
-                    onClick = { statusFilter = value },
-                    label = { Text(label) },
-                )
-            }
-        }
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             LazyRow(
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(start = 16.dp, end = 8.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(categories) { (id, label) ->
+                items(StatusOptions) { (value, label) ->
                     FilterChip(
-                        selected = classifyId == id,
-                        onClick = { classifyId = id },
+                        selected = statusFilter == value,
+                        onClick = { statusFilter = value },
                         label = { Text(label) },
                     )
                 }
             }
             TextButton(onClick = { sortType = if (sortType == 1) 2 else 1 }) {
                 Text(if (sortType == 1) "最新" else "最热", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+
+        if (categoriesEnabled) {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(visibleCategories) { (id, label) ->
+                    FilterChip(
+                        selected = classifyId == id,
+                        onClick = { classifyId = id },
+                        label = { Text(label) },
+                    )
+                }
             }
         }
 
@@ -263,7 +259,11 @@ fun DiscoverScreen(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 items(items, key = { it.id }) { item ->
-                    ActivityCard(item = item, onClick = { onOpenActivity(item.id) })
+                    ActivityCard(
+                        item = item,
+                        showCategoryTags = showCategoryTags,
+                        onClick = { onOpenActivity(item.id) },
+                    )
                 }
                 if (loadingMore) {
                     item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
@@ -283,7 +283,7 @@ fun DiscoverScreen(
 }
 
 @Composable
-private fun ActivityCard(item: ActivityItem, onClick: () -> Unit) {
+private fun ActivityCard(item: ActivityItem, showCategoryTags: Boolean, onClick: () -> Unit) {
     Column(modifier = Modifier.clickable(onClick = onClick)) {
         Box {
             AsyncImage(
@@ -315,7 +315,11 @@ private fun ActivityCard(item: ActivityItem, onClick: () -> Unit) {
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = "${formatHours(item.hours)}学时 · ${item.classifyName}",
+            text = if (showCategoryTags && item.classifyName.isNotBlank()) {
+                "${formatHours(item.hours)}学时 · ${item.classifyName}"
+            } else {
+                "${formatHours(item.hours)}学时"
+            },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
