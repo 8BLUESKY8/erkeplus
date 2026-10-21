@@ -249,7 +249,7 @@ fun DiscoverScreen(
         derivedStateOf {
             val lastIndex = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
             val threshold = if (preloadEnabled) 8 else 2
-            items.isNotEmpty() && lastIndex >= items.size - threshold
+            visibleItems.isNotEmpty() && lastIndex >= visibleItems.size - threshold
         }
     }
 
@@ -257,11 +257,11 @@ fun DiscoverScreen(
         if (shouldLoadMore) loadMore()
     }
 
-    // 过滤后内容撑不满屏幕时补页；只要还显示不到 12 条就继续补，最多 5 次
+    // 显示不足一屏时持续补页，直到没有更多或显示够 12 条；最多 20 次兜底
     LaunchedEffect(gridState.canScrollForward, items.size, visibleItems.size) {
         val laidOut = gridState.layoutInfo.totalItemsCount > 0
         if (!loading && !loadingMore && !endReached && laidOut &&
-            items.size < total && visibleItems.size < 12 && autoFillCount < 5
+            items.size < total && visibleItems.size < 12 && autoFillCount < 20
         ) {
             autoFillCount++
             AppLog.d("discover", "auto-fill #$autoFillCount loaded=${items.size} visible=${visibleItems.size} total=$total")
