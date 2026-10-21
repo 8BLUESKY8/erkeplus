@@ -31,6 +31,7 @@ fun HomePlaceholder(
     session: Session,
     onOpenWeb: () -> Unit,
     onLogout: () -> Unit,
+    onBack: () -> Unit = {},
 ) {
     val profile = session.profile
     Column(
@@ -38,7 +39,10 @@ fun HomePlaceholder(
             .fillMaxSize()
             .padding(horizontal = 24.dp),
     ) {
-        Spacer(Modifier.height(40.dp))
+        TextButton(onClick = onBack, modifier = Modifier.padding(top = 4.dp)) {
+            Text("返回")
+        }
+        Spacer(Modifier.height(4.dp))
         Text(
             text = "你好，${profile.name}",
             style = MaterialTheme.typography.headlineSmall,

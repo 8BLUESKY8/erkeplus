@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.ApiClient
 import gitee.leolin_me.erkepp.data.AppPreferences
 import gitee.leolin_me.erkepp.data.AuthRepository
@@ -27,6 +28,7 @@ import gitee.leolin_me.erkepp.data.SessionStore
 import gitee.leolin_me.erkepp.ui.DisclaimerDialog
 import gitee.leolin_me.erkepp.ui.ErkeppTheme
 import gitee.leolin_me.erkepp.ui.WebShell
+import gitee.leolin_me.erkepp.ui.home.DiscoverScreen
 import gitee.leolin_me.erkepp.ui.home.HomePlaceholder
 import gitee.leolin_me.erkepp.ui.login.ForgotPasswordScreen
 import gitee.leolin_me.erkepp.ui.login.LoginScreen
@@ -53,12 +55,14 @@ class MainActivity : ComponentActivity() {
         val repository = AuthRepository(apiClient)
         val resetRepository = PasswordResetRepository(apiClient)
         val schoolRepository = SchoolRepository(apiClient)
+        val activityRepository = ActivityRepository(apiClient)
 
         setContent {
             ErkeppTheme {
                 var session by remember { mutableStateOf(sessionStore.load()) }
                 var school by remember { mutableStateOf(schoolStore.load()) }
-                var showWeb by remember { mutableStateOf(false) }
+                var webUrl by remember { mutableStateOf<String?>(null) }
+                var showProfile by remember { mutableStateOf(false) }
                 var showForgot by remember { mutableStateOf(false) }
                 var showSchoolPicker by remember { mutableStateOf(false) }
                 var showDisclaimer by remember { mutableStateOf(!preferences.disclaimerAccepted) }
@@ -100,23 +104,34 @@ class MainActivity : ComponentActivity() {
                             onOpenSchoolPicker = { showSchoolPicker = true },
                         )
 
-                        showWeb -> WebShell(
+                        current != null && webUrl != null -> WebShell(
                             modifier = Modifier.fillMaxSize(),
+                            url = webUrl.orEmpty(),
                             onPickFiles = { callback ->
                                 pendingFileCallback?.onReceiveValue(null)
                                 pendingFileCallback = callback
                                 filePicker.launch("*/*")
                             },
-                            onClose = { showWeb = false },
+                            onClose = { webUrl = null },
                         )
 
-                        else -> HomePlaceholder(
+                        current != null && showProfile -> HomePlaceholder(
                             session = current,
-                            onOpenWeb = { showWeb = true },
+                            onOpenWeb = { webUrl = AppConfig.HOME_URL },
+                            onBack = { showProfile = false },
                             onLogout = {
                                 sessionStore.clear()
                                 session = null
                             },
+                        )
+
+                        current != null -> DiscoverScreen(
+                            token = current.token,
+                            repository = activityRepository,
+                            onOpenActivity = { id ->
+                                webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
+                            },
+                            onOpenProfile = { showProfile = true },
                         )
                     }
                 }

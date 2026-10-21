@@ -64,6 +64,7 @@ import gitee.leolin_me.erkepp.UrlPolicy
 fun WebShell(
     onPickFiles: (ValueCallback<Array<Uri>>) -> Unit,
     modifier: Modifier = Modifier,
+    url: String = AppConfig.HOME_URL,
     onClose: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -173,7 +174,7 @@ fun WebShell(
                 enqueueDownload(context, url, userAgent, contentDisposition, mimeType)
             }
 
-            loadUrl(AppConfig.HOME_URL)
+            loadUrl(url)
         }
     }
 
