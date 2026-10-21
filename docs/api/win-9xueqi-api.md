@@ -93,6 +93,21 @@
 
 口令强度规则（取自站内脚本）：至少 8 位，且同时含大写字母、小写字母、数字、特殊字符。
 
+## 学校档案与校徽（2026-10-21 实测）
+
+`GET /common/all-school`（无需登录）返回全部学校，实测 193 条：
+
+```json
+{"id": 10361, "name": "安徽理工大学", "firstLetter": "A",
+ "logo": "https://gytx-2ketang.oss-cn-hangzhou.aliyuncs.com/logo/aust_logo.png",
+ "appWebsiteNavTitle": "...", "systemName": "..."}
+```
+
+- 校徽由运营方按学校上传到阿里云 OSS，地址存在学校档案的 `logo` 字段，客户端直接取用。
+- 部分学校 `logo` 为空，此时只能显示名称。
+- 安徽理工的校徽原图仅 60×60，放大显示会发糊；这是平台侧素材问题，不是客户端取图错误。
+- `name` 字段可能带首尾换行，需要 trim。
+
 ## 尚未验证
 
 - 活动详情（`#/ActivityShow/:id`）所用接口路径与参数

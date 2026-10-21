@@ -1,5 +1,8 @@
 package gitee.leolin_me.erkepp.ui.login
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +53,10 @@ import gitee.leolin_me.erkepp.data.School
 import gitee.leolin_me.erkepp.data.Session
 import gitee.leolin_me.erkepp.data.toUserMessage
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+
+/** 隐藏入口：长按校名的触发时长。 */
+private const val HIDDEN_GESTURE_MILLIS = 5_000L
 
 /**
  * 原生登录页。
@@ -63,6 +71,7 @@ fun LoginScreen(
     onForgotPassword: () -> Unit,
     onShowDisclaimer: () -> Unit,
     school: School = School.default,
+    onOpenSchoolPicker: () -> Unit = {},
 ) {
     var studentNo by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -109,6 +118,19 @@ fun LoginScreen(
             text = school.name,
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.pointerInput(school.code) {
+                // 隐藏入口：长按 5 秒进入选校页
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    val finished = withTimeoutOrNull(HIDDEN_GESTURE_MILLIS) {
+                        waitForUpOrCancellation() ?: Unit
+                    }
+                    if (finished == null) {
+                        onOpenSchoolPicker()
+                        waitForUpOrCancellation()
+                    }
+                }
+            },
         )
         Spacer(Modifier.height(8.dp))
         Text(
