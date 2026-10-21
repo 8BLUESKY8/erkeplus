@@ -35,7 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -58,6 +57,7 @@ import kotlinx.coroutines.launch
 fun LoginScreen(
     repository: AuthRepository,
     onSuccess: (Session) -> Unit,
+    onForgotPassword: () -> Unit,
     school: School = School.default,
 ) {
     var studentNo by rememberSaveable { mutableStateOf("") }
@@ -68,7 +68,6 @@ fun LoginScreen(
 
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
-    val uriHandler = LocalUriHandler.current
 
     fun submit() {
         if (loading) return
@@ -180,9 +179,7 @@ fun LoginScreen(
                 .height(32.dp),
             contentAlignment = Alignment.CenterEnd,
         ) {
-            TextButton(
-                onClick = { uriHandler.openUri("https://win.9xueqi.com/#/resetPassword") },
-            ) {
+            TextButton(onClick = onForgotPassword) {
                 Text("忘记密码？", style = MaterialTheme.typography.bodySmall)
             }
         }

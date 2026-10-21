@@ -21,10 +21,12 @@ import androidx.compose.ui.Modifier
 import gitee.leolin_me.erkepp.data.ApiClient
 import gitee.leolin_me.erkepp.data.AuthRepository
 import gitee.leolin_me.erkepp.data.DeviceId
+import gitee.leolin_me.erkepp.data.PasswordResetRepository
 import gitee.leolin_me.erkepp.data.SessionStore
 import gitee.leolin_me.erkepp.ui.ErkeppTheme
 import gitee.leolin_me.erkepp.ui.WebShell
 import gitee.leolin_me.erkepp.ui.home.HomePlaceholder
+import gitee.leolin_me.erkepp.ui.login.ForgotPasswordScreen
 import gitee.leolin_me.erkepp.ui.login.LoginScreen
 
 class MainActivity : ComponentActivity() {
@@ -42,12 +44,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val sessionStore = SessionStore(this)
-        val repository = AuthRepository(ApiClient(deviceId = DeviceId.get(this)))
+        val apiClient = ApiClient(deviceId = DeviceId.get(this))
+        val repository = AuthRepository(apiClient)
+        val resetRepository = PasswordResetRepository(apiClient)
 
         setContent {
             ErkeppTheme {
                 var session by remember { mutableStateOf(sessionStore.load()) }
                 var showWeb by remember { mutableStateOf(false) }
+                var showForgot by remember { mutableStateOf(false) }
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -55,12 +60,18 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val current = session
                     when {
+                        current == null && showForgot -> ForgotPasswordScreen(
+                            repository = resetRepository,
+                            onBack = { showForgot = false },
+                        )
+
                         current == null -> LoginScreen(
                             repository = repository,
                             onSuccess = { newSession ->
                                 sessionStore.save(newSession)
                                 session = newSession
                             },
+                            onForgotPassword = { showForgot = true },
                         )
 
                         showWeb -> WebShell(

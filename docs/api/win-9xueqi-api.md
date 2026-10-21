@@ -82,6 +82,17 @@
 - 成功：`code:0`，`data.access_token` 即 JWT
 - 无验证码；密码错误等业务错误通过 `code` 返回（如 30005/30006/30007 对应客服与微信绑定提示）
 
+## 找回密码（2026-10-21 实测）
+
+官方页面 `#/resetPassword` 的表单：姓名、学号/工号、手机号、短信验证码、新密码、确认新密码。
+
+| 端点 | 方法 | 参数 | 实测结果 |
+| --- | --- | --- | --- |
+| `/common/captcha/mobile` | POST | `countryCode:"86"`、`mobile`、`type:2` | 手机号不合法时返回 `10002 手机号格式不正确`，说明端点与参数格式正确 |
+| `/common/modify/pwd` | POST | `mobile`、`countryCode:86`、`code`、`zhtxCode`（学号）、`userName`（姓名）、`password`、`passwordRepeat`、`schoolId` | 账号不存在时返回 `30008 账号不存在,请联系管理员或客服中心` |
+
+口令强度规则（取自站内脚本）：至少 8 位，且同时含大写字母、小写字母、数字、特殊字符。
+
 ## 尚未验证
 
 - 活动详情（`#/ActivityShow/:id`）所用接口路径与参数

@@ -5,7 +5,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -59,13 +58,5 @@ class AuthRepository(private val api: ApiClient) {
             credit = number("credit"),
             hours = number("hours"),
         )
-    }
-}
-
-private fun kotlinx.serialization.json.JsonElement.requireSuccess() {
-    val code = jsonObject["code"]?.jsonPrimitive?.intOrNull ?: 0
-    if (code != 0) {
-        val message = jsonObject["msg"]?.jsonPrimitive?.contentOrNull.orEmpty()
-        throw ApiException(code, message)
     }
 }
