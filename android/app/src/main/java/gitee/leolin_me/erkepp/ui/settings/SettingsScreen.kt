@@ -1,5 +1,7 @@
 package gitee.leolin_me.erkepp.ui.settings
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,10 +32,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import gitee.leolin_me.erkepp.AppConfig
 import gitee.leolin_me.erkepp.data.ActivityRepository
@@ -41,6 +45,9 @@ import gitee.leolin_me.erkepp.data.AppPreferences
 import gitee.leolin_me.erkepp.data.BlockRules
 import gitee.leolin_me.erkepp.data.ReenterBehavior
 import gitee.leolin_me.erkepp.data.Session
+import gitee.leolin_me.erkepp.data.UpdateChecker
+import gitee.leolin_me.erkepp.data.UpdateResult
+import kotlinx.coroutines.launch
 
 /** 设置页当前停在哪一层。 */
 enum class SettingsSection { ROOT, BLOCK_RULES }
@@ -74,6 +81,11 @@ fun SettingsScreen(
     var categories by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
+    var checking by remember { mutableStateOf(false) }
+    var updateDialog by remember { mutableStateOf<UpdateDialog?>(null) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val updateChecker = remember { UpdateChecker() }
 
     LaunchedEffect(Unit) {
         runCatching { repository.categories(token) }.onSuccess { categories = it }
@@ -214,18 +226,50 @@ fun SettingsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable(enabled = !checking) {
+                        checking = true
+                        scope.launch {
+                            val result = updateChecker.check(AppConfig.VERSION)
+                            checking = false
+                            updateDialog = when (result) {
+                                is UpdateResult.Available -> UpdateDialog.Available(
+                                    version = result.version.toString(),
+                                    url = result.url,
+                                    notes = result.notes,
+                                )
+
+                                UpdateResult.UpToDate -> UpdateDialog.Message("已经是最新版本（${AppConfig.VERSION}）。")
+                                UpdateResult.NoRelease -> UpdateDialog.Message("仓库里还没有发布版本。")
+                                is UpdateResult.Failed -> UpdateDialog.Message("检查失败：${result.message}")
+                            }
+                        }
+                    }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("检查更新", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = if (checking) "正在检查…" else "当前版本 ${AppConfig.VERSION}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    text = "检查",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
                     .clickable(onClick = onShowDisclaimer)
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("免责声明与隐私说明", style = MaterialTheme.typography.bodyLarge)
             }
-            Text(
-                text = "版本 ${AppConfig.VERSION}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
-            )
         }
 
         Spacer(Modifier.height(12.dp))
@@ -283,6 +327,52 @@ fun SettingsScreen(
             },
         )
     }
+
+    updateDialog?.let { dialog ->
+        when (dialog) {
+            is UpdateDialog.Available -> AlertDialog(
+                onDismissRequest = { updateDialog = null },
+                title = { Text("发现新版本 ${dialog.version}") },
+                text = {
+                    Text(
+                        text = dialog.notes.trim().ifBlank { "去发布页看看这次改了什么。" }.take(600),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            updateDialog = null
+                            runCatching {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(dialog.url)))
+                            }
+                        },
+                    ) {
+                        Text("去发布页")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { updateDialog = null }) { Text("以后再说") }
+                },
+            )
+
+            is UpdateDialog.Message -> AlertDialog(
+                onDismissRequest = { updateDialog = null },
+                title = { Text("检查更新") },
+                text = { Text(dialog.text) },
+                confirmButton = {
+                    TextButton(onClick = { updateDialog = null }) { Text("好") }
+                },
+            )
+        }
+    }
+}
+
+/** 检查更新的弹窗内容。 */
+private sealed interface UpdateDialog {
+    data class Available(val version: String, val url: String, val notes: String) : UpdateDialog
+
+    data class Message(val text: String) : UpdateDialog
 }
 
 /** 分区卡片：一组相关设置放在同一块底板上，标题在块内。 */

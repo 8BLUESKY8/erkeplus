@@ -205,7 +205,16 @@ class MainActivity : ComponentActivity() {
                             var discoverReenterTick by remember { mutableIntStateOf(0) }
                             var lastDiscoverTap by remember { mutableLongStateOf(0L) }
 
-                            // 左右滑动与底部导航双向同步；滑动落定后才切 tab
+                            // 页面只能由一个来源驱动：手指滑动只更新 tab，代码切页只动 pager。
+                            // 以前两边互相拉，滑动和动画打架，就会出现切页失败或闪一下。
+                            fun goTab(target: MainTab) {
+                                if (tab == target) return
+                                tab = target
+                                if (pagerState.currentPage != target.ordinal) {
+                                    scope.launch { pagerState.animateScrollToPage(target.ordinal) }
+                                }
+                            }
+
                             LaunchedEffect(pagerState) {
                                 var previous = pagerState.settledPage
                                 snapshotFlow { pagerState.settledPage }.collect { page ->
@@ -215,18 +224,13 @@ class MainActivity : ComponentActivity() {
                                     if (tab == MainTab.DISCOVER) discoverReenterTick++
                                 }
                             }
-                            LaunchedEffect(tab) {
-                                if (pagerState.currentPage != tab.ordinal) {
-                                    pagerState.animateScrollToPage(tab.ordinal)
-                                }
-                            }
 
                             BackHandler {
                                 if (tab != MainTab.DISCOVER) {
                                     if (showMyActivities) {
                                         showMyActivities = false
                                     } else {
-                                        tab = MainTab.DISCOVER
+                                        goTab(MainTab.DISCOVER)
                                     }
                                 } else {
                                     showExitConfirm = true
@@ -318,8 +322,7 @@ class MainActivity : ComponentActivity() {
                                                         MainTab.PROFILE -> Unit
                                                     }
                                                 } else {
-                                                    tab = item
-                                                    scope.launch { pagerState.animateScrollToPage(item.ordinal) }
+                                                    goTab(item)
                                                 }
                                             },
                                             icon = {
