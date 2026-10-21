@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "erkepp"
 include(":app")
+include(":baselineprofile")

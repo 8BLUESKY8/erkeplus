@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.androidx.baselineprofile)
 }
 
 // 签名材料一律不入库：
@@ -94,6 +95,10 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
+    implementation(libs.androidx.profileinstaller)
+
+    // Baseline Profile 生成器，只在跑 :app:generateReleaseBaselineProfile 时用到
+    baselineProfile(project(":baselineprofile"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

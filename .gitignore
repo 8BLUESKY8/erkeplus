@@ -3,6 +3,7 @@ android/.gradle/
 android/.gradle-home/
 android/build/
 android/app/build/
+android/baselineprofile/build/
 android/local.properties
 android/out/
 

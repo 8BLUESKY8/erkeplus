@@ -54,3 +54,4 @@
 - 发布包开启 R8 与资源收缩，APK 7.2 MB → 1.57 MB
 - 新增 `Startup` 分段计时（仅调试包）与 `.tools/startup-bench.ps1` 冷启动基准脚本
 - 版本号改由 `BuildConfig` 提供，不再和 `AppConfig` 各存一份
+- 接入 Baseline Profile：新增 `android/baselineprofile` 模块，真机生成并随包发布（APK 内约 5.8 KB，安装包体积不变）
