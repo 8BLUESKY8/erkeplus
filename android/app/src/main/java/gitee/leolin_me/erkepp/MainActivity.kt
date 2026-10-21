@@ -19,10 +19,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import gitee.leolin_me.erkepp.data.ApiClient
+import gitee.leolin_me.erkepp.data.AppPreferences
 import gitee.leolin_me.erkepp.data.AuthRepository
 import gitee.leolin_me.erkepp.data.DeviceId
 import gitee.leolin_me.erkepp.data.PasswordResetRepository
 import gitee.leolin_me.erkepp.data.SessionStore
+import gitee.leolin_me.erkepp.ui.DisclaimerDialog
 import gitee.leolin_me.erkepp.ui.ErkeppTheme
 import gitee.leolin_me.erkepp.ui.WebShell
 import gitee.leolin_me.erkepp.ui.home.HomePlaceholder
@@ -44,6 +46,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val sessionStore = SessionStore(this)
+        val preferences = AppPreferences(this)
         val apiClient = ApiClient(deviceId = DeviceId.get(this))
         val repository = AuthRepository(apiClient)
         val resetRepository = PasswordResetRepository(apiClient)
@@ -53,6 +56,7 @@ class MainActivity : ComponentActivity() {
                 var session by remember { mutableStateOf(sessionStore.load()) }
                 var showWeb by remember { mutableStateOf(false) }
                 var showForgot by remember { mutableStateOf(false) }
+                var showDisclaimer by remember { mutableStateOf(!preferences.disclaimerAccepted) }
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -72,6 +76,7 @@ class MainActivity : ComponentActivity() {
                                 session = newSession
                             },
                             onForgotPassword = { showForgot = true },
+                            onShowDisclaimer = { showDisclaimer = true },
                         )
 
                         showWeb -> WebShell(
@@ -95,6 +100,15 @@ class MainActivity : ComponentActivity() {
                             },
                         )
                     }
+                }
+
+                if (showDisclaimer) {
+                    DisclaimerDialog(
+                        onAccept = {
+                            preferences.disclaimerAccepted = true
+                            showDisclaimer = false
+                        },
+                    )
                 }
             }
         }

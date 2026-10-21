@@ -20,6 +20,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -35,12 +37,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import gitee.leolin_me.erkepp.R
 import gitee.leolin_me.erkepp.data.AuthRepository
 import gitee.leolin_me.erkepp.data.School
 import gitee.leolin_me.erkepp.data.Session
@@ -58,6 +62,7 @@ fun LoginScreen(
     repository: AuthRepository,
     onSuccess: (Session) -> Unit,
     onForgotPassword: () -> Unit,
+    onShowDisclaimer: () -> Unit,
     school: School = School.default,
 ) {
     var studentNo by rememberSaveable { mutableStateOf("") }
@@ -135,6 +140,12 @@ fun LoginScreen(
             label = { Text("学号") },
             singleLine = true,
             shape = RoundedCornerShape(12.dp),
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(R.drawable.ic_person),
+                    contentDescription = null,
+                )
+            },
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Number,
                 imeAction = ImeAction.Next,
@@ -161,9 +172,20 @@ fun LoginScreen(
             } else {
                 PasswordVisualTransformation()
             },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(R.drawable.ic_lock),
+                    contentDescription = null,
+                )
+            },
             trailingIcon = {
-                TextButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Text(if (passwordVisible) "隐藏" else "显示")
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(
+                        painter = painterResource(
+                            if (passwordVisible) R.drawable.ic_visibility else R.drawable.ic_visibility_off,
+                        ),
+                        contentDescription = if (passwordVisible) "隐藏密码" else "显示密码",
+                    )
                 }
             },
             keyboardOptions = KeyboardOptions(
@@ -226,5 +248,11 @@ fun LoginScreen(
         )
 
         Spacer(Modifier.height(40.dp))
+
+        TextButton(onClick = onShowDisclaimer) {
+            Text("免责声明与隐私说明", style = MaterialTheme.typography.bodySmall)
+        }
+
+        Spacer(Modifier.height(24.dp))
     }
 }

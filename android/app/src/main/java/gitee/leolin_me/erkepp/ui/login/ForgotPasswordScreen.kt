@@ -17,6 +17,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -31,12 +33,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import gitee.leolin_me.erkepp.R
 import gitee.leolin_me.erkepp.data.PasswordPolicy
 import gitee.leolin_me.erkepp.data.PasswordResetRepository
 import gitee.leolin_me.erkepp.data.School
@@ -62,6 +67,8 @@ fun ForgotPasswordScreen(
     var smsCode by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordRepeat by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var repeatVisible by remember { mutableStateOf(false) }
     var countdown by remember { mutableIntStateOf(0) }
     var sending by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
@@ -215,11 +222,12 @@ fun ForgotPasswordScreen(
             }
 
             Spacer(Modifier.height(14.dp))
-            FormField(
+            PasswordField(
                 value = password,
                 onChange = { password = it; error = null },
                 label = "新密码",
-                isPassword = true,
+                visible = passwordVisible,
+                onToggleVisible = { passwordVisible = !passwordVisible },
                 imeAction = ImeAction.Next,
             )
             Spacer(Modifier.height(6.dp))
@@ -229,11 +237,12 @@ fun ForgotPasswordScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(14.dp))
-            FormField(
+            PasswordField(
                 value = passwordRepeat,
                 onChange = { passwordRepeat = it; error = null },
                 label = "确认新密码",
-                isPassword = true,
+                visible = repeatVisible,
+                onToggleVisible = { repeatVisible = !repeatVisible },
                 imeAction = ImeAction.Done,
             )
 
@@ -277,7 +286,6 @@ private fun FormField(
     value: String,
     onChange: (String) -> Unit,
     label: String,
-    isPassword: Boolean = false,
     keyboardType: KeyboardType = KeyboardType.Text,
     imeAction: ImeAction = ImeAction.Next,
 ) {
@@ -288,11 +296,48 @@ private fun FormField(
         label = { Text(label) },
         singleLine = true,
         shape = RoundedCornerShape(12.dp),
-        visualTransformation = if (isPassword) {
-            PasswordVisualTransformation()
-        } else {
-            androidx.compose.ui.text.input.VisualTransformation.None
-        },
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+    )
+}
+
+/** 口令输入框：带锁图标与「小眼睛」，两次输入可以分别点开核对。 */
+@Composable
+private fun PasswordField(
+    value: String,
+    onChange: (String) -> Unit,
+    label: String,
+    visible: Boolean,
+    onToggleVisible: () -> Unit,
+    imeAction: ImeAction = ImeAction.Next,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(label) },
+        singleLine = true,
+        shape = RoundedCornerShape(12.dp),
+        visualTransformation = if (visible) {
+            VisualTransformation.None
+        } else {
+            PasswordVisualTransformation()
+        },
+        leadingIcon = {
+            Icon(painter = painterResource(R.drawable.ic_lock), contentDescription = null)
+        },
+        trailingIcon = {
+            IconButton(onClick = onToggleVisible) {
+                Icon(
+                    painter = painterResource(
+                        if (visible) R.drawable.ic_visibility else R.drawable.ic_visibility_off,
+                    ),
+                    contentDescription = if (visible) "隐藏密码" else "显示密码",
+                )
+            }
+        },
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Password,
+            imeAction = imeAction,
+        ),
     )
 }
