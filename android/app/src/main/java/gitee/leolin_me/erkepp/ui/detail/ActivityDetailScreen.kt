@@ -9,6 +9,7 @@ import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import gitee.leolin_me.erkepp.R
+import gitee.leolin_me.erkepp.data.ActivityAttachment
 import gitee.leolin_me.erkepp.data.ActivityDetail
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.toUserMessage
@@ -79,6 +81,7 @@ fun ActivityDetailScreen(
     activityId: Long,
     onBack: () -> Unit,
     onOpenWeb: (Long) -> Unit,
+    onOpenUrl: (String) -> Unit,
 ) {
     var detail by remember(activityId) { mutableStateOf<ActivityDetail?>(null) }
     var error by remember(activityId) { mutableStateOf<String?>(null) }
@@ -118,7 +121,11 @@ fun ActivityDetailScreen(
                 TextButton(onClick = { reloadKey++ }) { Text("重试") }
             }
 
-            else -> DetailContent(detail = detail!!, onOpenWeb = { onOpenWeb(activityId) })
+            else -> DetailContent(
+                detail = detail!!,
+                onOpenWeb = { onOpenWeb(activityId) },
+                onOpenUrl = onOpenUrl,
+            )
         }
 
         IconButton(
@@ -138,7 +145,7 @@ fun ActivityDetailScreen(
 }
 
 @Composable
-private fun DetailContent(detail: ActivityDetail, onOpenWeb: () -> Unit) {
+private fun DetailContent(detail: ActivityDetail, onOpenWeb: () -> Unit, onOpenUrl: (String) -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -252,10 +259,21 @@ private fun DetailContent(detail: ActivityDetail, onOpenWeb: () -> Unit) {
                     }
                 }
 
-                if (detail.attachmentUrl != null) {
+                if (detail.attachments.isNotEmpty()) {
                     Spacer(Modifier.height(16.dp))
                     Card {
-                        InfoLine(label = "附件", value = detail.attachmentUrl)
+                        Text(
+                            text = "附件",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        detail.attachments.forEach { attachment ->
+                            AttachmentRow(
+                                attachment = attachment,
+                                onClick = { onOpenUrl(attachment.url) },
+                            )
+                        }
                     }
                 }
 
@@ -447,6 +465,45 @@ private fun Card(content: @Composable androidx.compose.foundation.layout.ColumnS
             .padding(horizontal = 14.dp, vertical = 12.dp),
         content = content,
     )
+}
+
+@Composable
+private fun AttachmentRow(attachment: ActivityAttachment, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = attachment.extension,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = attachment.name,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = "打开",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
 }
 
 @Composable

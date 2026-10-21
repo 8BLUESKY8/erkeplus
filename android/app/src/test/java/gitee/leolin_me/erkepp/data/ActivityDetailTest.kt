@@ -39,7 +39,10 @@ class ActivityDetailTest {
           "gradeList": ["2024级", "2025级"],
           "collegeList": [{"id": 1, "name": "计算机学院"}],
           "honestLimit": 60,
-          "attachment": {"url": "https://example.com/file.pdf"},
+          "attachment": [
+            {"attachmentType": 5, "name": "活动通知.pdf", "url": "https://example.com/a.pdf"},
+            {"attachmentType": 1, "name": "海报.png", "url": "https://example.com/b.png"}
+          ],
           "manager": {"name": "刘昊辰", "id": 2197962}
         }
         """.trimIndent(),
@@ -65,7 +68,12 @@ class ActivityDetailTest {
         assertEquals(listOf("2024级", "2025级"), detail.gradeNames)
         assertEquals(listOf("计算机学院"), detail.collegeNames)
         assertEquals(60.0, detail.honestLimit, 0.0)
-        assertEquals("https://example.com/file.pdf", detail.attachmentUrl)
+        assertEquals(2, detail.attachments.size)
+        assertEquals("活动通知.pdf", detail.attachments[0].name)
+        assertEquals("https://example.com/a.pdf", detail.attachments[0].url)
+        assertEquals("PDF", detail.attachments[0].extension)
+        assertEquals(1, detail.attachments[1].type)
+        assertEquals("PNG", detail.attachments[1].extension)
         assertEquals("刘昊辰", detail.managerName)
         assertEquals("non-member", detail.source)
         assertTrue(detail.hasRestriction)
@@ -79,7 +87,7 @@ class ActivityDetailTest {
         assertEquals(1L, detail.id)
         assertEquals("空活动", detail.name)
         assertNull(detail.cover)
-        assertNull(detail.attachmentUrl)
+        assertTrue(detail.attachments.isEmpty())
         assertEquals(0, detail.status)
         assertEquals(0.0, detail.hours, 0.0)
         assertTrue(detail.gradeNames.isEmpty())

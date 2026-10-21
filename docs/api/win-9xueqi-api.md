@@ -146,7 +146,9 @@
 - `introduce` **多数是纯文本**，不是 HTML；客户端按是否含标签决定用文本还是富文本渲染。
 - `credit` 不可当作「学分」使用：实测 `98.33` 与学时无关，含义未明，客户端不展示。
 - `peopleLimit` 为 0 表示不限人数，此时只显示已报名人数。
-- `attachment` 是**数组**，空数组即无附件。
+- `attachment` 是**数组**，空数组即无附件。每项形如
+  `{"attachmentType": 5, "name": "通知.pdf", "url": "https://..."}`；
+  `attachmentType`：1 图片、3 Word、4 Excel、5 PDF、6 其它。点击直接打开 `url`。
 - `gradeList` / `collegeList` 是对象数组，取其中的 `name`。
 - 所有时间字段都是毫秒时间戳。
 - `honestLimit` 可能为 `null`。

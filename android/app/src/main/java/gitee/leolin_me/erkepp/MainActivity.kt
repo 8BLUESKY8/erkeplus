@@ -1,5 +1,6 @@
 package gitee.leolin_me.erkepp
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
@@ -366,6 +367,11 @@ class MainActivity : ComponentActivity() {
                                     onOpenWeb = { id ->
                                         detailActivityId = null
                                         webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
+                                    },
+                                    onOpenUrl = { url ->
+                                        runCatching {
+                                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                        }
                                     },
                                 )
                             }

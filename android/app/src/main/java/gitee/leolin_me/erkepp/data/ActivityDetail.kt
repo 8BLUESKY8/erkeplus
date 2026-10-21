@@ -13,6 +13,33 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 
 /**
+ * 活动附件。
+ *
+ * 官方详情页的 `attachment` 是**数组**，每项形如
+ * `{"attachmentType": 5, "name": "通知.pdf", "url": "https://..."}`。
+ * `attachmentType`：1 图片、3 Word、4 Excel、5 PDF、6 其它。
+ */
+data class ActivityAttachment(
+    val name: String,
+    val url: String,
+    val type: Int,
+) {
+    /** 显示用后缀：没有文件名时用类型兜底。 */
+    val extension: String
+        get() {
+            val fromName = name.substringAfterLast('.', "")
+            if (fromName.isNotBlank() && fromName.length <= 4) return fromName.uppercase()
+            return when (type) {
+                1 -> "IMG"
+                3 -> "DOC"
+                4 -> "XLS"
+                5 -> "PDF"
+                else -> "FILE"
+            }
+        }
+}
+
+/**
  * 活动详情。
  *
  * 字段取自官方 H5 的「活动详情（未参加）」页面（`activity/detail/non-member`），
@@ -42,7 +69,7 @@ data class ActivityDetail(
     val gradeNames: List<String>,
     val collegeNames: List<String>,
     val honestLimit: Double,
-    val attachmentUrl: String?,
+    val attachments: List<ActivityAttachment>,
     /** 活动管理员姓名（官方详情页也会显示）。 */
     val managerName: String,
     /** 数据来自哪个接口：`non-member` 或 `participant`。 */
@@ -77,7 +104,7 @@ internal fun parseActivityDetail(data: JsonObject, source: String): ActivityDeta
     gradeNames = data.nameList("gradeList"),
     collegeNames = data.nameList("collegeList"),
     honestLimit = data.double("honestLimit"),
-    attachmentUrl = data.attachmentUrl("attachment"),
+    attachments = data.attachments("attachment"),
     managerName = (data.element("manager") as? JsonObject)?.text("name").orEmpty(),
     source = source,
 )
@@ -116,12 +143,22 @@ private fun JsonObject.nameList(key: String): List<String> {
     }
 }
 
-private fun JsonObject.attachmentUrl(key: String): String? {
-    return when (val item = element(key)) {
-        null -> null
-        is JsonPrimitive -> item.contentOrNull?.takeIf { it.isNotBlank() }
-        is JsonObject -> item.text("url").ifBlank { item.text("path") }.ifBlank { item.text("fileUrl") }
-            .takeIf { it.isNotBlank() }
-        else -> null
+private fun JsonObject.attachments(key: String): List<ActivityAttachment> {
+    val element = element(key) ?: return emptyList()
+    val items: List<JsonElement> = when (element) {
+        is kotlinx.serialization.json.JsonArray -> element.toList()
+        else -> listOf(element)
+    }
+    return items.mapNotNull { item ->
+        val url = when (item) {
+            is JsonPrimitive -> item.contentOrNull
+            is JsonObject -> item.text("url").ifBlank { item.text("path") }.ifBlank { item.text("fileUrl") }
+            else -> null
+        }?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        val name = (item as? JsonObject)?.text("name").orEmpty().ifBlank {
+            url.substringAfterLast('/').substringBefore('?')
+        }
+        val type = (item as? JsonObject)?.int("attachmentType") ?: 0
+        ActivityAttachment(name = name, url = url, type = type)
     }
 }
