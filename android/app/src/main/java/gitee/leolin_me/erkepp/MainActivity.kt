@@ -61,6 +61,7 @@ import gitee.leolin_me.erkepp.ui.login.LoginScreen
 import gitee.leolin_me.erkepp.ui.school.SchoolPickerScreen
 import gitee.leolin_me.erkepp.ui.settings.SettingsScreen
 import gitee.leolin_me.erkepp.ui.settings.SettingsSection
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 enum class MainTab(val label: String, val iconRes: Int) {
@@ -204,24 +205,38 @@ class MainActivity : ComponentActivity() {
                             var discoverRefreshTick by remember { mutableIntStateOf(0) }
                             var discoverReenterTick by remember { mutableIntStateOf(0) }
                             var lastDiscoverTap by remember { mutableLongStateOf(0L) }
+                            var switchJob by remember { mutableStateOf<Job?>(null) }
 
-                            // 页面只能由一个来源驱动：手指滑动只更新 tab，代码切页只动 pager。
-                            // 以前两边互相拉，滑动和动画打架，就会出现切页失败或闪一下。
+                            // 切页只由一个来源驱动：
+                            // 手指滑动 → 只更新 tab；点导航 → 只动 pager。
+                            // 动画可能被列表的惯性滚动打断，所以收尾时强制落到目标页，
+                            // 不然高亮停在目标页、内容还在原页，看起来就是「切页失败」。
                             fun goTab(target: MainTab) {
-                                if (tab == target) return
-                                tab = target
-                                if (pagerState.currentPage != target.ordinal) {
-                                    scope.launch { pagerState.animateScrollToPage(target.ordinal) }
+                                switchJob?.cancel()
+                                switchJob = scope.launch {
+                                    if (pagerState.currentPage != target.ordinal) {
+                                        runCatching { pagerState.animateScrollToPage(target.ordinal) }
+                                    }
+                                    if (pagerState.currentPage != target.ordinal) {
+                                        runCatching { pagerState.scrollToPage(target.ordinal) }
+                                    }
+                                    tab = target
                                 }
                             }
 
+                            LaunchedEffect(pagerState) {
+                                snapshotFlow { pagerState.currentPage }.collect { page ->
+                                    tab = MainTab.entries[page]
+                                }
+                            }
+
+                            // 落定后再算「重新进入发现页」，避免拖动中途就触发
                             LaunchedEffect(pagerState) {
                                 var previous = pagerState.settledPage
                                 snapshotFlow { pagerState.settledPage }.collect { page ->
                                     if (page == previous) return@collect
                                     previous = page
-                                    tab = MainTab.entries[page]
-                                    if (tab == MainTab.DISCOVER) discoverReenterTick++
+                                    if (MainTab.entries[page] == MainTab.DISCOVER) discoverReenterTick++
                                 }
                             }
 

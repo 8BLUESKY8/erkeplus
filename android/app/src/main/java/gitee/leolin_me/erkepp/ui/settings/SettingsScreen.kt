@@ -112,12 +112,6 @@ fun SettingsScreen(
                 onCheckedChange = { preferences.categoriesEnabled = it },
             )
             SettingSwitchRow(
-                title = "卡片显示分类标签",
-                subtitle = "在活动卡片上显示「思想政治引领」这类分类名",
-                checked = preferences.showCategoryTags,
-                onCheckedChange = { preferences.showCategoryTags = it },
-            )
-            SettingSwitchRow(
                 title = "预加载下一页",
                 subtitle = "滚动接近底部前就提前请求，翻页更顺滑",
                 checked = preferences.preloadEnabled,
@@ -142,6 +136,12 @@ fun SettingsScreen(
                 subtitle = "关闭后卡片只显示文字，省流量也更快",
                 checked = preferences.showCover,
                 onCheckedChange = { preferences.showCover = it },
+            )
+            SettingSwitchRow(
+                title = "显示分类标签",
+                subtitle = "在卡片上显示「思想政治引领」这类分类名",
+                checked = preferences.showCategoryTags,
+                onCheckedChange = { preferences.showCategoryTags = it },
             )
             SettingSwitchRow(
                 title = "显示学时",
