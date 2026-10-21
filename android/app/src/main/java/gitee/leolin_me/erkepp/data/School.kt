@@ -12,7 +12,12 @@ data class School(
     val logoUrl: String? = null,
 ) {
     companion object {
-        val AUST = School(code = "10361", name = "安徽理工大学")
+        /** 校徽地址取自官方 `/common/all-school` 中 id=10361 的 logo 字段。 */
+        val AUST = School(
+            code = "10361",
+            name = "安徽理工大学",
+            logoUrl = "https://gytx-2ketang.oss-cn-hangzhou.aliyuncs.com/logo/aust_logo.png",
+        )
 
         val all: List<School> = listOf(AUST)
 
