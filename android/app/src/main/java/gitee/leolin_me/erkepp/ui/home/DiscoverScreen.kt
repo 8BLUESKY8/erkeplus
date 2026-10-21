@@ -225,6 +225,13 @@ fun DiscoverScreen(
         if (shouldLoadMore) loadMore()
     }
 
+    // 过滤后内容不足以撑满屏幕时，列表无法滚动，主动补下一页，避免"加载不出更多"
+    LaunchedEffect(gridState.canScrollForward, items.size, visibleItems.size) {
+        if (!loading && !loadingMore && items.size < total && !gridState.canScrollForward && visibleItems.isNotEmpty()) {
+            loadMore()
+        }
+    }
+
     // 搜索时如果当前页没有命中，自动往后翻几页，避免"搜不到"的错觉
     LaunchedEffect(query, items.size) {
         if (query.isNotEmpty() && visibleItems.isEmpty() && items.size < total && page < 5 && !loading && !loadingMore) {
@@ -276,7 +283,7 @@ fun DiscoverScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "已加载 ${items.size} · 显示 ${visibleItems.size}",
+                text = "已加载 ${items.size} / 共 $total · 显示 ${visibleItems.size}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
