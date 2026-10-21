@@ -51,6 +51,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import gitee.leolin_me.erkepp.AppConfig
+import gitee.leolin_me.erkepp.AppLog
 import gitee.leolin_me.erkepp.UrlPolicy
 import kotlinx.coroutines.delay
 import org.json.JSONObject
@@ -135,6 +136,7 @@ fun WebShell(
                 }
 
                 override fun onPageFinished(view: WebView, url: String) {
+                    AppLog.d("web", "finished $url seeded=${seeded.value}")
                     loading = false
                     progress = 100
                     canGoBack = view.canGoBack()

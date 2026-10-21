@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
+import gitee.leolin_me.erkepp.AppLog
 import gitee.leolin_me.erkepp.R
 import gitee.leolin_me.erkepp.data.ActivityItem
 import gitee.leolin_me.erkepp.data.ActivityQuery
@@ -147,11 +148,16 @@ fun DiscoverScreen(
     fun reload() {
         val gen = generation + 1
         generation = gen
+        AppLog.d(
+            "discover",
+            "reload status=$statusFilter sort=$sortType classify=$classifyId enrolled=$enrolledOnly search=$debouncedSearch hours=$hoursMin..$hoursMax",
+        )
         scope.launch {
             loading = true
             error = null
             runCatching { fetch(1) }
                 .onSuccess {
+                    AppLog.d("discover", "reload ok total=${it.total} got=${it.items.size}")
                     if (gen == generation) {
                         items = it.items
                         total = it.total
@@ -159,7 +165,10 @@ fun DiscoverScreen(
                         gridState.requestScrollToItem(0)
                     }
                 }
-                .onFailure { if (gen == generation) error = it.toUserMessage() }
+                .onFailure {
+                    AppLog.d("discover", "reload fail ${it.javaClass.simpleName} ${it.message}")
+                    if (gen == generation) error = it.toUserMessage()
+                }
             if (gen == generation) loading = false
         }
     }
@@ -169,15 +178,23 @@ fun DiscoverScreen(
         val gen = generation
         scope.launch {
             loadingMore = true
+            AppLog.d("discover", "more request page=${page + 1} loaded=${items.size} total=$total")
             runCatching { fetch(page + 1) }
                 .onSuccess {
+                    AppLog.d(
+                        "discover",
+                        "more ok page=${it.pageNum} got=${it.items.size} added=${(items + it.items).distinctBy { i -> i.id }.size - items.size}",
+                    )
                     if (gen == generation) {
                         items = (items + it.items).distinctBy { item -> item.id }
                         page = it.pageNum
                         total = it.total
                     }
                 }
-                .onFailure { if (gen == generation) error = it.toUserMessage() }
+                .onFailure {
+                    AppLog.d("discover", "more fail ${it.javaClass.simpleName} ${it.message}")
+                    if (gen == generation) error = it.toUserMessage()
+                }
             if (gen == generation) loadingMore = false
         }
     }
@@ -228,6 +245,7 @@ fun DiscoverScreen(
     // 过滤后内容不足以撑满屏幕时，列表无法滚动，主动补下一页，避免"加载不出更多"
     LaunchedEffect(gridState.canScrollForward, items.size, visibleItems.size) {
         if (!loading && !loadingMore && items.size < total && !gridState.canScrollForward && visibleItems.isNotEmpty()) {
+            AppLog.d("discover", "auto-fill: no scroll room, loaded=${items.size} visible=${visibleItems.size} total=$total")
             loadMore()
         }
     }
