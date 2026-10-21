@@ -36,6 +36,7 @@ import coil.compose.AsyncImage
 import gitee.leolin_me.erkepp.data.School
 import gitee.leolin_me.erkepp.data.SchoolRepository
 import gitee.leolin_me.erkepp.data.toUserMessage
+import kotlinx.coroutines.delay
 
 /**
  * 隐藏的选校页：登录页长按校名 5 秒进入。
@@ -55,16 +56,15 @@ fun SchoolPickerScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
 
-    LaunchedEffect(Unit) {
+    // 与服务端搜索一致：官方也是把输入框内容作为 name 参数请求 /common/all-school
+    LaunchedEffect(query) {
         loading = true
-        runCatching { repository.all() }
+        error = null
+        if (query.isNotBlank()) delay(300)
+        runCatching { repository.list(query) }
             .onSuccess { schools = it }
             .onFailure { error = it.toUserMessage() }
         loading = false
-    }
-
-    val filtered = remember(query, schools) {
-        if (query.isBlank()) schools else schools.filter { it.name.contains(query.trim(), ignoreCase = true) }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -115,7 +115,7 @@ fun SchoolPickerScreen(
             }
 
             else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(filtered, key = { it.code }) { school ->
+                items(schools, key = { it.code }) { school ->
                     SchoolRow(
                         school = school,
                         selected = school.code == current.code,
