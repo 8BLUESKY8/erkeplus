@@ -31,6 +31,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -63,6 +64,7 @@ import gitee.leolin_me.erkepp.UrlPolicy
 fun WebShell(
     onPickFiles: (ValueCallback<Array<Uri>>) -> Unit,
     modifier: Modifier = Modifier,
+    onClose: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     var progress by remember { mutableIntStateOf(0) }
@@ -222,6 +224,15 @@ fun WebShell(
                 },
                 onOpenInBrowser = { openExternal(context, Uri.parse(failed)) },
             )
+        }
+
+        onClose?.let { close ->
+            TextButton(
+                onClick = close,
+                modifier = Modifier.align(Alignment.TopStart),
+            ) {
+                Text("返回")
+            }
         }
     }
 }
