@@ -39,6 +39,7 @@ import gitee.leolin_me.erkepp.AppConfig
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.AppPreferences
 import gitee.leolin_me.erkepp.data.BlockRules
+import gitee.leolin_me.erkepp.data.ReenterBehavior
 import gitee.leolin_me.erkepp.data.Session
 
 /** 设置页当前停在哪一层。 */
@@ -117,6 +118,10 @@ fun SettingsScreen(
                     onChange = { preferences.selectedCategoryIds = it },
                 )
             }
+            ReenterChips(
+                current = preferences.reenterBehavior,
+                onChange = { preferences.reenterBehavior = it },
+            )
         }
 
         SettingGroup(title = "活动卡片") {
@@ -325,6 +330,35 @@ private fun CategoryChipList(
             )
         }
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ReenterChips(current: String, onChange: (String) -> Unit) {
+    Text(
+        text = "重新进入发现页",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 12.dp),
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(
+            ReenterBehavior.KEEP to "保持位置",
+            ReenterBehavior.TOP to "回到顶部",
+            ReenterBehavior.RELOAD to "重新加载",
+        ).forEach { (value, label) ->
+            FilterChip(
+                selected = current == value,
+                onClick = { onChange(value) },
+                label = { Text(label) },
+            )
+        }
+    }
+    Text(
+        text = "双击底部「发现」图标可直接刷新",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)

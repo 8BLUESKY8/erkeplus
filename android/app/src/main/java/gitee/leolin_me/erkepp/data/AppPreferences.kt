@@ -38,6 +38,9 @@ class AppPreferences(context: Context) {
     /** 是否提前预加载下一页。 */
     var preloadEnabled: Boolean by prefBoolean(KEY_PRELOAD, true)
 
+    /** 重新进入发现页时的行为，取值见 [ReenterBehavior]。 */
+    var reenterBehavior: String by prefString(KEY_REENTER_BEHAVIOR, ReenterBehavior.KEEP)
+
     /** 卡片是否显示活动封面图。 */
     var showCover: Boolean by prefBoolean(KEY_SHOW_COVER, true)
 
@@ -90,6 +93,7 @@ class AppPreferences(context: Context) {
         filterEnrolled = false
         filterHoursMin = ""
         filterHoursMax = ""
+        reenterBehavior = ReenterBehavior.KEEP
     }
 
     private fun prefBoolean(key: String, default: Boolean) = object : ReadWriteProperty<Any?, Boolean> {
@@ -154,6 +158,7 @@ class AppPreferences(context: Context) {
         const val KEY_BLOCKED_KEYWORDS = "blocked_keywords"
         const val KEY_BLOCKED_REGEXES = "blocked_regexes"
         const val KEY_PRELOAD = "preload_enabled"
+        const val KEY_REENTER_BEHAVIOR = "reenter_behavior"
         const val KEY_SHOW_COVER = "show_cover"
         const val KEY_TITLE_LINES = "title_lines"
         const val KEY_FILTER_STATUS = "filter_status"
@@ -170,4 +175,16 @@ class AppPreferences(context: Context) {
 
         val DEFAULT_CATEGORIES = setOf(1440, 1441, 1444)
     }
+}
+
+/** 重新进入（切回）发现页时的行为。 */
+object ReenterBehavior {
+    /** 保持离开时的位置，什么都不做。 */
+    const val KEEP = "keep"
+
+    /** 回到顶部。 */
+    const val TOP = "top"
+
+    /** 重新加载第一页。 */
+    const val RELOAD = "reload"
 }

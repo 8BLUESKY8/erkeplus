@@ -67,6 +67,7 @@ import gitee.leolin_me.erkepp.data.ActivityQuery
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.AppPreferences
 import gitee.leolin_me.erkepp.data.BlockRules
+import gitee.leolin_me.erkepp.data.ReenterBehavior
 import gitee.leolin_me.erkepp.data.toUserMessage
 import gitee.leolin_me.erkepp.ui.gridCardWidthDp
 import gitee.leolin_me.erkepp.ui.prefetchCovers
@@ -91,6 +92,8 @@ fun DiscoverScreen(
     token: String,
     repository: ActivityRepository,
     preferences: AppPreferences,
+    refreshTick: Int = 0,
+    reenterTick: Int = 0,
     onOpenActivity: (Long) -> Unit,
     onOpenBlockRules: () -> Unit = {},
 ) {
@@ -223,6 +226,23 @@ fun DiscoverScreen(
                     if (gen == generation) error = it.toUserMessage()
                 }
             if (gen == generation) loadingMore = false
+        }
+    }
+
+    // 双击「发现」图标：手动重新拉取
+    LaunchedEffect(refreshTick) {
+        if (refreshTick == 0) return@LaunchedEffect
+        AppLog.d("discover", "manual refresh tick=$refreshTick")
+        reload()
+    }
+
+    // 切回发现页：按用户设置保持位置、回到顶部或重载
+    LaunchedEffect(reenterTick) {
+        if (reenterTick == 0) return@LaunchedEffect
+        when (preferences.reenterBehavior) {
+            ReenterBehavior.TOP -> if (items.isNotEmpty()) gridState.animateScrollToItem(0)
+            ReenterBehavior.RELOAD -> reload()
+            else -> Unit
         }
     }
 

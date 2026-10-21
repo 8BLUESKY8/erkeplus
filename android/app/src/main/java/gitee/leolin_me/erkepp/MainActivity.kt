@@ -2,17 +2,19 @@ package gitee.leolin_me.erkepp
 
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.webkit.ValueCallback
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -23,10 +25,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import coil.Coil
@@ -53,6 +59,7 @@ import gitee.leolin_me.erkepp.ui.login.LoginScreen
 import gitee.leolin_me.erkepp.ui.school.SchoolPickerScreen
 import gitee.leolin_me.erkepp.ui.settings.SettingsScreen
 import gitee.leolin_me.erkepp.ui.settings.SettingsSection
+import kotlinx.coroutines.launch
 
 enum class MainTab(val label: String, val iconRes: Int) {
     DISCOVER("发现", R.drawable.ic_explore),
@@ -172,6 +179,28 @@ class MainActivity : ComponentActivity() {
                         )
 
                         else -> {
+                            val scope = rememberCoroutineScope()
+                            val pagerState = rememberPagerState { MainTab.entries.size }
+                            var discoverRefreshTick by remember { mutableIntStateOf(0) }
+                            var discoverReenterTick by remember { mutableIntStateOf(0) }
+                            var lastDiscoverTap by remember { mutableLongStateOf(0L) }
+
+                            // 左右滑动与底部导航双向同步；滑动落定后才切 tab
+                            LaunchedEffect(pagerState) {
+                                var previous = pagerState.settledPage
+                                snapshotFlow { pagerState.settledPage }.collect { page ->
+                                    if (page == previous) return@collect
+                                    previous = page
+                                    tab = MainTab.entries[page]
+                                    if (tab == MainTab.DISCOVER) discoverReenterTick++
+                                }
+                            }
+                            LaunchedEffect(tab) {
+                                if (pagerState.currentPage != tab.ordinal) {
+                                    pagerState.animateScrollToPage(tab.ordinal)
+                                }
+                            }
+
                             BackHandler {
                                 if (tab != MainTab.DISCOVER) {
                                     if (showMyActivities) {
@@ -183,83 +212,107 @@ class MainActivity : ComponentActivity() {
                                     showExitConfirm = true
                                 }
                             }
+
                             Column(modifier = Modifier.fillMaxSize()) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                when (tab) {
-                                    MainTab.DISCOVER -> DiscoverScreen(
-                                        token = current.token,
-                                        repository = activityRepository,
-                                        preferences = preferences,
-                                        onOpenActivity = { id ->
-                                            webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
-                                        },
-                                        onOpenBlockRules = {
-                                            settingsSection = SettingsSection.BLOCK_RULES
-                                            tab = MainTab.SETTINGS
-                                        },
-                                    )
+                                HorizontalPager(
+                                    state = pagerState,
+                                    // 三页全部常驻：来回切页不再重建界面，也不会掉回顶部重拉
+                                    beyondViewportPageCount = MainTab.entries.size,
+                                    modifier = Modifier.weight(1f),
+                                ) { page ->
+                                    when (MainTab.entries[page]) {
+                                        MainTab.DISCOVER -> DiscoverScreen(
+                                            token = current.token,
+                                            repository = activityRepository,
+                                            preferences = preferences,
+                                            refreshTick = discoverRefreshTick,
+                                            reenterTick = discoverReenterTick,
+                                            onOpenActivity = { id ->
+                                                webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
+                                            },
+                                            onOpenBlockRules = {
+                                                settingsSection = SettingsSection.BLOCK_RULES
+                                                tab = MainTab.SETTINGS
+                                            },
+                                        )
 
-                                    MainTab.PROFILE -> {
-                                        if (showMyActivities) {
-                                            MyActivitiesScreen(
-                                                token = current.token,
-                                                repository = activityRepository,
-                                                onBack = { showMyActivities = false },
-                                                onOpenActivity = { id ->
-                                                    webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
-                                                },
-                                            )
-                                        } else {
-                                            ProfileScreen(
-                                                session = current,
-                                                onOpenWeb = { webUrl = AppConfig.HOME_URL },
-                                                onOpenMyActivities = { showMyActivities = true },
-                                            )
-                                        }
-                                    }
-
-                                    MainTab.SETTINGS -> SettingsScreen(
-                                        session = current,
-                                        token = current.token,
-                                        repository = activityRepository,
-                                        preferences = preferences,
-                                        section = settingsSection,
-                                        onSectionChange = { settingsSection = it },
-                                        onLogout = {
-                                            sessionStore.clear()
-                                            session = null
-                                            webUrl = null
-                                            tab = MainTab.DISCOVER
-                                        },
-                                        onShowDisclaimer = { showDisclaimer = true },
-                                    )
-                                }
-                            }
-
-                            NavigationBar(windowInsets = WindowInsets(0, 0, 0, 0)) {
-                                MainTab.entries.forEach { item ->
-                                    NavigationBarItem(
-                                        selected = tab == item,
-                                        onClick = {
-                                            if (item == MainTab.SETTINGS) {
-                                                settingsSection = SettingsSection.ROOT
+                                        MainTab.PROFILE -> {
+                                            if (showMyActivities) {
+                                                MyActivitiesScreen(
+                                                    token = current.token,
+                                                    repository = activityRepository,
+                                                    onBack = { showMyActivities = false },
+                                                    onOpenActivity = { id ->
+                                                        webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
+                                                    },
+                                                )
+                                            } else {
+                                                ProfileScreen(
+                                                    session = current,
+                                                    onOpenWeb = { webUrl = AppConfig.HOME_URL },
+                                                    onOpenMyActivities = { showMyActivities = true },
+                                                )
                                             }
-                                            tab = item
-                                        },
-                                        icon = {
-                                            Icon(
-                                                painter = painterResource(item.iconRes),
-                                                contentDescription = item.label,
-                                            )
-                                        },
-                                        label = { Text(item.label) },
-                                    )
+                                        }
+
+                                        MainTab.SETTINGS -> SettingsScreen(
+                                            session = current,
+                                            token = current.token,
+                                            repository = activityRepository,
+                                            preferences = preferences,
+                                            section = settingsSection,
+                                            onSectionChange = { settingsSection = it },
+                                            onLogout = {
+                                                sessionStore.clear()
+                                                session = null
+                                                webUrl = null
+                                                tab = MainTab.DISCOVER
+                                            },
+                                            onShowDisclaimer = { showDisclaimer = true },
+                                        )
+                                    }
+                                }
+
+                                NavigationBar(windowInsets = WindowInsets(0, 0, 0, 0)) {
+                                    MainTab.entries.forEach { item ->
+                                        NavigationBarItem(
+                                            selected = tab == item,
+                                            onClick = {
+                                                if (item == tab) {
+                                                    when (item) {
+                                                        // 双击「发现」：重新拉取列表
+                                                        MainTab.DISCOVER -> {
+                                                            val now = SystemClock.uptimeMillis()
+                                                            if (now - lastDiscoverTap <= 400L) {
+                                                                lastDiscoverTap = 0L
+                                                                discoverRefreshTick++
+                                                            } else {
+                                                                lastDiscoverTap = now
+                                                            }
+                                                        }
+
+                                                        MainTab.SETTINGS -> settingsSection = SettingsSection.ROOT
+                                                        MainTab.PROFILE -> Unit
+                                                    }
+                                                } else {
+                                                    tab = item
+                                                    scope.launch { pagerState.animateScrollToPage(item.ordinal) }
+                                                }
+                                            },
+                                            icon = {
+                                                Icon(
+                                                    painter = painterResource(item.iconRes),
+                                                    contentDescription = item.label,
+                                                )
+                                            },
+                                            label = { Text(item.label) },
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
 
                 if (showExitConfirm) {
                     AlertDialog(
