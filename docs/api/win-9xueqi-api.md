@@ -10,7 +10,7 @@
 | --- | --- |
 | 技术栈 | Vue2 + Vant/VUX 的移动端 H5，hash 路由 |
 | 接口前缀 | `https://win.9xueqi.com/api/app/client/v1/` |
-| 参数编码 | `params=<JSON>`，**双重 URL 编码** |
+| 参数编码 | `params=<JSON>`，最终在线路上是**双重 URL 编码**（代码中只编一次，传输层再编一次） |
 | 鉴权 | 请求头 `Authorization: <JWT>`；同时以 query 参数 `token` 携带。无 `Bearer` 前缀 |
 | 公共参数 | `platform=3`、`version=2.0.5`、`device`、`timestamp` |
 | 会话存储 | 仅 `localStorage.Token`，无 Cookie |

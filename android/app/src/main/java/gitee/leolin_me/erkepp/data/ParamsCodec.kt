@@ -1,12 +1,14 @@
 package gitee.leolin_me.erkepp.data
 
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
 /**
- * 参数编码，与官方 H5 的请求拦截器保持一致：
- * 先对 JSON 做一次 [encodeURIComponent]（axios 拼 query 时再做一次），因此这里是两次。
+ * 参数编码，与官方 H5 的请求拦截器保持一致。
+ *
+ * 官方是「encodeURI 一次 + axios/qs 拼接时再编码一次」，共两次。
+ * 这里只做第一次：传输层（[okhttp3.HttpUrl] 的 query、[okhttp3.FormBody]）会自动完成第二次，
+ * 因此这里返回的是**一次编码**后的字符串，直接交给传输层即可。
  */
 object ParamsCodec {
 
@@ -14,7 +16,8 @@ object ParamsCodec {
 
     private const val HEX = "0123456789ABCDEF"
 
-    fun encode(params: JsonObject): String = percentEncode(percentEncode(json.encodeToString(JsonElement.serializer(), params)))
+    fun encode(params: JsonObject): String =
+        percentEncode(json.encodeToString(JsonObject.serializer(), params))
 
     /** 等价于 JavaScript 的 encodeURIComponent。 */
     fun percentEncode(value: String): String {
