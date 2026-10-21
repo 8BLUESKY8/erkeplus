@@ -44,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -129,7 +130,10 @@ fun DiscoverScreen(
     var loadingMore by remember { mutableStateOf(false) }
     var endReached by remember { mutableStateOf(false) }
     var autoFillCount by remember { mutableIntStateOf(0) }
+    var noProgressCount by remember { mutableIntStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
+    // total 为 0 表示服务端没有返回总数（例如 my-list），此时按“还有”处理，直到拉到空页
+    val hasMore = total <= 0 || items.size < total
     var categories by remember { mutableStateOf(listOf(0 to "全部")) }
     val visibleCategories = remember(categories, selectedCategoryIds) {
         categories.filter { it.first == 0 || selectedCategoryIds.isEmpty() || it.first in selectedCategoryIds }
@@ -182,7 +186,7 @@ fun DiscoverScreen(
     }
 
     fun loadMore() {
-        if (loadingMore || loading || endReached || items.size >= total) return
+        if (loadingMore || loading || endReached || !hasMore) return
         val gen = generation
         scope.launch {
             loadingMore = true
@@ -194,10 +198,13 @@ fun DiscoverScreen(
                         "more ok page=${it.pageNum} got=${it.items.size} added=${(items + it.items).distinctBy { i -> i.id }.size - items.size}",
                     )
                     if (gen == generation) {
+                        val before = items.size
                         items = (items + it.items).distinctBy { item -> item.id }
                         page = it.pageNum
                         total = it.total
-                        if (it.items.isEmpty() || items.size >= total) {
+                        val added = items.size - before
+                        if (added == 0 && it.items.isNotEmpty()) noProgressCount++ else noProgressCount = 0
+                        if (it.items.isEmpty() || (total > 0 && items.size >= total) || noProgressCount >= 2) {
                             endReached = true
                             AppLog.d("discover", "endReached loaded=${items.size} total=$total")
                         }
@@ -235,33 +242,37 @@ fun DiscoverScreen(
     val blockedByRules = remember(items, blockRules) {
         if (blockRules.isEmpty) 0 else items.count { blockRules.isBlocked(it.name) }
     }
-    val query = debouncedSearch.trim()
-    val visibleItems = remember(items, blockRules, query, hoursMin, hoursMax) {
-        items.asSequence()
-            .filter { query.isEmpty() || it.name.contains(query, ignoreCase = true) }
-            .filter { hoursMin == null || it.hours >= hoursMin!! }
-            .filter { hoursMax == null || it.hours <= hoursMax!! }
-            .filterNot { blockRules.isBlocked(it.name) }
-            .toList()
-    }
-
-    val shouldLoadMore by remember {
+    val visibleItems by remember(blockRules) {
         derivedStateOf {
-            val lastIndex = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            val threshold = if (preloadEnabled) 8 else 2
-            visibleItems.isNotEmpty() && lastIndex >= visibleItems.size - threshold
+            val keyword = debouncedSearch.trim()
+            items.asSequence()
+                .filter { keyword.isEmpty() || it.name.contains(keyword, ignoreCase = true) }
+                .filter { hoursMin == null || it.hours >= hoursMin!! }
+                .filter { hoursMax == null || it.hours <= hoursMax!! }
+                .filterNot { blockRules.isBlocked(it.name) }
+                .toList()
         }
     }
 
-    LaunchedEffect(shouldLoadMore) {
-        if (shouldLoadMore) loadMore()
+    // 滚动驱动：只要接近末尾就继续加载，直到没有更多
+    LaunchedEffect(gridState) {
+        snapshotFlow {
+            val info = gridState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            last to visibleItems.size
+        }.collect { (last, count) ->
+            val threshold = if (preloadEnabled) 8 else 2
+            if (count > 0 && hasMore && last >= count - threshold) {
+                loadMore()
+            }
+        }
     }
 
     // 显示不足一屏时持续补页，直到没有更多或显示够 12 条；最多 20 次兜底
     LaunchedEffect(gridState.canScrollForward, items.size, visibleItems.size) {
         val laidOut = gridState.layoutInfo.totalItemsCount > 0
         if (!loading && !loadingMore && !endReached && laidOut &&
-            items.size < total && visibleItems.size < 12 && autoFillCount < 20
+            hasMore && visibleItems.size < 12 && autoFillCount < 20
         ) {
             autoFillCount++
             AppLog.d("discover", "auto-fill #$autoFillCount loaded=${items.size} visible=${visibleItems.size} total=$total")
@@ -269,9 +280,10 @@ fun DiscoverScreen(
         }
     }
 
-    // 搜索时如果当前页没有命中，自动往后翻几页，避免"搜不到"的错觉
-    LaunchedEffect(query, items.size) {
-        if (query.isNotEmpty() && visibleItems.isEmpty() && items.size < total && page < 5 && !loading && !loadingMore) {
+    // 搜索时如果当前页没有命中，自动往后翻页，避免"搜不到"的错觉
+    LaunchedEffect(debouncedSearch, items.size) {
+        val keyword = debouncedSearch.trim()
+        if (keyword.isNotEmpty() && visibleItems.isEmpty() && hasMore && !loading && !loadingMore) {
             loadMore()
         }
     }
