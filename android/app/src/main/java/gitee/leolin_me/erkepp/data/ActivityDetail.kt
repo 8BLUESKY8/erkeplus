@@ -90,12 +90,36 @@ data class ActivityDetail(
     val identity: Int = 0,
     /** 是否已提交作业：1 已提交（查看作业）、0 未提交（交作业）。 */
     val isPostHomework: Int = 0,
+    /** 签到方式，逗号分隔的字典 id（本校：1 动态二维码、2 静态二维码、3 GPS定位）。 */
+    val signWay: String = "",
+    /** 签到开关：0 未开启、1 签到中、2 签退中。 */
+    val signSwitch: Int = 0,
+    /** 本人是否已签到：1 已签到。仅 participant 详情接口会返回。 */
+    val isSigner: Int = 0,
+    /** 已签到人数 / 已签退人数，仅 participant 详情接口会返回。 */
+    val signInCount: Int = 0,
+    val signOutCount: Int = 0,
     /** 数据来自哪个接口：`non-member` 或 `participant`。 */
     val source: String,
 ) {
     /** 是否限制了参与人群，用于决定要不要显示「参与限制」一栏。 */
     val hasRestriction: Boolean
         get() = genderLimit != 0 || gradeNames.isNotEmpty() || collegeNames.isNotEmpty() || honestLimit > 0
+
+    /** 解析后的签到方式 id 列表。 */
+    val signWayIds: List<Int>
+        get() = signWay.split(',').mapNotNull { it.trim().toIntOrNull() }
+
+    /**
+     * 是否该显示签到入口。对应官方 H5 的按钮显示条件：
+     * 已参加、报名通过、活动状态 5～8、签到已开启、签到方式含二维码。
+     */
+    val canScanSign: Boolean
+        get() = identity == 1 &&
+            applyStatus == 2 &&
+            status in 5..8 &&
+            signSwitch != 0 &&
+            signWayIds.any { it == 1 || it == 2 }
 }
 
 internal fun parseActivityDetail(data: JsonObject, source: String): ActivityDetail = ActivityDetail(
@@ -131,6 +155,11 @@ internal fun parseActivityDetail(data: JsonObject, source: String): ActivityDeta
     limitType = (data.element("activityLimitType") as? JsonObject)?.int("type") ?: 0,
     applyStatus = data.int("applyStatus"),
     isPostHomework = data.int("isPostHomework"),
+    signWay = data.text("signWay"),
+    signSwitch = data.int("signSwitch"),
+    isSigner = data.int("isSigner"),
+    signInCount = data.int("signInCount"),
+    signOutCount = data.int("signOutCount"),
     source = source,
 )
 

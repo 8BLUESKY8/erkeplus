@@ -77,6 +77,11 @@ import gitee.leolin_me.erkepp.ui.school.SchoolPickerScreen
 import gitee.leolin_me.erkepp.ui.settings.BlockRulesScreen
 import gitee.leolin_me.erkepp.ui.settings.SettingsScreen
 import gitee.leolin_me.erkepp.ui.settings.SettingsSection
+import gitee.leolin_me.erkepp.ui.sign.SignScanScreen
+import gitee.leolin_me.erkepp.ui.sign.SignTarget
+import gitee.leolin_me.erkepp.ui.sign.decodeQrFromBitmap
+import gitee.leolin_me.erkepp.data.parseSignCode
+import gitee.leolin_me.erkepp.data.SignTicket
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -172,6 +177,10 @@ class MainActivity : ComponentActivity() {
                 var pendingDownload by remember { mutableStateOf<ActivityAttachment?>(null) }
                 var attachmentSheet by remember { mutableStateOf<ActivityAttachment?>(null) }
                 var homeworkEditId by remember { mutableStateOf<Long?>(null) }
+                var signScan by remember { mutableStateOf<SignTarget?>(null) }
+                var presetSignText by remember { mutableStateOf<String?>(null) }
+                // 签到成功后让详情重拉一次，及时显示「已签到」
+                var detailRefreshTick by remember { mutableIntStateOf(0) }
                 var attachmentsInTrash by remember { mutableStateOf(false) }
                 var pendingPreviewName by remember { mutableStateOf<String?>(null) }
                 val downloadTasks by Downloads.tasks.collectAsState()
@@ -237,8 +246,37 @@ class MainActivity : ComponentActivity() {
                     AppLog.d("probe", "start=$probe detail=$detailId")
                     when (probe) {
                         "homework_list" -> activityActions.homeworkList(current.token)
-                        "sign_dict" -> activityActions.signWays(current.token)
+                        "sign_dict" -> activityRepository.signWays(current.token)
                         "sign_records" -> activityActions.mySignRecords(current.token)
+                        // 只对不存在的活动（id=1）发两次签到请求，确认请求体形状与 sp 语义，
+                        // 不会碰任何真实活动与真实用户
+                        "sign_probe" -> {
+                            val base = SignTicket(
+                                activityId = 1L,
+                                userId = "0",
+                                sp = "1",
+                                type = 2,
+                                signSwitch = 1,
+                                raw = "probe-fake",
+                            )
+                            val stale = activityActions.sign(current.token, base)
+                            val fresh = activityActions.sign(
+                                current.token,
+                                base.copy(sp = System.currentTimeMillis().toString()),
+                            )
+                            AppLog.d("probe", "sign_probe stale=$stale")
+                            AppLog.d("probe", "sign_probe fresh=$fresh")
+                        }
+                        "scan_image" -> {
+                            val file = java.io.File(activity.filesDir, "qr.png")
+                            val text = if (file.exists()) {
+                                android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+                                    ?.let { decodeQrFromBitmap(it) }
+                            } else {
+                                null
+                            }
+                            AppLog.d("probe", "scan_image text=$text ticket=${text?.let { parseSignCode(it) }}")
+                        }
                         "sign_count" -> if (detailId > 0) activityActions.signCount(current.token, detailId)
                         "work_detail" -> if (detailId > 0) activityActions.workDetail(current.token, detailId)
                         "download" -> {
@@ -275,6 +313,19 @@ class MainActivity : ComponentActivity() {
                             attachmentsVisible = true
                         }
                         "my_activities" -> showMyActivities = true
+                        "sign_scan" -> if (detailId > 0) {
+                            val loaded = runCatching { activityRepository.detail(current.token, detailId) }.getOrNull()
+                            signScan = SignTarget(detailId, loaded?.name.orEmpty(), loaded?.signSwitch ?: 0)
+                            // 有 files/qr.png 就直接当成本次扫到的码，免去对着屏幕扫
+                            val qrFile = java.io.File(activity.filesDir, "qr.png")
+                            presetSignText = if (qrFile.exists()) {
+                                android.graphics.BitmapFactory.decodeFile(qrFile.absolutePath)
+                                    ?.let { decodeQrFromBitmap(it) }
+                            } else {
+                                null
+                            }
+                            AppLog.d("probe", "sign_scan preset=$presetSignText")
+                        }
                         "homework_edit" -> if (detailId > 0) homeworkEditId = detailId
                         "attachment_sheet" -> {
                             val url = intent.getStringExtra("url")
@@ -604,6 +655,8 @@ class MainActivity : ComponentActivity() {
                                             }
                                         },
                                         onOpenAttachment = { attachment -> handleAttachmentTap(attachment) },
+                                        onOpenSignScan = { target -> signScan = target },
+                                        refreshKey = detailRefreshTick,
                                     )
                                 }
                             }
@@ -636,6 +689,26 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onAttachment = { attachment -> attachmentSheet = attachment },
                                         onBack = { homeworkEditId = null },
+                                    )
+                                }
+                            }
+
+                            // 扫码签到压在详情之上：相机页必须独占，不能有下层内容透出来
+                            val scan = signScan
+                            if (scan != null) {
+                                SecondaryPage(onBack = { signScan = null }) {
+                                    SignScanScreen(
+                                        token = current.token,
+                                        target = scan,
+                                        developerMode = preferences.developerMode,
+                                        repository = activityRepository,
+                                        actions = activityActions,
+                                        onBack = { signScan = null },
+                                        onSigned = {
+                                            detailRefreshTick++
+                                            AppLog.d("sign", "signed id=${scan.activityId}")
+                                        },
+                                        initialQrText = presetSignText,
                                     )
                                 }
                             }

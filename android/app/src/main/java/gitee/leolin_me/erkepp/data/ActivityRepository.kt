@@ -65,6 +65,39 @@ data class ActivityQuery(
 /** 活动列表。参数与官方活动页一致，共 11 个，缺项会返回 10002。 */
 class ActivityRepository(private val api: ApiClient) {
 
+    /** 签到方式字典的进程内缓存：字典是学校级配置，一次会话内不会变。 */
+    private var signWayCache: Map<Int, String>? = null
+
+    /**
+     * 签到方式字典：官方 `/dict/school/system-para/list {fieldType:"activity", keyWord:"sign_way"}`。
+     *
+     * 活动详情里的 `signWay` 是这组字典里 id 的逗号串。本校实测为
+     * `1 动态二维码 / 2 静态二维码 / 3 GPS定位`；字典里的 id 是学校配置的，不能写死。
+     */
+    suspend fun signWays(token: String): Map<Int, String> {
+        signWayCache?.let { return it }
+        val response = api.get(
+            path = "dict/school/system-para/list",
+            params = buildJsonObject {
+                put("fieldType", JsonPrimitive("activity"))
+                put("keyWord", JsonPrimitive("sign_way"))
+            },
+            token = token,
+        )
+        response.requireSuccess()
+        val array = runCatching { response.jsonObject["data"]?.jsonArray }.getOrNull()
+            ?: return emptyMap()
+        val map = array.mapNotNull { element ->
+            val item = runCatching { element.jsonObject }.getOrNull() ?: return@mapNotNull null
+            val id = item["id"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+            val name = item["name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            id to name
+        }.toMap()
+        if (map.isNotEmpty()) signWayCache = map
+        return map
+    }
+
+
     /** 活动分类：官方 `/dict/activity/choice-sort?moduleId=1` 的 filterArray。 */
     suspend fun categories(token: String): List<Pair<Int, String>> {
         val response = api.get(

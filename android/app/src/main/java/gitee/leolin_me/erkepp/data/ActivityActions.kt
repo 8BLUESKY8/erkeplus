@@ -5,7 +5,11 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+
+/** 签到结果，直接把 `code` / `msg` 交给界面，不在客户端猜测业务含义。 */
+data class SignOutcome(val success: Boolean, val code: Int, val message: String)
 
 /**
  * 活动写操作与相关只读查询的封装。
@@ -49,22 +53,44 @@ class ActivityActions(private val api: ApiClient) {
         }
 
     /**
-     * 签到方式字典：官方 `/dict/school/system-para/list {fieldType:"activity", keyWord:"sign_way"}`。
+     * 签到 / 签退：官方 `POST activity/sign/in-out`。
      *
-     * 活动详情里的 `signWay` 是这组字典的 id（逗号分隔），名字对应「动态二维码 / 静态二维码 /
-     * 动态+静态二维码 / GPS任意位置 / GPS固定位置」。不解这层就不知道某个活动到底怎么签到。
+     * 请求体严格照官方扫码回调拼（`window.BackScan`）：
+     * - `type=1`（waitSign 码）：`{id, userId, type, sp}`
+     * - `type=2`（活动码）：`{id, userId, type, sp, signSwitch}`
+     *
+     * `userId` 用**二维码里的值**原样转发（官方也是转发的，不是当前登录用户）；
+     * `sp` 原样转发，静态码是空串。服务端怎么校验由它决定，客户端不自作聪明。
+     *
+     * 这是写操作，只允许由用户主动扫码后触发。
      */
-    suspend fun signWays(token: String): JsonElement? =
-        call("GET", "dict/school/system-para/list", token, "sign_way") {
-            api.get(
-                path = "dict/school/system-para/list",
-                params = buildJsonObject {
-                    put("fieldType", JsonPrimitive("activity"))
-                    put("keyWord", JsonPrimitive("sign_way"))
-                },
-                token = token,
-            )
+    suspend fun sign(token: String, ticket: SignTicket): SignOutcome {
+        val params = buildJsonObject {
+            put("id", JsonPrimitive(ticket.activityId))
+            put("userId", JsonPrimitive(ticket.userId))
+            put("type", JsonPrimitive(ticket.type))
+            put("sp", JsonPrimitive(ticket.sp))
+            ticket.signSwitch?.let { put("signSwitch", JsonPrimitive(it)) }
         }
+        val response = call(
+            method = "POST",
+            path = "activity/sign/in-out",
+            token = token,
+            extra = "id=${ticket.activityId} type=${ticket.type} signSwitch=${ticket.signSwitch} sp=${ticket.sp}",
+        ) {
+            api.post(path = "activity/sign/in-out", params = params, token = token)
+        } ?: return SignOutcome(false, -1, "没有响应，请检查网络")
+
+        val code = response.code()
+        val message = runCatching {
+            (response as JsonObject)["msg"]?.jsonPrimitive?.content
+        }.getOrNull().orEmpty()
+        return SignOutcome(
+            success = code == 0,
+            code = code,
+            message = message.ifBlank { if (code == 0) "成功" else "失败（code=$code）" },
+        )
+    }
 
     /** 我的签到签退记录：官方 `activity/my-sign-in-out-list {pageNum,pageSize,name}`。 */
     suspend fun mySignRecords(token: String, page: Int = 1, pageSize: Int = 20): JsonElement? =

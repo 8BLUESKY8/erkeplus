@@ -29,8 +29,8 @@ android {
         applicationId = "gitee.leolin_me.erkepp"
         minSdk = 26
         targetSdk = 36
-        versionCode = 21
-        versionName = "0.6.6"
+        versionCode = 22
+        versionName = "0.6.7"
     }
 
     signingConfigs {
@@ -95,6 +95,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
+    // 扫码只用解码，不引 CameraX / zxing-android-embedded：省体积，界面保持自绘
+    implementation(libs.zxing.core)
     implementation(libs.androidx.profileinstaller)
 
     // Baseline Profile 生成器，只在跑 :app:generateReleaseBaselineProfile 时用到

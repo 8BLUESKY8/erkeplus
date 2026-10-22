@@ -70,6 +70,7 @@ import gitee.leolin_me.erkepp.ui.formatHours
 import gitee.leolin_me.erkepp.ui.rememberCoverRequest
 import gitee.leolin_me.erkepp.ui.statusColor
 import gitee.leolin_me.erkepp.ui.statusLabel
+import gitee.leolin_me.erkepp.ui.sign.SignTarget
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -91,6 +92,9 @@ fun ActivityDetailScreen(
     onOpenUrl: (String) -> Unit,
     onOpenHomework: (Long, Boolean) -> Unit,
     onOpenAttachment: (ActivityAttachment) -> Unit,
+    onOpenSignScan: (SignTarget) -> Unit = {},
+    /** 外部让详情重新拉一次（例如刚签到完）。 */
+    refreshKey: Int = 0,
 ) {
     var detail by remember(activityId) { mutableStateOf<ActivityDetail?>(null) }
     var error by remember(activityId) { mutableStateOf<String?>(null) }
@@ -99,9 +103,11 @@ fun ActivityDetailScreen(
     var notices by remember(activityId) { mutableStateOf<List<ActivityNotice>>(emptyList()) }
     var noticeIndex by remember(activityId) { mutableIntStateOf(0) }
     var showNotices by remember(activityId) { mutableStateOf(false) }
+    // 签到方式字典：signWay 里存的是学校配置的 id，名字要单独查
+    var signWayNames by remember(activityId) { mutableStateOf<Map<Int, String>>(emptyMap()) }
 
 
-    LaunchedEffect(activityId, reloadKey) {
+    LaunchedEffect(activityId, reloadKey, refreshKey) {
         loading = true
         error = null
         runCatching { repository.detail(token, activityId) }
@@ -118,6 +124,15 @@ fun ActivityDetailScreen(
             }
             .onFailure { error = it.toUserMessage() }
         loading = false
+    }
+
+    // 只有已参加、且活动配了签到方式时才需要字典；失败就当没有，不打扰用户
+    LaunchedEffect(detail?.signWay, detail?.identity) {
+        val current = detail ?: return@LaunchedEffect
+        if (current.identity != 1 || current.signWay.isBlank()) return@LaunchedEffect
+        if (signWayNames.isEmpty()) {
+            runCatching { repository.signWays(token) }.onSuccess { signWayNames = it }
+        }
     }
 
     Box(
@@ -145,6 +160,7 @@ fun ActivityDetailScreen(
             else -> DetailContent(
                 detail = detail!!,
                 noticePreview = notices.firstOrNull()?.plainText,
+                signWayNames = signWayNames,
                 onOpenNotices = {
                     noticeIndex = 0
                     showNotices = true
@@ -153,6 +169,16 @@ fun ActivityDetailScreen(
                 onOpenUrl = onOpenUrl,
                 onOpenHomework = { onOpenHomework(activityId, detail!!.isPostHomework == 1) },
                 onOpenAttachment = onOpenAttachment,
+                onOpenSignScan = {
+                    val current = detail!!
+                    onOpenSignScan(
+                        SignTarget(
+                            activityId = current.id,
+                            activityName = current.name,
+                            signSwitch = current.signSwitch,
+                        ),
+                    )
+                },
             )
         }
 
@@ -218,11 +244,13 @@ fun ActivityDetailScreen(
 private fun DetailContent(
     detail: ActivityDetail,
     noticePreview: String?,
+    signWayNames: Map<Int, String>,
     onOpenNotices: () -> Unit,
     onOpenWeb: () -> Unit,
     onOpenUrl: (String) -> Unit,
     onOpenHomework: () -> Unit,
     onOpenAttachment: (ActivityAttachment) -> Unit,
+    onOpenSignScan: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -293,6 +321,15 @@ private fun DetailContent(
                 StatsCard(detail)
                 Spacer(Modifier.height(12.dp))
                 ScheduleCard(detail)
+
+                if (detail.identity == 1 && detail.attendanceType != 0) {
+                    Spacer(Modifier.height(12.dp))
+                    SignCard(
+                        detail = detail,
+                        signWayNames = signWayNames,
+                        onScan = onOpenSignScan,
+                    )
+                }
 
                 if (noticePreview != null) {
                     Spacer(Modifier.height(12.dp))
@@ -569,6 +606,70 @@ private fun ScheduleCard(detail: ActivityDetail) {
         }
         InfoLine(label = "考勤标准", value = attendanceLabel(detail.attendanceType))
         InfoLine(label = "提交作业", value = if (detail.isSubmitWork == 1) "需要提交" else "不需要")    }
+}
+
+/**
+ * 签到卡片。
+ *
+ * 「扫码签到」的显示条件与官方 H5 的按钮逐条对齐（已参加、报名通过、状态 5～8、
+ * 签到已开启、签到方式含二维码）。定位签到官方学生端只展示地图信息、没给提交入口，
+ * 所以这里也不提供，避免造出一个官方没有的功能。
+ */
+@Composable
+private fun SignCard(
+    detail: ActivityDetail,
+    signWayNames: Map<Int, String>,
+    onScan: () -> Unit,
+) {
+    val wayNames = detail.signWayIds.map { id -> signWayNames[id] ?: "方式 $id" }
+    val hasQrWay = detail.signWayIds.any { it == 1 || it == 2 }
+    val unavailable = when {
+        !hasQrWay -> "这个活动用定位签到，暂不支持。"
+        detail.signSwitch == 0 -> "老师还没开启签到，开启后这里会出现扫码按钮。"
+        detail.applyStatus != 2 -> "报名通过后才能签到。"
+        detail.status !in 5..8 -> "活动还没到签到时间。"
+        else -> null
+    }
+
+    Card {
+        Text(
+            text = "签到",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.height(6.dp))
+        InfoLine(label = "签到方式", value = wayNames.joinToString("、").ifBlank { "—" })
+        InfoLine(label = "当前状态", value = signSwitchLabel(detail.signSwitch))
+        if (detail.isSigner == 1) {
+            InfoLine(label = "我的状态", value = "已签到")
+        }
+        if (detail.signInCount > 0 || detail.signOutCount > 0) {
+            InfoLine(
+                label = "已签人数",
+                value = "签到 ${detail.signInCount} 人 · 签退 ${detail.signOutCount} 人",
+            )
+        }
+        if (unavailable == null) {
+            Spacer(Modifier.height(10.dp))
+            Button(onClick = onScan, modifier = Modifier.fillMaxWidth()) {
+                Text("扫码签到")
+            }
+        } else {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = unavailable,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** 签到开关：0 未开启、1 签到中、2 签退中（官方 `activity/sign/switch` 的 handleType）。 */
+private fun signSwitchLabel(signSwitch: Int): String = when (signSwitch) {
+    1 -> "签到中"
+    2 -> "签退中"
+    else -> "未开启"
 }
 
 /** 报名状态：已实测 `2` 为「报名已通过」，其余值暂时按「已报名」显示。 */
