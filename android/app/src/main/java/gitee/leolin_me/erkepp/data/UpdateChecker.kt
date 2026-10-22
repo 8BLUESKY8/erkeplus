@@ -14,8 +14,13 @@ import java.util.concurrent.TimeUnit
 
 /** 检查更新的结果。 */
 sealed interface UpdateResult {
-    /** 有新版本。[url] 是发布页地址。 */
-    data class Available(val version: Version, val url: String, val notes: String) : UpdateResult
+    /** 有新版本。[url] 是发布页地址，[apkUrl] 是发布里附带的安装包（可能没有）。 */
+    data class Available(
+        val version: Version,
+        val url: String,
+        val notes: String,
+        val apkUrl: String? = null,
+    ) : UpdateResult
 
     /** 已经是最新。 */
     object UpToDate : UpdateResult
@@ -54,7 +59,7 @@ class UpdateChecker(
                     if (latest == null) {
                         UpdateResult.NoRelease
                     } else if (latest.version > currentVersion) {
-                        UpdateResult.Available(latest.version, latest.url, latest.notes)
+                        UpdateResult.Available(latest.version, latest.url, latest.notes, latest.apkUrl)
                     } else {
                         UpdateResult.UpToDate
                     }
@@ -63,7 +68,12 @@ class UpdateChecker(
             )
     }
 
-    private data class Latest(val version: Version, val url: String, val notes: String)
+    private data class Latest(
+        val version: Version,
+        val url: String,
+        val notes: String,
+        val apkUrl: String?,
+    )
 
     private fun fetchLatest(): Latest? {
         val releases = getArray("https://gitee.com/api/v5/repos/$owner/$repo/releases?per_page=5", allowMissing = true)
@@ -75,6 +85,7 @@ class UpdateChecker(
                 version = version,
                 url = "https://gitee.com/$owner/$repo/releases/tag/$tag",
                 notes = release.string("body").orEmpty(),
+                apkUrl = apkAsset(release),
             )
         }
 
@@ -86,9 +97,18 @@ class UpdateChecker(
                 version = version,
                 url = "https://gitee.com/$owner/$repo/releases",
                 notes = "",
+                apkUrl = null,
             )
         }
         return null
+    }
+
+    /** 发布里附带的第一个 .apk（Gitee 的附件字段是 `browser_download_url`）。 */
+    private fun apkAsset(release: JsonObject): String? {
+        val assets = runCatching { release["assets"] as JsonArray }.getOrNull() ?: return null
+        return assets.asSequence()
+            .mapNotNull { item -> runCatching { item.jsonObject.string("browser_download_url") }.getOrNull() }
+            .firstOrNull { it.endsWith(".apk", ignoreCase = true) }
     }
 
     /** 404 当作「这一类还不存在」，其余异常照常抛出。 */

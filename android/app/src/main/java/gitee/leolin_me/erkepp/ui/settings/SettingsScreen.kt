@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -40,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import gitee.leolin_me.erkepp.AppConfig
 import gitee.leolin_me.erkepp.data.ActivityRepository
+import gitee.leolin_me.erkepp.data.ApkUpdater
 import gitee.leolin_me.erkepp.data.AppPreferences
 import gitee.leolin_me.erkepp.data.BlockRules
 import gitee.leolin_me.erkepp.data.ReenterBehavior
@@ -73,6 +75,9 @@ fun SettingsScreen(
     var showResetConfirm by remember { mutableStateOf(false) }
     var checking by remember { mutableStateOf(false) }
     var updateDialog by remember { mutableStateOf<UpdateDialog?>(null) }
+    var updateBusy by remember { mutableStateOf(false) }
+    var updateProgress by remember { mutableStateOf<Float?>(null) }
+    var updateStatus by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val updateChecker = remember { UpdateChecker() }
@@ -262,11 +267,16 @@ fun SettingsScreen(
                             val result = updateChecker.check(AppConfig.VERSION)
                             checking = false
                             updateDialog = when (result) {
-                                is UpdateResult.Available -> UpdateDialog.Available(
-                                    version = result.version.toString(),
-                                    url = result.url,
-                                    notes = result.notes,
-                                )
+                                is UpdateResult.Available -> {
+                                    updateStatus = null
+                                    updateProgress = null
+                                    UpdateDialog.Available(
+                                        version = result.version.toString(),
+                                        url = result.url,
+                                        notes = result.notes,
+                                        apkUrl = result.apkUrl,
+                                    )
+                                }
 
                                 UpdateResult.UpToDate -> UpdateDialog.Message("已经是最新版本（${AppConfig.VERSION}）。")
                                 UpdateResult.NoRelease -> UpdateDialog.Message("仓库里还没有发布版本。")
@@ -361,28 +371,89 @@ fun SettingsScreen(
     updateDialog?.let { dialog ->
         when (dialog) {
             is UpdateDialog.Available -> AlertDialog(
-                onDismissRequest = { updateDialog = null },
+                onDismissRequest = { if (!updateBusy) updateDialog = null },
                 title = { Text("发现新版本 ${dialog.version}") },
                 text = {
-                    Text(
-                        text = dialog.notes.trim().ifBlank { "去发布页看看这次改了什么。" }.take(600),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    Column {
+                        Text(
+                            text = dialog.notes.trim().ifBlank { "去发布页看看这次改了什么。" }.take(600),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        if (dialog.apkUrl == null) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "这个版本没有附带安装包，只能去发布页手动下载。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        updateStatus?.let { status ->
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = status,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        if (updateBusy) {
+                            Spacer(Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = { updateProgress ?: 0f },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
                 },
                 confirmButton = {
-                    TextButton(
-                        onClick = {
-                            updateDialog = null
-                            runCatching {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(dialog.url)))
-                            }
-                        },
-                    ) {
-                        Text("去发布页")
+                    if (dialog.apkUrl != null) {
+                        TextButton(
+                            enabled = !updateBusy,
+                            onClick = {
+                                if (ApkUpdater.needsInstallPermission(context)) {
+                                    updateStatus = "已在系统设置里打开「安装未知应用」，允许后回来再点一次"
+                                    ApkUpdater.openInstallPermission(context)
+                                    return@TextButton
+                                }
+                                updateBusy = true
+                                updateProgress = null
+                                updateStatus = "正在下载…"
+                                scope.launch {
+                                    runCatching {
+                                        ApkUpdater.download(context, dialog.apkUrl, dialog.version) { progress ->
+                                            updateProgress = progress
+                                            updateStatus = "正在下载 ${(progress * 100).toInt()}%"
+                                        }
+                                    }.onSuccess { file ->
+                                        updateBusy = false
+                                        updateStatus = "下载完成，正在调起安装"
+                                        updateDialog = null
+                                        if (!ApkUpdater.install(context, file)) {
+                                            updateStatus = "没找到能安装 APK 的应用"
+                                        }
+                                    }.onFailure { error ->
+                                        updateBusy = false
+                                        updateStatus = "下载失败：${error.message ?: error.javaClass.simpleName}"
+                                    }
+                                }
+                            },
+                        ) {
+                            Text(if (updateBusy) "下载中…" else "下载并安装")
+                        }
+                    } else {
+                        TextButton(
+                            onClick = {
+                                updateDialog = null
+                                runCatching {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(dialog.url)))
+                                }
+                            },
+                        ) {
+                            Text("去发布页")
+                        }
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { updateDialog = null }) { Text("以后再说") }
+                    TextButton(enabled = !updateBusy, onClick = { updateDialog = null }) { Text("以后再说") }
                 },
             )
 
@@ -400,7 +471,12 @@ fun SettingsScreen(
 
 /** 检查更新的弹窗内容。 */
 private sealed interface UpdateDialog {
-    data class Available(val version: String, val url: String, val notes: String) : UpdateDialog
+    data class Available(
+        val version: String,
+        val url: String,
+        val notes: String,
+        val apkUrl: String?,
+    ) : UpdateDialog
 
     data class Message(val text: String) : UpdateDialog
 }

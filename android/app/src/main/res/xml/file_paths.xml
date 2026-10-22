@@ -3,4 +3,8 @@
     <external-path
         name="erkepp_downloads"
         path="Download/ErkePlus/" />
+    <!-- 应用内更新下载的安装包 -->
+    <cache-path
+        name="erkepp_update"
+        path="update/" />
 </paths>

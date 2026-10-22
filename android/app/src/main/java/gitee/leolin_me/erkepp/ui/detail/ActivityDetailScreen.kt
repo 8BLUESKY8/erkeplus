@@ -1,6 +1,10 @@
 package gitee.leolin_me.erkepp.ui.detail
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.view.View
 import android.webkit.WebResourceRequest
@@ -29,12 +33,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -55,9 +62,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -70,6 +80,7 @@ import gitee.leolin_me.erkepp.data.ActivityDetail
 import gitee.leolin_me.erkepp.data.ActivityNotice
 import gitee.leolin_me.erkepp.data.SignRecord
 import gitee.leolin_me.erkepp.data.ActivityRepository
+import gitee.leolin_me.erkepp.data.ActivityShare
 import gitee.leolin_me.erkepp.data.toUserMessage
 import gitee.leolin_me.erkepp.ui.formatHours
 import gitee.leolin_me.erkepp.ui.rememberCoverRequest
@@ -119,6 +130,7 @@ fun ActivityDetailScreen(
     var notices by remember(activityId) { mutableStateOf<List<ActivityNotice>>(emptyList()) }
     var noticeIndex by remember(activityId) { mutableIntStateOf(0) }
     var showNotices by remember(activityId) { mutableStateOf(false) }
+    var showShare by remember(activityId) { mutableStateOf(false) }
     // 签到方式字典：signWay 里存的是学校配置的 id，名字要单独查
     var signWayNames by remember(activityId) { mutableStateOf<Map<Int, String>>(emptyMap()) }
     // 报名 / 取消报名：确认框、理由、结果
@@ -264,6 +276,24 @@ fun ActivityDetailScreen(
                 contentDescription = "返回",
                 tint = Color.White,
             )
+        }
+
+        // 分享：官方「活动二维码」是同一个分享链接，这里做成二维码 + 复制/分享
+        if (detail != null) {
+            IconButton(
+                onClick = { showShare = true },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x59000000)),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_share),
+                    contentDescription = "分享活动",
+                    tint = Color.White,
+                )
+            }
         }
     }
 
@@ -447,6 +477,15 @@ fun ActivityDetailScreen(
             confirmButton = {
                 TextButton(onClick = { actionResult = null }) { Text("知道了") }
             },
+        )
+    }
+
+    // 分享：活动二维码 + 复制链接
+    if (showShare && detail != null) {
+        ShareSheet(
+            activityId = detail!!.id,
+            activityName = detail!!.name,
+            onDismiss = { showShare = false },
         )
     }
 
@@ -971,6 +1010,108 @@ private fun SignCard(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("打卡记录")
+            }
+        }
+    }
+}
+
+/**
+ * 分享面板：二维码 + 链接。
+ *
+ * 码的内容与官方「活动二维码」完全一致（`?sourceName=schActivityCode@Xj&activityid=`），
+ * 别人扫了会打开官方详情页去报名；复制链接更适合发到群里。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ShareSheet(
+    activityId: Long,
+    activityName: String,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val url = remember(activityId) { ActivityShare.shareUrl(activityId) }
+    val qr = remember(url) { ActivityShare.qrBitmap(url, 640) }
+    var copied by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = "分享活动",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = activityName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(14.dp))
+            if (qr != null) {
+                Image(
+                    bitmap = qr.asImageBitmap(),
+                    contentDescription = "活动二维码",
+                    modifier = Modifier
+                        .size(220.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.White)
+                        .padding(10.dp),
+                )
+            } else {
+                Text("二维码生成失败", color = MaterialTheme.colorScheme.error)
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "扫码打开官方活动页，可直接报名",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+            SelectionContainer {
+                Text(
+                    text = url,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        manager?.setPrimaryClip(ClipData.newPlainText("activity", url))
+                        copied = true
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (copied) "已复制" else "复制链接")
+                }
+                Button(
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, activityName)
+                            putExtra(Intent.EXTRA_TEXT, "$activityName\n$url")
+                        }
+                        runCatching {
+                            context.startActivity(
+                                Intent.createChooser(intent, "分享活动").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("分享")
+                }
             }
         }
     }
