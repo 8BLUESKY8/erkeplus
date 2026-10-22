@@ -2,7 +2,6 @@ package gitee.leolin_me.erkepp.ui.settings
 
 import android.content.Intent
 import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -69,10 +68,6 @@ fun SettingsScreen(
     onLogout: () -> Unit,
     onShowDisclaimer: () -> Unit,
 ) {
-    BackHandler(enabled = section == SettingsSection.BLOCK_RULES) {
-        onSectionChange(SettingsSection.ROOT)
-    }
-
     var categories by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }

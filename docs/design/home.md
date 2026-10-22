@@ -85,6 +85,15 @@
 - 不做列表内报名：写操作未验证，一律先进详情。
 - 分类 chip 仍可能横向溢出：由用户勾选入口数量控制，属预期行为。
 
+## 返回与过渡（v0.5.2）
+
+- 二级页面统一用 `SecondaryPage` 外壳：不透明背景 + 180ms 入场位移淡入。
+- 返回走预测性返回（Predictive Back）：`PredictiveBackHandler` 拿到手势进度 0..1，直接映射成位移、透明度与 0.96 缩放；中途松手弹回且不导航，提交时补 120ms 收尾再导航。
+- 三键导航与 Android 12 及以下拿不到进度事件，退化为一次 120ms 收尾动画。
+- 根页面（发现页）不再拦截返回，由系统直接退出应用；`AndroidManifest.xml` 打开 `enableOnBackInvokedCallback`。
+
+
+
 ## 附件与预览（v0.5.0）
 
 附件统一落在公共下载目录 `Download/ErkePlus/`。

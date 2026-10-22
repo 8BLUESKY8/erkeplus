@@ -1,6 +1,5 @@
 package gitee.leolin_me.erkepp.ui.detail
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -70,7 +69,6 @@ fun HomeworkScreen(
     var loading by remember(activityId) { mutableStateOf(true) }
     var reloadKey by remember(activityId) { mutableIntStateOf(0) }
 
-    BackHandler(onBack = onBack)
 
     LaunchedEffect(activityId, reloadKey) {
         loading = true

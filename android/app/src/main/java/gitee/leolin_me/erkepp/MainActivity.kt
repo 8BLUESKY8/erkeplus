@@ -147,7 +147,6 @@ class MainActivity : ComponentActivity() {
                 var tab by rememberSaveable { mutableStateOf(MainTab.DISCOVER) }
                 var showForgot by remember { mutableStateOf(false) }
                 var showSchoolPicker by remember { mutableStateOf(false) }
-                var showExitConfirm by remember { mutableStateOf(false) }
                 var showDisclaimer by remember { mutableStateOf(!preferences.disclaimerAccepted) }
 
                 var settingsSection by remember { mutableStateOf(SettingsSection.ROOT) }
@@ -351,16 +350,9 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
-                            BackHandler {
-                                if (tab != MainTab.DISCOVER) {
-                                    if (showMyActivities) {
-                                        showMyActivities = false
-                                    } else {
-                                        goTab(MainTab.DISCOVER)
-                                    }
-                                } else {
-                                    showExitConfirm = true
-                                }
+                            // 根页面返回交给系统直接退出；只有不在「发现」页时才拦截
+                            BackHandler(enabled = tab != MainTab.DISCOVER) {
+                                goTab(MainTab.DISCOVER)
                             }
 
                             Box(modifier = Modifier.fillMaxSize()) {
@@ -453,7 +445,7 @@ class MainActivity : ComponentActivity() {
                             // 详情做成覆盖层：分页容器留在组合里，返回时列表不重载、位置不丢
                             val detailId = detailActivityId
                             if (detailId != null) {
-                                SecondaryPage {
+                                SecondaryPage(onBack = { detailActivityId = null }) {
                                     ActivityDetailScreen(
                                         token = current.token,
                                         repository = activityRepository,
@@ -484,7 +476,7 @@ class MainActivity : ComponentActivity() {
 
                             // 我的活动、附件、屏蔽规则都做成全屏覆盖层，不留底部标签栏
                             if (showMyActivities) {
-                                SecondaryPage {
+                                SecondaryPage(onBack = { showMyActivities = false }) {
                                     MyActivitiesScreen(
                                         token = current.token,
                                         repository = activityRepository,
@@ -495,7 +487,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             if (settingsSection == SettingsSection.BLOCK_RULES) {
-                                SecondaryPage {
+                                SecondaryPage(onBack = { settingsSection = SettingsSection.ROOT }) {
                                     BlockRulesScreen(
                                         preferences = preferences,
                                         onBack = { settingsSection = SettingsSection.ROOT },
@@ -504,7 +496,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             if (attachmentsVisible) {
-                                SecondaryPage {
+                                SecondaryPage(onBack = { attachmentsVisible = false }) {
                                     AttachmentsScreen(
                                         files = attachmentFiles,
                                         downloads = downloadTasks,
@@ -528,7 +520,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                             if (previewNames.isNotEmpty()) {
-                                SecondaryPage {
+                                SecondaryPage(onBack = { previewNames = emptyList() }) {
                                     ImagePreviewScreen(
                                         names = previewNames,
                                         startIndex = previewIndex,
@@ -567,7 +559,7 @@ class MainActivity : ComponentActivity() {
                             // 查看作业覆盖层
                             val homeworkId = homeworkActivityId
                             if (homeworkId != null) {
-                                SecondaryPage {
+                                SecondaryPage(onBack = { homeworkActivityId = null }) {
                                     HomeworkScreen(
                                         activityId = homeworkId,
                                         loader = { activityActions.work(current.token, homeworkId) },
@@ -587,29 +579,6 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
-                }
-
-                if (showExitConfirm) {
-                    AlertDialog(
-                        onDismissRequest = { showExitConfirm = false },
-                        title = { Text("退出应用？") },
-                        text = { Text("按下退出后需要重新打开。") },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    showExitConfirm = false
-                                    finish()
-                                },
-                            ) {
-                                Text("退出")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showExitConfirm = false }) {
-                                Text("取消")
-                            }
-                        },
-                    )
                 }
 
                 if (showDisclaimer) {

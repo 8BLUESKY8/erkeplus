@@ -1,6 +1,5 @@
 package gitee.leolin_me.erkepp.ui.attachments
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -50,7 +49,6 @@ fun AttachmentsScreen(
     onCancelDownload: (String) -> Unit,
     onRetryDownload: (Downloads.Task) -> Unit,
 ) {
-    BackHandler(onBack = onBack)
 
     val active = downloads.values.filter {
         it.state in setOf(Downloads.State.QUEUED, Downloads.State.RUNNING, Downloads.State.FAILED)

@@ -6,7 +6,6 @@ import android.view.View
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -101,7 +100,6 @@ fun ActivityDetailScreen(
     var noticeIndex by remember(activityId) { mutableIntStateOf(0) }
     var showNotices by remember(activityId) { mutableStateOf(false) }
 
-    BackHandler(onBack = onBack)
 
     LaunchedEffect(activityId, reloadKey) {
         loading = true

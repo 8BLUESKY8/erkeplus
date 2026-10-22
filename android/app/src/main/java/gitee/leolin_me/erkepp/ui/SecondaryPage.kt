@@ -1,6 +1,10 @@
 package gitee.leolin_me.erkepp.ui
 
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,29 +19,56 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 
 /**
- * 二级页面的统一外壳：不透明的背景 + 入场位移淡入。
+ * 二级页面外壳：不透明背景 + 入场位移淡入 + 预测性返回退场。
  *
- * 之前这些页面直接铺在标签页上面，自身没有背景色，底下的列表会透上来；
- * 现在统一套这一层，既遮住底页，也顺便给出「从右边进来」的过渡。
+ * 返回手势由 [PredictiveBackHandler] 接管：系统给出手势进度（0..1），
+ * 这里直接把它映射成位移和透明度，所以手指拖到一半就能看到页面退到一半，
+ * 中途松手会弹回且不导航。三键导航或旧系统拿不到进度时，退化成一次收尾动画。
+ *
+ * 用法：页面自己不再注册 BackHandler，返回一律交给这一层。
  */
 @Composable
-fun SecondaryPage(content: @Composable () -> Unit) {
+fun SecondaryPage(onBack: () -> Unit, content: @Composable () -> Unit) {
     var appeared by remember { mutableStateOf(false) }
-    val progress by animateFloatAsState(
+    val appearProgress by animateFloatAsState(
         targetValue = if (appeared) 1f else 0f,
         animationSpec = tween(durationMillis = 180),
-        label = "secondaryPage",
+        label = "secondaryPageAppear",
     )
     LaunchedEffect(Unit) { appeared = true }
 
+    // 0f = 停在当前页；1f = 已完全退出
+    val backProgress = remember { Animatable(0f) }
+
+    PredictiveBackHandler(enabled = true) { events ->
+        try {
+            events.collect { event -> backProgress.snapTo(event.progress) }
+            // 手势已提交：补完退场动画，再真正导航
+            backProgress.animateTo(1f, tween(durationMillis = 120))
+            onBack()
+            backProgress.snapTo(0f)
+        } catch (cancelled: CancellationException) {
+            // 中途松手：弹回原位，不导航
+            backProgress.animateTo(
+                0f,
+                spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium),
+            )
+            throw cancelled
+        }
+    }
+
+    val progress = backProgress.value
     Box(
         modifier = Modifier
             .fillMaxSize()
             .graphicsLayer {
-                translationX = (1f - progress) * 48.dp.toPx()
-                alpha = progress
+                alpha = appearProgress * (1f - progress)
+                translationX = (1f - appearProgress) * 48.dp.toPx() + progress * 96.dp.toPx()
+                scaleX = 1f - progress * 0.04f
+                scaleY = 1f - progress * 0.04f
             },
     ) {
         Surface(

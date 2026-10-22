@@ -1,7 +1,6 @@
 package gitee.leolin_me.erkepp.ui.attachments
 
 import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -54,7 +53,6 @@ fun ImagePreviewScreen(
     onBack: () -> Unit,
     onShare: (AttachmentStorage.LocalFile) -> Unit,
 ) {
-    BackHandler(onBack = onBack)
     if (names.isEmpty()) {
         onBack()
         return
