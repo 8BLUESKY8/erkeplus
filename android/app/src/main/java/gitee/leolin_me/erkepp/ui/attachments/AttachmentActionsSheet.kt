@@ -31,6 +31,7 @@ fun AttachmentActionsSheet(
     downloaded: Boolean,
     isImage: Boolean,
     onDownload: () -> Unit,
+    onDownloadAndPreview: () -> Unit,
     onPreview: () -> Unit,
     onOpenWithOther: () -> Unit,
     onShare: () -> Unit,
@@ -64,6 +65,17 @@ fun AttachmentActionsSheet(
                     },
                     onClick = onDownload,
                 )
+                ActionRow(
+                    text = "下载并预览",
+                    onClick = onDownloadAndPreview,
+                    highlight = true,
+                )
+                Text(
+                    text = "下载后可以预览、分享和用其他应用打开",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                )
             } else {
                 if (isImage) {
                     ActionRow("预览", onPreview)
@@ -77,7 +89,12 @@ fun AttachmentActionsSheet(
 }
 
 @Composable
-private fun ActionRow(text: String, onClick: () -> Unit, danger: Boolean = false) {
+private fun ActionRow(
+    text: String,
+    onClick: () -> Unit,
+    danger: Boolean = false,
+    highlight: Boolean = false,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -87,7 +104,11 @@ private fun ActionRow(text: String, onClick: () -> Unit, danger: Boolean = false
         Text(
             text = text,
             style = MaterialTheme.typography.bodyLarge,
-            color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            color = when {
+                danger -> MaterialTheme.colorScheme.error
+                highlight -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurface
+            },
         )
     }
 }

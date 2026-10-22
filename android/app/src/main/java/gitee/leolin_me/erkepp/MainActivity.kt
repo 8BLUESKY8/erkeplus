@@ -168,6 +168,8 @@ class MainActivity : ComponentActivity() {
                 var pendingDownload by remember { mutableStateOf<ActivityAttachment?>(null) }
                 var attachmentSheet by remember { mutableStateOf<ActivityAttachment?>(null) }
                 var homeworkEditId by remember { mutableStateOf<Long?>(null) }
+                var attachmentsInTrash by remember { mutableStateOf(false) }
+                var pendingPreviewName by remember { mutableStateOf<String?>(null) }
                 val downloadTasks by Downloads.tasks.collectAsState()
                 val activity = this
 
@@ -210,6 +212,18 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(attachmentsVisible, downloadTasks.values.map { it.state }) {
                     if (attachmentsVisible) attachmentFiles = AttachmentStorage.list(activity)
+                }
+
+                // 「下载并预览」：这一项下载完成后自动打开预览
+                LaunchedEffect(downloadTasks) {
+                    val name = pendingPreviewName ?: return@LaunchedEffect
+                    val finished = downloadTasks.values.any {
+                        it.name == name && it.state == Downloads.State.DONE
+                    }
+                    if (!finished) return@LaunchedEffect
+                    pendingPreviewName = null
+                    attachmentFiles = AttachmentStorage.list(activity)
+                    attachmentFiles.firstOrNull { it.name == name }?.let { openAttachmentFile(it) }
                 }
 
                 LaunchedEffect(probe, session) {
@@ -504,7 +518,14 @@ class MainActivity : ComponentActivity() {
                             }
 
                             if (attachmentsVisible) {
-                                SecondaryPage(onBack = { attachmentsVisible = false }) {
+                                SecondaryPage(onBack = {
+                                    // 回收站里返回先回附件页，再返回才离开
+                                    if (attachmentsInTrash) {
+                                        attachmentsInTrash = false
+                                    } else {
+                                        attachmentsVisible = false
+                                    }
+                                }) {
                                     AttachmentsScreen(
                                         files = attachmentFiles,
                                         downloads = downloadTasks,
@@ -512,6 +533,8 @@ class MainActivity : ComponentActivity() {
                                         gridView = preferences.attachmentsGridView,
                                         deleteToTrash = preferences.deleteToTrash,
                                         trashSupported = AttachmentStorage.trashSupported(),
+                                        inTrash = attachmentsInTrash,
+                                        onInTrashChange = { attachmentsInTrash = it },
                                         onBack = { attachmentsVisible = false },
                                         onToggleView = {
                                             preferences.attachmentsGridView = !preferences.attachmentsGridView
@@ -604,6 +627,7 @@ class MainActivity : ComponentActivity() {
                                             activityActions.submitWork(current.token, editId, text, files)
                                             Toast.makeText(activity, "作业已提交", Toast.LENGTH_SHORT).show()
                                         },
+                                        onAttachment = { attachment -> attachmentSheet = attachment },
                                         onBack = { homeworkEditId = null },
                                     )
                                 }
@@ -618,6 +642,11 @@ class MainActivity : ComponentActivity() {
                                     downloaded = local != null,
                                     isImage = isImage,
                                     onDownload = {
+                                        downloadAttachment(attachment)
+                                        attachmentSheet = null
+                                    },
+                                    onDownloadAndPreview = {
+                                        pendingPreviewName = attachment.name
                                         downloadAttachment(attachment)
                                         attachmentSheet = null
                                     },

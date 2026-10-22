@@ -1,5 +1,6 @@
 package gitee.leolin_me.erkepp.ui.detail
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -54,6 +55,7 @@ fun HomeworkEditScreen(
     activityName: String,
     loader: suspend () -> ActivityWork?,
     onSubmit: suspend (String, List<ActivityAttachment>) -> Unit,
+    onAttachment: (ActivityAttachment) -> Unit,
     onBack: () -> Unit,
 ) {
     var loading by remember(activityId) { mutableStateOf(true) }
@@ -148,7 +150,8 @@ fun HomeworkEditScreen(
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
                                     .size(84.dp)
-                                    .clip(RoundedCornerShape(10.dp)),
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { onAttachment(attachment) },
                             )
                         } else {
                             Text(

@@ -61,6 +61,8 @@ fun AttachmentsScreen(
     gridView: Boolean,
     deleteToTrash: Boolean,
     trashSupported: Boolean,
+    inTrash: Boolean,
+    onInTrashChange: (Boolean) -> Unit,
     onBack: () -> Unit,
     onToggleView: () -> Unit,
     onDeleteToTrashChange: (Boolean) -> Unit,
@@ -76,7 +78,6 @@ fun AttachmentsScreen(
 ) {
     BackHandler(onBack = onBack)
 
-    var inTrash by remember { mutableStateOf(false) }
     var confirmTarget by remember { mutableStateOf<AttachmentStorage.LocalFile?>(null) }
     var toTrash by remember(deleteToTrash) { mutableStateOf(deleteToTrash) }
 
@@ -101,7 +102,7 @@ fun AttachmentsScreen(
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = { if (inTrash) inTrash = false else onBack() }) { Text("返回") }
+            TextButton(onClick = { if (inTrash) onInTrashChange(false) else onBack() }) { Text("返回") }
             Text(
                 text = if (inTrash) "回收站" else "附件",
                 style = MaterialTheme.typography.titleMedium,
@@ -112,7 +113,7 @@ fun AttachmentsScreen(
                 TextButton(
                     onClick = {
                         onOpenTrash()
-                        inTrash = true
+                        onInTrashChange(true)
                     },
                 ) { Text("回收站") }
             }
@@ -226,6 +227,7 @@ fun AttachmentsScreen(
                         FileCard(
                             file = file,
                             onOpen = { openFile(file) },
+                            onShare = { onShare(file) },
                             onDelete = { confirmTarget = file },
                         )
                     }
@@ -428,6 +430,7 @@ private fun FileRow(
 private fun FileCard(
     file: AttachmentStorage.LocalFile,
     onOpen: () -> Unit,
+    onShare: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Column {
@@ -470,6 +473,7 @@ private fun FileCard(
                 maxLines = 1,
                 modifier = Modifier.weight(1f),
             )
+            TextButton(onClick = onShare) { Text("分享") }
             TextButton(onClick = onDelete) { Text("删除") }
         }
     }
