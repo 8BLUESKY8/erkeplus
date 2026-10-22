@@ -11,8 +11,8 @@
 | --- | --- | --- |
 | v0.1.0 | 原生登录 + 个人信息落地页，网页仅作兜底 | 已发布 |
 | v0.2.0 | 原生发现页（活动流、筛选、已报名、我的活动）、设置页、左右滑动切页 | 已发布 |
-| v0.3.0 | 应用内检查更新；活动详情仍走网页 | 开发中 |
-| v0.4.0 | 原生二课成绩 | 规划中 |
+| v0.3.0 ~ v0.7.2 | 原生详情、作业查看/提交、附件与回收站、扫码签到、首页扫一扫、原生报名与取消报名、打卡记录 | 已发布 |
+| v0.8.1 | 应用内更新（下载并安装）、活动分享二维码 | 已发布 |
 
 ## 结构
 
@@ -42,9 +42,18 @@ build.cmd release    :: 产出签名 release APK
 
 仓库：`git@gitee.com:LeoLin_ME/erkeplus.git`（公开）。
 
-发新版本的流程：改 `versionCode` / `versionName`、写 `CHANGELOG.md`、打 `vX.Y.Z` 标签并推送。
-应用内「设置 → 关于 → 检查更新」会读 Gitee 公共接口，先看 Release、没有就看 Tag，
-与当前版本号比较后给出提示，可一键跳转发布页。
+下载：<https://gitee.com/LeoLin_ME/erkeplus/releases>
+
+发新版本的流程：
+
+1. 改 `versionCode` / `versionName`，写 `CHANGELOG.md`；
+2. `build.cmd release` 产出签名 APK；
+3. 打 `vX.Y.Z` 标签并推送；
+4. 在 Gitee 建 Release（tag 与版本号一致），**把 APK 作为附件上传**——应用内更新靠这个附件。
+
+「设置 → 关于 → 检查更新」读 Gitee 公共接口：先看 Release（取其中第一个 `.apk` 附件），
+没有 Release 再看 Tag。发现新版本时直接「下载并安装」，下载到 `cache/update/` 后交给系统安装器；
+没给「安装未知应用」权限会先把用户送去系统开关。
 
 ## 声明
 
