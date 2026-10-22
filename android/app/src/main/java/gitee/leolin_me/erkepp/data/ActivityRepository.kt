@@ -49,7 +49,6 @@ data class ActivityQuery(
     val status: String = "5",
     val classifyId: Int = 0,
     val sortType: Int = 1,
-    val search: String = "",
     /** 官方要求传“当天 0 点”的毫秒时间戳。 */
     val activityTime: Long = startOfToday(),
 ) {
@@ -225,7 +224,9 @@ private fun kotlinx.serialization.json.JsonObject.stringOrNull(key: String): Str
 
 /** 活动列表参数：与官方活动页一致，共 11 个，缺项会返回 10002。 */
 internal fun buildActivityParams(query: ActivityQuery): JsonObject = buildJsonObject {
-    put("search", JsonPrimitive(query.search))
+    // 固定空串：服务端的 search 只影响 total，不影响 list（搜「挑战杯」得 total=5 但列表照旧
+    // 是无关活动），带上去只会让分页提前截断。搜索改由 [ActivitySearch] 在本地做。
+    put("search", JsonPrimitive(""))
     put("pageNum", JsonPrimitive(query.page))
     put("pageSize", JsonPrimitive(query.pageSize))
     put("sortType", JsonPrimitive(query.sortType))

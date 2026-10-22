@@ -144,6 +144,10 @@ class MainActivity : ComponentActivity() {
                 }
                 // 调试用：`am start ... --es probe homework_list` 可安全验证只读接口
                 val probe = remember { intent.getStringExtra("probe") }
+                // 调试用：`am start ... --es search 挑战杯` 预填发现页搜索词，免去手打
+                val debugSearch = remember {
+                    if (BuildConfig.DEBUG) intent.getStringExtra("search").orEmpty() else ""
+                }
                 var school by remember { mutableStateOf(schoolStore.load()) }
                 var webUrl by remember { mutableStateOf<String?>(null) }
                 var tab by rememberSaveable { mutableStateOf(MainTab.DISCOVER) }
@@ -426,6 +430,7 @@ class MainActivity : ComponentActivity() {
                                             preferences = preferences,
                                             refreshTick = discoverRefreshTick,
                                             reenterTick = discoverReenterTick,
+                                            initialSearch = debugSearch,
                                             onOpenActivity = { id -> detailActivityId = id },
                                             onOpenBlockRules = {
                                                 settingsSection = SettingsSection.BLOCK_RULES

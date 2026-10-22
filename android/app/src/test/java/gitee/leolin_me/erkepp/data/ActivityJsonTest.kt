@@ -19,7 +19,6 @@ class ActivityJsonTest {
                 status = "5",
                 classifyId = 1440,
                 sortType = 2,
-                search = "毕业",
                 activityTime = 1792512000000,
             ),
         )
@@ -27,7 +26,8 @@ class ActivityJsonTest {
         assertEquals("5", params["status"]!!.jsonPrimitive.content)
         assertEquals(1440, params["classifyId"]!!.jsonPrimitive.int)
         assertEquals(2, params["pageNum"]!!.jsonPrimitive.int)
-        assertEquals("毕业", params["search"]!!.jsonPrimitive.content)
+        // 服务端的 search 只作用于 total，不作用于 list，所以永远传空串
+        assertEquals("", params["search"]!!.jsonPrimitive.content)
         assertEquals(1792512000000, params["activityTime"]!!.jsonPrimitive.content.toLong())
         assertEquals("activity_iseErollment", params["fieldType"]!!.jsonPrimitive.content)
         assertEquals("switch", params["keyWord"]!!.jsonPrimitive.content)

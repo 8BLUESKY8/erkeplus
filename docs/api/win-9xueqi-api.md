@@ -56,6 +56,9 @@
 - `activityTime` 是**当天 0 点的毫秒时间戳**，不是字符串日期。
 - `fieldType` 的值按其服务端拼写 `activity_iseErollment`（原文即含两个 e），不可“纠正”。
 - `status` 为逗号分隔的字符串，不是数组。
+- **`search` 只作用于 `total`，不作用于 `list`**（2026-10-22 实测）：传 `search=挑战杯` 时
+  `total=5` 但 `list` 仍是未过滤的第 1 页（「21天单词打卡」之类）。因此客户端不该依赖它做搜索，
+  始终传空串；搜索改成本地匹配（官方 H5 的 `getSearc` 也是 `name.indexOf` 前端过滤）。
 
 ## `/page/activity/list` 返回字段（列表项）
 

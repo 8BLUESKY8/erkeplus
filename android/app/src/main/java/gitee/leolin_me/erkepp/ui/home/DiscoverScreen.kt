@@ -65,6 +65,7 @@ import gitee.leolin_me.erkepp.R
 import gitee.leolin_me.erkepp.data.ActivityItem
 import gitee.leolin_me.erkepp.data.ActivityQuery
 import gitee.leolin_me.erkepp.data.ActivityRepository
+import gitee.leolin_me.erkepp.data.ActivitySearch
 import gitee.leolin_me.erkepp.data.AppPreferences
 import gitee.leolin_me.erkepp.data.BlockRules
 import gitee.leolin_me.erkepp.data.ReenterBehavior
@@ -85,6 +86,12 @@ private val StatusOptions = listOf(
     "4,5,6,7" to "全部",
 )
 
+/** 列表每页条数（官方 H5 传 10，这里传 20 少翻一倍页数）。 */
+private const val PAGE_SIZE = 20
+
+/** 搜索时最多往后扫多少页，防止服务端 total 异常时无限翻页。 */
+private const val MAX_SCAN_PAGES = 40
+
 /**
  * 发现页（概念版）：双列封面卡片流。
  *
@@ -97,6 +104,8 @@ fun DiscoverScreen(
     preferences: AppPreferences,
     refreshTick: Int = 0,
     reenterTick: Int = 0,
+    /** 调试用：启动时预填的搜索词（`am start --es search 挑战杯`）。 */
+    initialSearch: String = "",
     onOpenActivity: (Long) -> Unit,
     onOpenBlockRules: () -> Unit = {},
 ) {
@@ -119,8 +128,8 @@ fun DiscoverScreen(
     val context = LocalContext.current
     val prefetchedCovers = remember { mutableSetOf<String>() }
 
-    var search by rememberSaveable { mutableStateOf("") }
-    var debouncedSearch by remember { mutableStateOf("") }
+    var search by rememberSaveable { mutableStateOf(initialSearch) }
+    var debouncedSearch by remember { mutableStateOf(initialSearch.trim()) }
     var statusFilter by rememberSaveable { mutableStateOf(preferences.filterStatus) }
     var classifyId by rememberSaveable { mutableIntStateOf(preferences.filterClassify) }
     var sortType by rememberSaveable { mutableIntStateOf(preferences.filterSort) }
@@ -143,6 +152,8 @@ fun DiscoverScreen(
     var page by remember { mutableIntStateOf(1) }
     var loading by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
+    // 搜索需要全量数据：官方接口的 search 不作用于 list，只能本地匹配，所以要逐页拉完
+    var scanning by remember { mutableStateOf(false) }
     var endReached by remember { mutableStateOf(false) }
     var autoFillCount by remember { mutableIntStateOf(0) }
     var noProgressCount by remember { mutableIntStateOf(0) }
@@ -158,10 +169,10 @@ fun DiscoverScreen(
 
     fun query(targetPage: Int) = ActivityQuery(
         page = targetPage,
+        pageSize = PAGE_SIZE,
         status = statusFilter,
         classifyId = classifyId,
         sortType = sortType,
-        search = debouncedSearch,
     )
 
     suspend fun fetch(targetPage: Int) = if (enrolledOnly) {
@@ -175,9 +186,10 @@ fun DiscoverScreen(
         generation = gen
         endReached = false
         autoFillCount = 0
+        noProgressCount = 0
         AppLog.d(
             "discover",
-            "reload status=$statusFilter sort=$sortType classify=$classifyId enrolled=$enrolledOnly search=$debouncedSearch hours=$hoursMin..$hoursMax",
+            "reload status=$statusFilter sort=$sortType classify=$classifyId enrolled=$enrolledOnly hours=$hoursMin..$hoursMax",
         )
         scope.launch {
             loading = true
@@ -191,13 +203,15 @@ fun DiscoverScreen(
                     AppLog.d("discover", "reload ok total=${it.total} got=${it.items.size}")
                     if (gen == generation) {
                         items = it.items
-                        // 服务端在搜索场景会给出比列表还小的 total，取两者较大值更接近事实
-                        total = maxOf(it.total, it.items.size)
+                        total = it.total
                         page = 1
+                        // 不满一页就说明到底了，比信任 total 更稳
+                        if (it.items.size < PAGE_SIZE) endReached = true
                         gridState.requestScrollToItem(0)
                     }
                 }
                 .onFailure {
+                    if (it is kotlinx.coroutines.CancellationException) throw it
                     AppLog.d("discover", "reload fail ${it.javaClass.simpleName} ${it.message}")
                     if (gen == generation) error = it.toUserMessage()
                 }
@@ -205,36 +219,78 @@ fun DiscoverScreen(
         }
     }
 
-    fun loadMore() {
-        if (loadingMore || loading || endReached || !hasMore) return
+    /**
+     * 拉下一页并追加，返回这次是否拿到了新数据。
+     *
+     * [loadingMore] 兼作互斥锁：滚动加载和搜索时的连续扫描都走这里，
+     * 保证同一时刻只有一个列表请求在飞。
+     */
+    suspend fun fetchNext(): Boolean {
+        if (loading || loadingMore || endReached || !hasMore) return false
         val gen = generation
-        scope.launch {
-            loadingMore = true
+        loadingMore = true
+        var added = 0
+        try {
             AppLog.d("discover", "more request page=${page + 1} loaded=${items.size} total=$total")
-            runCatching { fetch(page + 1) }
-                .onSuccess {
-                    AppLog.d(
-                        "discover",
-                        "more ok page=${it.pageNum} got=${it.items.size} added=${(items + it.items).distinctBy { i -> i.id }.size - items.size}",
-                    )
-                    if (gen == generation) {
-                        val before = items.size
-                        items = (items + it.items).distinctBy { item -> item.id }
-                        page = it.pageNum
-                        total = it.total
-                        val added = items.size - before
-                        if (added == 0 && it.items.isNotEmpty()) noProgressCount++ else noProgressCount = 0
-                        if (it.items.isEmpty() || (total > 0 && items.size >= total) || noProgressCount >= 2) {
-                            endReached = true
-                            AppLog.d("discover", "endReached loaded=${items.size} total=$total")
-                        }
-                    }
-                }
-                .onFailure {
-                    AppLog.d("discover", "more fail ${it.javaClass.simpleName} ${it.message}")
-                    if (gen == generation) error = it.toUserMessage()
-                }
-            if (gen == generation) loadingMore = false
+            val next = fetch(page + 1)
+            if (gen != generation) return false
+            val before = items.size
+            items = (items + next.items).distinctBy { item -> item.id }
+            page = next.pageNum
+            total = next.total
+            added = items.size - before
+            if (added == 0 && next.items.isNotEmpty()) noProgressCount++ else noProgressCount = 0
+            AppLog.d("discover", "more ok page=${next.pageNum} got=${next.items.size} added=$added")
+            if (next.items.isEmpty() ||
+                next.items.size < PAGE_SIZE ||
+                (total > 0 && items.size >= total) ||
+                noProgressCount >= 2
+            ) {
+                endReached = true
+                AppLog.d("discover", "endReached loaded=${items.size} total=$total")
+            }
+        } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
+            AppLog.d("discover", "more fail ${t.javaClass.simpleName} ${t.message}")
+            if (gen == generation) error = t.toUserMessage()
+            return false
+        } finally {
+            loadingMore = false
+        }
+        return added > 0
+    }
+
+    fun loadMore() {
+        if (loadingMore) return
+        scope.launch { fetchNext() }
+    }
+
+    /**
+     * 搜索用：把列表拉到最后一页，之后所有匹配都在本地做。
+     *
+     * 一次搜索最多扫 [MAX_SCAN_PAGES] 页（当前全校活动约 8 页），
+     * 扫完之后同一个筛选下的搜索都是瞬时的。
+     */
+    suspend fun scanAll() {
+        if (scanning || endReached || !hasMore) return
+        val gen = generation
+        scanning = true
+        try {
+            var pages = 0
+            while (gen == generation && !endReached && hasMore && pages < MAX_SCAN_PAGES) {
+                pages++
+                if (!fetchNext()) break
+            }
+            if (gen == generation) {
+                val terms = ActivitySearch.terms(debouncedSearch)
+                val hits = ActivitySearch.filter(items, terms).map { it.name }
+                AppLog.d(
+                    "discover",
+                    "scan done scanned=${items.size}/$total pages=$pages matched=${hits.size} $hits",
+                )
+            }
+        } finally {
+            if (gen == generation) scanning = false
         }
     }
 
@@ -269,8 +325,15 @@ fun DiscoverScreen(
         debouncedSearch = search
     }
 
-    LaunchedEffect(statusFilter, classifyId, sortType, debouncedSearch, enrolledOnly) {
+    // 筛选变化才重新拉列表；搜索词不参与请求，只作用于本地过滤
+    LaunchedEffect(statusFilter, classifyId, sortType, enrolledOnly) {
         reload()
+    }
+
+    // 搜索词一变就本地过滤；数据没拉全时先在后台把列表扫完
+    LaunchedEffect(debouncedSearch, generation, loading) {
+        if (debouncedSearch.isBlank() || loading) return@LaunchedEffect
+        scanAll()
     }
 
     val blockRules = remember(blockedKeywords, blockedRegexes) {
@@ -279,15 +342,18 @@ fun DiscoverScreen(
     val blockedByRules = remember(items, blockRules) {
         if (blockRules.isEmpty) 0 else items.count { blockRules.isBlocked(it.name) }
     }
-    val visibleItems by remember(blockRules) {
+    val searchTerms = remember(debouncedSearch) { ActivitySearch.terms(debouncedSearch) }
+    // 用 derivedStateOf 而不是普通局部变量：下面的滚动监听在 snapshotFlow 里读这个数量，
+    // 普通值只在启动时被捕获一次，会一直用旧数字
+    val matchedItems by remember(searchTerms) {
+        derivedStateOf { ActivitySearch.filter(items, searchTerms) }
+    }
+    val visibleItems by remember(searchTerms, blockRules) {
         derivedStateOf {
-            // 搜索由服务端完成；客户端再按标题过滤一次会把服务端匹配到的
-            // 非标题命中（例如按组织名匹配）全部滤掉，出现「显示 0」
-            items.asSequence()
+            matchedItems
                 .filter { hoursMin == null || it.hours >= hoursMin!! }
                 .filter { hoursMax == null || it.hours <= hoursMax!! }
                 .filterNot { blockRules.isBlocked(it.name) }
-                .toList()
         }
     }
 
@@ -323,19 +389,13 @@ fun DiscoverScreen(
     // 显示不足一屏时持续补页，直到没有更多或显示够 12 条；最多 20 次兜底
     LaunchedEffect(gridState.canScrollForward, items.size, visibleItems.size) {
         val laidOut = gridState.layoutInfo.totalItemsCount > 0
+        // 搜索时由 scanAll 负责拉全，这里不插手，避免两边抢同一个请求锁
+        if (searchTerms.isNotEmpty()) return@LaunchedEffect
         if (!loading && !loadingMore && !endReached && laidOut &&
             hasMore && visibleItems.size < 12 && autoFillCount < 20
         ) {
             autoFillCount++
             AppLog.d("discover", "auto-fill #$autoFillCount loaded=${items.size} visible=${visibleItems.size} total=$total")
-            loadMore()
-        }
-    }
-
-    // 搜索时如果当前页没有命中，自动往后翻页，避免"搜不到"的错觉
-    LaunchedEffect(debouncedSearch, items.size) {
-        val keyword = debouncedSearch.trim()
-        if (keyword.isNotEmpty() && visibleItems.isEmpty() && hasMore && !loading && !loadingMore) {
             loadMore()
         }
     }
@@ -391,7 +451,7 @@ fun DiscoverScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "已加载 ${items.size} / 共 $total · 屏蔽 $blockedByRules · 显示 ${visibleItems.size}",
+                    text = "已加载 ${items.size} / 共 $total · 命中 ${matchedItems.size} · 屏蔽 $blockedByRules · 显示 ${visibleItems.size}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
@@ -428,7 +488,8 @@ fun DiscoverScreen(
             }
         }
 
-        if (blockedByRules > 0) {
+        // 搜索时屏蔽数字是整列表的统计，放在这里只会混淆（命中才是用户关心的）
+        if (blockedByRules > 0 && searchTerms.isEmpty()) {
             Text(
                 text = "屏蔽规则隐藏了 $blockedByRules 条，点此去设置",
                 style = MaterialTheme.typography.bodySmall,
@@ -438,6 +499,33 @@ fun DiscoverScreen(
                     .clickable { onOpenBlockRules() }
                     .padding(horizontal = 16.dp, vertical = 2.dp),
             )
+        }
+
+        // 搜索是本地匹配全量列表：先说清在扫，扫完给出命中数，省得以为"只有这几条"
+        if (searchTerms.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (scanning) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(12.dp),
+                        strokeWidth = 1.5.dp,
+                    )
+                }
+                Text(
+                    text = if (scanning) {
+                        "正在搜索全部活动… ${items.size}/${total.coerceAtLeast(items.size)}"
+                    } else {
+                        "在 ${items.size} 条活动里匹配到 ${matchedItems.size} 条"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         when {
@@ -461,8 +549,24 @@ fun DiscoverScreen(
                 Text("没有符合条件的活动", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
+            scanning && visibleItems.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator()
+                    Spacer(Modifier.height(12.dp))
+                    Text("正在搜索…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            visibleItems.isEmpty() && searchTerms.isNotEmpty() ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "没有找到与「${debouncedSearch.trim()}」相关的活动",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
             visibleItems.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("没有匹配的活动（可能被搜索词或屏蔽规则过滤）", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("没有匹配的活动（被屏蔽规则过滤了）", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             else -> LazyVerticalGrid(
@@ -484,7 +588,8 @@ fun DiscoverScreen(
                         customText = customText,
                         showCover = showCover,
                         coverWidthDp = coverWidthDp,
-                        titleLines = titleLines,
+                        // 搜索命中通常只有几条，标题多给一行，别让不同的活动看起来一模一样
+                        titleLines = if (searchTerms.isEmpty()) titleLines else maxOf(titleLines, 2),
                         onClick = { onOpenActivity(item.id) },
                     )
                 }
