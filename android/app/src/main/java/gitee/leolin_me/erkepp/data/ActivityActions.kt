@@ -48,6 +48,38 @@ class ActivityActions(private val api: ApiClient) {
             )
         }
 
+    /**
+     * 签到方式字典：官方 `/dict/school/system-para/list {fieldType:"activity", keyWord:"sign_way"}`。
+     *
+     * 活动详情里的 `signWay` 是这组字典的 id（逗号分隔），名字对应「动态二维码 / 静态二维码 /
+     * 动态+静态二维码 / GPS任意位置 / GPS固定位置」。不解这层就不知道某个活动到底怎么签到。
+     */
+    suspend fun signWays(token: String): JsonElement? =
+        call("GET", "dict/school/system-para/list", token, "sign_way") {
+            api.get(
+                path = "dict/school/system-para/list",
+                params = buildJsonObject {
+                    put("fieldType", JsonPrimitive("activity"))
+                    put("keyWord", JsonPrimitive("sign_way"))
+                },
+                token = token,
+            )
+        }
+
+    /** 我的签到签退记录：官方 `activity/my-sign-in-out-list {pageNum,pageSize,name}`。 */
+    suspend fun mySignRecords(token: String, page: Int = 1, pageSize: Int = 20): JsonElement? =
+        call("GET", "activity/my-sign-in-out-list", token, "page=$page size=$pageSize") {
+            api.get(
+                path = "activity/my-sign-in-out-list",
+                params = buildJsonObject {
+                    put("pageNum", JsonPrimitive(page))
+                    put("pageSize", JsonPrimitive(pageSize))
+                    put("name", JsonPrimitive(""))
+                },
+                token = token,
+            )
+        }
+
     /** 查看作业：官方 `#/assignmentinfor/:id` 页面用的就是这个接口。 */
     suspend fun workDetail(token: String, activityId: Long): JsonElement? =
         call("GET", "activity/query/work_3_0_1", token, "activityId=$activityId") {

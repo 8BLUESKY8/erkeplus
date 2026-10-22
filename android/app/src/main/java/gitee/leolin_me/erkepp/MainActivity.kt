@@ -237,6 +237,8 @@ class MainActivity : ComponentActivity() {
                     AppLog.d("probe", "start=$probe detail=$detailId")
                     when (probe) {
                         "homework_list" -> activityActions.homeworkList(current.token)
+                        "sign_dict" -> activityActions.signWays(current.token)
+                        "sign_records" -> activityActions.mySignRecords(current.token)
                         "sign_count" -> if (detailId > 0) activityActions.signCount(current.token, detailId)
                         "work_detail" -> if (detailId > 0) activityActions.workDetail(current.token, detailId)
                         "download" -> {
