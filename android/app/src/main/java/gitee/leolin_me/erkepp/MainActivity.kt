@@ -162,6 +162,7 @@ class MainActivity : ComponentActivity() {
                 }
                 var attachmentsVisible by remember { mutableStateOf(intent.getBooleanExtra("attachments", false)) }
                 var attachmentFiles by remember { mutableStateOf<List<AttachmentStorage.LocalFile>>(emptyList()) }
+                var trashFiles by remember { mutableStateOf<List<AttachmentStorage.LocalFile>>(emptyList()) }
                 var previewNames by remember { mutableStateOf<List<String>>(emptyList()) }
                 var previewIndex by remember { mutableIntStateOf(0) }
                 var pendingDownload by remember { mutableStateOf<ActivityAttachment?>(null) }
@@ -229,6 +230,28 @@ class MainActivity : ComponentActivity() {
                         }
                         "attachments" -> {
                             attachmentFiles = AttachmentStorage.list(activity)
+                            attachmentsVisible = true
+                        }
+                        "attachments_grid" -> {
+                            preferences.attachmentsGridView = true
+                            attachmentFiles = AttachmentStorage.list(activity)
+                            attachmentsVisible = true
+                        }
+                        "restore_test" -> {
+                            AttachmentStorage.listTrash(activity).forEach { AttachmentStorage.restore(activity, it) }
+                            attachmentFiles = AttachmentStorage.list(activity)
+                            trashFiles = AttachmentStorage.listTrash(activity)
+                            AppLog.d("storage", "restore_test files=${attachmentFiles.size} trash=${trashFiles.size}")
+                        }                        "trash_test" -> {
+                            val name = intent.getStringExtra("name").orEmpty()
+                            val file = AttachmentStorage.find(activity, name)
+                            val moved = file?.let { AttachmentStorage.trash(activity, it) }
+                            attachmentFiles = AttachmentStorage.list(activity)
+                            trashFiles = AttachmentStorage.listTrash(activity)
+                            AppLog.d(
+                                "storage",
+                                "trash_test name=$name moved=$moved files=${attachmentFiles.size} trash=${trashFiles.size}",
+                            )
                             attachmentsVisible = true
                         }
                         "my_activities" -> showMyActivities = true
@@ -485,17 +508,36 @@ class MainActivity : ComponentActivity() {
                                     AttachmentsScreen(
                                         files = attachmentFiles,
                                         downloads = downloadTasks,
+                                        trashFiles = trashFiles,
+                                        gridView = preferences.attachmentsGridView,
+                                        deleteToTrash = preferences.deleteToTrash,
+                                        trashSupported = AttachmentStorage.trashSupported(),
                                         onBack = { attachmentsVisible = false },
+                                        onToggleView = {
+                                            preferences.attachmentsGridView = !preferences.attachmentsGridView
+                                        },
+                                        onDeleteToTrashChange = { preferences.deleteToTrash = it },
                                         onPreviewImage = { names, index ->
                                             previewNames = names
                                             previewIndex = index
                                         },
                                         onOpenFile = { file -> openAttachmentFile(file) },
                                         onShare = { file -> shareFile(file) },
-                                        onDelete = { file ->
-                                            AttachmentStorage.delete(activity, file)
+                                        onTrash = { file ->
+                                            AttachmentStorage.trash(activity, file)
                                             attachmentFiles = AttachmentStorage.list(activity)
                                         },
+                                        onDeleteForever = { file ->
+                                            AttachmentStorage.delete(activity, file)
+                                            attachmentFiles = AttachmentStorage.list(activity)
+                                            trashFiles = AttachmentStorage.listTrash(activity)
+                                        },
+                                        onRestore = { file ->
+                                            AttachmentStorage.restore(activity, file)
+                                            trashFiles = AttachmentStorage.listTrash(activity)
+                                            attachmentFiles = AttachmentStorage.list(activity)
+                                        },
+                                        onOpenTrash = { trashFiles = AttachmentStorage.listTrash(activity) },
                                         onCancelDownload = { url -> Downloads.cancel(url) },
                                         onRetryDownload = { task ->
                                             Downloads.retry(activity, task.url, task.name, task.expectedSize)
@@ -580,12 +622,10 @@ class MainActivity : ComponentActivity() {
                                         attachmentSheet = null
                                     },
                                     onPreview = {
+                                        // 从详情/作业进来只预览这一张，不再拿全局已下载图片凑成 1/5
                                         attachmentFiles = AttachmentStorage.list(activity)
-                                        val images = attachmentFiles
-                                            .filter { it.mime.startsWith("image/") }
-                                            .map { it.name }
-                                        previewNames = images
-                                        previewIndex = images.indexOf(attachment.name).coerceAtLeast(0)
+                                        previewNames = listOf(attachment.name)
+                                        previewIndex = 0
                                         attachmentSheet = null
                                     },
                                     onOpenWithOther = {

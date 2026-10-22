@@ -73,6 +73,12 @@ class AppPreferences(context: Context) {
     /** 卡片是否显示时间参考（报名截止 / 活动开始 / 活动结束）。 */
     var cardShowTime: Boolean by prefBoolean(KEY_CARD_TIME, true)
 
+    /** 附件列表是否用双列卡片，false 为分条列表。 */
+    var attachmentsGridView: Boolean by prefBoolean(KEY_ATTACH_GRID, false)
+
+    /** 删除附件时默认放进回收站（记住用户上次的勾选）。 */
+    var deleteToTrash: Boolean by prefBoolean(KEY_DELETE_TO_TRASH, true)
+
     /** 开发者模式：显示加载计数等调试信息。 */
     var developerMode: Boolean by prefBoolean(KEY_DEVELOPER, false)
 
@@ -91,6 +97,8 @@ class AppPreferences(context: Context) {
         cardShowOrganization = true
         cardCustomText = ""
         cardShowTime = true
+        attachmentsGridView = false
+        deleteToTrash = true
         filterStatus = "5"
         filterSort = 1
         filterClassify = 0
@@ -175,6 +183,8 @@ class AppPreferences(context: Context) {
         const val KEY_CARD_COUNT = "card_show_count"
         const val KEY_CARD_ORG = "card_show_org"
         const val KEY_CARD_TIME = "card_show_time"
+        const val KEY_ATTACH_GRID = "attachments_grid"
+        const val KEY_DELETE_TO_TRASH = "delete_to_trash"
         const val KEY_CARD_TEXT = "card_custom_text"
         const val KEY_DEVELOPER = "developer_mode"
 

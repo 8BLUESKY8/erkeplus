@@ -95,13 +95,16 @@ fun ImagePreviewScreen(
                 )
             }
             Spacer(Modifier.weight(1f))
-            Surface(color = Color(0x66000000), shape = CircleShape) {
-                Text(
-                    text = "${pagerState.currentPage + 1}/${names.size}",
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                )
+            // 只有一张图时不显示页码，避免 1/1 这种没有信息量的提示
+            if (names.size > 1) {
+                Surface(color = Color(0x66000000), shape = CircleShape) {
+                    Text(
+                        text = "${pagerState.currentPage + 1}/${names.size}",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
             }
         }
 
