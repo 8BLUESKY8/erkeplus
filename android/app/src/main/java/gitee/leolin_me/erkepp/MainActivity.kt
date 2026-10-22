@@ -234,6 +234,11 @@ class MainActivity : ComponentActivity() {
                             attachmentsVisible = true
                         }
                         "my_activities" -> showMyActivities = true
+                        "stack_detail" -> {
+                            // 复现「我的活动里点进详情」的层级：两层同时打开
+                            showMyActivities = true
+                            if (detailId > 0) detailActivityId = detailId
+                        }
                         "block_rules" -> settingsSection = SettingsSection.BLOCK_RULES
                         "preview_image" -> {
                             attachmentFiles = AttachmentStorage.list(activity)
@@ -442,39 +447,8 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
-                            // 详情做成覆盖层：分页容器留在组合里，返回时列表不重载、位置不丢
-                            val detailId = detailActivityId
-                            if (detailId != null) {
-                                SecondaryPage(onBack = { detailActivityId = null }) {
-                                    ActivityDetailScreen(
-                                        token = current.token,
-                                        repository = activityRepository,
-                                        activityId = detailId,
-                                        onBack = { detailActivityId = null },
-                                        onOpenWeb = { id ->
-                                            detailActivityId = null
-                                            webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
-                                        },
-                                        onOpenUrl = { url ->
-                                            runCatching {
-                                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                                            }
-                                        },
-                                        onOpenHomework = { id, viewing ->
-                                            if (viewing) {
-                                                // 查看作业用原生页：接口 `activity/query/work_3_0_1` 已实测
-                                                homeworkActivityId = id
-                                            } else {
-                                                detailActivityId = null
-                                                webUrl = "https://${AppConfig.ALLOWED_HOST}/#/assignment/$id"
-                                            }
-                                        },
-                                        onOpenAttachment = { attachment -> handleAttachmentTap(attachment) },
-                                    )
-                                }
-                            }
-
-                            // 我的活动、附件、屏蔽规则都做成全屏覆盖层，不留底部标签栏
+                            // 覆盖层按「谁压谁」的顺序写：先出现的在下，后出现的在上
+                            // 我的活动、屏蔽规则、附件 → 详情 → 作业 → 图片预览
                             if (showMyActivities) {
                                 SecondaryPage(onBack = { showMyActivities = false }) {
                                     MyActivitiesScreen(
@@ -519,6 +493,59 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
+                            // 详情压在附件/我的活动之上，从「我的活动」点进来才不会被遮住
+                            val detailId = detailActivityId
+                            if (detailId != null) {
+                                SecondaryPage(onBack = { detailActivityId = null }) {
+                                    ActivityDetailScreen(
+                                        token = current.token,
+                                        repository = activityRepository,
+                                        activityId = detailId,
+                                        onBack = { detailActivityId = null },
+                                        onOpenWeb = { id ->
+                                            detailActivityId = null
+                                            webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
+                                        },
+                                        onOpenUrl = { url ->
+                                            runCatching {
+                                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                            }
+                                        },
+                                        onOpenHomework = { id, viewing ->
+                                            if (viewing) {
+                                                // 查看作业用原生页：接口 `activity/query/work_3_0_1` 已实测
+                                                homeworkActivityId = id
+                                            } else {
+                                                detailActivityId = null
+                                                webUrl = "https://${AppConfig.ALLOWED_HOST}/#/assignment/$id"
+                                            }
+                                        },
+                                        onOpenAttachment = { attachment -> handleAttachmentTap(attachment) },
+                                    )
+                                }
+                            }
+
+                            // 查看作业压在详情之上
+                            val homeworkId = homeworkActivityId
+                            if (homeworkId != null) {
+                                SecondaryPage(onBack = { homeworkActivityId = null }) {
+                                    HomeworkScreen(
+                                        activityId = homeworkId,
+                                        loader = { activityActions.work(current.token, homeworkId) },
+                                        onBack = { homeworkActivityId = null },
+                                        onEdit = {
+                                            homeworkActivityId = null
+                                            webUrl = "https://${AppConfig.ALLOWED_HOST}/#/assignment/$homeworkId"
+                                        },
+                                        onOpenUrl = { url ->
+                                            runCatching {
+                                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+
                             if (previewNames.isNotEmpty()) {
                                 SecondaryPage(onBack = { previewNames = emptyList() }) {
                                     ImagePreviewScreen(
@@ -555,32 +582,11 @@ class MainActivity : ComponentActivity() {
                                     },
                                 )
                             }
-
-                            // 查看作业覆盖层
-                            val homeworkId = homeworkActivityId
-                            if (homeworkId != null) {
-                                SecondaryPage(onBack = { homeworkActivityId = null }) {
-                                    HomeworkScreen(
-                                        activityId = homeworkId,
-                                        loader = { activityActions.work(current.token, homeworkId) },
-                                        onBack = { homeworkActivityId = null },
-                                        onEdit = {
-                                            homeworkActivityId = null
-                                            webUrl = "https://${AppConfig.ALLOWED_HOST}/#/assignment/$homeworkId"
-                                        },
-                                        onOpenUrl = { url ->
-                                            runCatching {
-                                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                                            }
-                                        },
-                                    )
-                                }
-                            }
-                            }
                         }
                     }
                 }
 
+                }
                 if (showDisclaimer) {
                     DisclaimerDialog(
                         onAccept = {
