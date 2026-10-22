@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +50,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -69,6 +71,7 @@ import gitee.leolin_me.erkepp.data.SignTicket
 import gitee.leolin_me.erkepp.data.parseSignCode
 import gitee.leolin_me.erkepp.ui.SecondaryPage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -609,36 +612,65 @@ private fun QrPreview(
     LaunchedEffect(active) { engine.setDecoding(active) }
     LaunchedEffect(torch) { engine.setTorch(torch) }
 
-    AndroidView(
-        modifier = modifier,
-        factory = { ctx ->
-            val textureView = TextureView(ctx)
-            textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                override fun onSurfaceTextureAvailable(
-                    surface: android.graphics.SurfaceTexture,
-                    width: Int,
-                    height: Int,
-                ) {
-                    val error = engine.attach(textureView)
-                    if (error != null) errorRef.value(error)
+    // 点一下对焦：画个短暂的对焦圈，告诉用户点到了哪里
+    var focusPoint by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
+    LaunchedEffect(focusPoint) {
+        if (focusPoint != null) {
+            delay(600)
+            focusPoint = null
+        }
+    }
+
+    Box(modifier = modifier) {
+        AndroidView(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures { offset ->
+                        focusPoint = offset
+                        engine.focusAt(offset.x, offset.y, size.width, size.height)
+                    }
+                },
+            factory = { ctx ->
+                val textureView = TextureView(ctx)
+                textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                    override fun onSurfaceTextureAvailable(
+                        surface: android.graphics.SurfaceTexture,
+                        width: Int,
+                        height: Int,
+                    ) {
+                        val error = engine.attach(textureView)
+                        if (error != null) errorRef.value(error)
+                    }
+
+                    override fun onSurfaceTextureSizeChanged(
+                        surface: android.graphics.SurfaceTexture,
+                        width: Int,
+                        height: Int,
+                    ) = Unit
+
+                    override fun onSurfaceTextureDestroyed(
+                        surface: android.graphics.SurfaceTexture,
+                    ): Boolean {
+                        engine.pause()
+                        return true
+                    }
+
+                    override fun onSurfaceTextureUpdated(surface: android.graphics.SurfaceTexture) = Unit
                 }
-
-                override fun onSurfaceTextureSizeChanged(
-                    surface: android.graphics.SurfaceTexture,
-                    width: Int,
-                    height: Int,
-                ) = Unit
-
-                override fun onSurfaceTextureDestroyed(
-                    surface: android.graphics.SurfaceTexture,
-                ): Boolean {
-                    engine.pause()
-                    return true
-                }
-
-                override fun onSurfaceTextureUpdated(surface: android.graphics.SurfaceTexture) = Unit
+                textureView
+            },
+        )
+        focusPoint?.let { point ->
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawCircle(
+                    color = Color(0xCCFFFFFF),
+                    radius = 34.dp.toPx(),
+                    center = point,
+                    style = Stroke(width = 2.dp.toPx()),
+                )
+                drawCircle(color = Color(0xCCFFFFFF), radius = 3.dp.toPx(), center = point)
             }
-            textureView
-        },
-    )
+        }
+    }
 }

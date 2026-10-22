@@ -49,6 +49,8 @@ class QrCamera(private val context: Context, private val onDecoded: (String) -> 
     @Volatile private var desired = true
     @Volatile private var lastAttempt = 0L
     private val firstFrameLogged = java.util.concurrent.atomic.AtomicBoolean(false)
+    private var continuousFocus = false
+    private val focusHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     /**
      * 只控制「要不要解码」，不动相机：扫码弹确认框时预览仍然亮着，
@@ -72,29 +74,113 @@ class QrCamera(private val context: Context, private val onDecoded: (String) -> 
         return try {
             val params = cam.parameters
             params.previewFormat = ImageFormat.NV21
-            val size = choosePreviewSize(params)
+            val viewWidth = texture.width.takeIf { it > 0 } ?: 1080
+            val viewHeight = texture.height.takeIf { it > 0 } ?: 1920
+            val size = choosePreviewSize(params, viewWidth, viewHeight)
             params.setPreviewSize(size.width, size.height)
-            val focusModes = params.supportedFocusModes.orEmpty()
-            if (focusModes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE)) {
-                params.focusMode = Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE
-            }
+            setUpFocus(cam, params)
             cam.parameters = params
             // 竖屏应用固定 90°；预览被转正后，表面上的内容宽高互换
             cam.setDisplayOrientation(90)
             cam.setPreviewTexture(texture.surfaceTexture)
             previewWidth = size.width
             previewHeight = size.height
-            applyCenterCrop(texture, size.width, size.height)
+            // 整幅画面都显示（留黑边），不再放大裁切：裁切会让视野变窄，看着像贴到屏幕上
+            applyFitCenter(texture, size.width, size.height)
             cam.startPreview()
             accepting = desired
             cam.setPreviewCallback { data, _ -> onFrame(data) }
             camera = cam
             if (torchOn) applyTorch(cam, true)
+            startPeriodicFocus(cam)
+            AppLog.d(
+                "sign",
+                "camera open size=${size.width}x${size.height} view=${viewWidth}x$viewHeight " +
+                    "continuousFocus=$continuousFocus",
+            )
             null
         } catch (t: Throwable) {
             runCatching { cam.release() }
             "相机启动失败：${t.javaClass.simpleName}"
         }
+    }
+
+    /**
+     * 对焦：优先连续对焦；不支持时退回「自动对焦 + 定时触发」，
+     * 否则拍屏幕这种近距离场景会一直虚着。
+     */
+    private fun setUpFocus(cam: Camera, params: Camera.Parameters) {
+        val modes = params.supportedFocusModes.orEmpty()
+        continuousFocus = when {
+            modes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE) -> {
+                params.focusMode = Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE
+                true
+            }
+            modes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO) -> {
+                params.focusMode = Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO
+                true
+            }
+            modes.contains(Camera.Parameters.FOCUS_MODE_AUTO) -> {
+                params.focusMode = Camera.Parameters.FOCUS_MODE_AUTO
+                false
+            }
+            else -> false
+        }
+        // 拍屏幕常是近距离，MACRO 可用时优先给对焦区域留出微距能力
+        if (!continuousFocus && modes.contains(Camera.Parameters.FOCUS_MODE_MACRO)) {
+            runCatching { params.focusMode = Camera.Parameters.FOCUS_MODE_MACRO }
+        }
+    }
+
+    /** 非连续对焦模式下每 1.5 秒触发一次，避免画面长时间虚着。 */
+    private fun startPeriodicFocus(cam: Camera) {
+        if (continuousFocus) return
+        val runnable = object : Runnable {
+            override fun run() {
+                if (camera !== cam) return
+                runCatching { cam.autoFocus(null) }
+                focusHandler.postDelayed(this, 1500)
+            }
+        }
+        focusHandler.postDelayed(runnable, 500)
+    }
+
+    /** 点哪儿对哪儿：把点击位置换算成相机坐标，设对焦区域后触发一次自动对焦。 */
+    fun focusAt(x: Float, y: Float, viewWidth: Int, viewHeight: Int) {
+        val cam = camera ?: return
+        if (viewWidth <= 0 || viewHeight <= 0) return
+        val surfaceWidth = previewHeight.toFloat()
+        val surfaceHeight = previewWidth.toFloat()
+        if (surfaceWidth <= 0f || surfaceHeight <= 0f) return
+        // 预览按「完整显示」摆放：先算缩放和偏移，再把触点换算回表面坐标
+        val scale = minOf(viewWidth / surfaceWidth, viewHeight / surfaceHeight)
+        val offsetX = (viewWidth - surfaceWidth * scale) / 2f
+        val offsetY = (viewHeight - surfaceHeight * scale) / 2f
+        val surfaceX = ((x - offsetX) / scale / surfaceWidth).coerceIn(0f, 1f)
+        val surfaceY = ((y - offsetY) / scale / surfaceHeight).coerceIn(0f, 1f)
+        // 表面经过 90° 旋转，映射到相机坐标（-1000..1000）
+        val cx = ((surfaceY * 2f) - 1f) * 1000f
+        val cy = ((surfaceX * 2f) - 1f) * -1000f
+        val half = 250
+        runCatching {
+            val params = cam.parameters
+            val rect = Camera.Area(
+                android.graphics.Rect(
+                    (cx - half).toInt().coerceIn(-1000, 1000),
+                    (cy - half).toInt().coerceIn(-1000, 1000),
+                    (cx + half).toInt().coerceIn(-1000, 1000),
+                    (cy + half).toInt().coerceIn(-1000, 1000),
+                ),
+                1000,
+            )
+            if (params.maxNumFocusAreas > 0) {
+                params.focusAreas = listOf(rect)
+                params.meteringAreas = listOf(rect)
+                cam.parameters = params
+            }
+        }.onFailure { AppLog.d("sign", "focus area failed ${it.javaClass.simpleName}") }
+        runCatching { cam.autoFocus(null) }
+        AppLog.d("sign", "tap focus at ${cx.toInt()},${cy.toInt()}")
     }
 
     /** 退到后台：释放相机，但记住 View，回来还能接着开。 */
@@ -140,6 +226,7 @@ class QrCamera(private val context: Context, private val onDecoded: (String) -> 
 
     private fun releaseCamera() {
         accepting = false
+        focusHandler.removeCallbacksAndMessages(null)
         val cam = camera ?: return
         camera = null
         runCatching { cam.setPreviewCallback(null) }
@@ -190,28 +277,37 @@ class QrCamera(private val context: Context, private val onDecoded: (String) -> 
         }
     }
 
-    /** 选一个够用又不至于太重的预览尺寸（尽量 ≥640×480，且不超过 1280×720）。 */
-    private fun choosePreviewSize(params: Camera.Parameters): Camera.Size {
+    /**
+     * 选预览尺寸：优先「转正后的长宽比」接近屏幕的，且别太吃 CPU。
+     *
+     * 之前固定挑最小的 640×480（4:3），竖屏下要裁掉两边才能铺满，视野被压窄一倍多，
+     * 看起来就像手机贴在码上。现在按屏幕比例挑，16:9 的 1280×720 在竖屏下最接近。
+     */
+    private fun choosePreviewSize(params: Camera.Parameters, viewWidth: Int, viewHeight: Int): Camera.Size {
         val sizes = params.supportedPreviewSizes.orEmpty()
-        val landscape = sizes.filter { it.width >= it.height }
-        val candidates = landscape.ifEmpty { sizes }
-        val sensible = candidates.filter { it.width * it.height >= 640 * 480 }
-        val capped = sensible.filter { it.width * it.height <= 1280 * 720 }
-        val pool = (capped.ifEmpty { sensible }).ifEmpty { candidates }
-        return pool.minByOrNull { it.width * it.height } ?: candidates.first()
+        val viewAspect = viewWidth.toFloat() / viewHeight.toFloat()
+        val candidates = sizes.filter { it.width >= it.height }
+            .ifEmpty { sizes }
+            .filter { it.width * it.height <= 1920 * 1080 }
+            .ifEmpty { sizes }
+        return candidates.minByOrNull { size ->
+            // 转正后长宽比 = 宽/高 的倒数
+            val rotatedAspect = size.height.toFloat() / size.width.toFloat()
+            val aspectPenalty = kotlin.math.abs(rotatedAspect - viewAspect) * 100f
+            // 面积小一点省电，作为次要因素
+            val areaPenalty = (size.width * size.height).toFloat() / (1920f * 1080f)
+            aspectPenalty + areaPenalty
+        } ?: candidates.first()
     }
 
-    /**
-     * 预览铺满 View 且不变形：`setDisplayOrientation(90)` 之后表面内容是 `h×w`，
-     * 按“填满后居中裁切”算一个缩放与平移。
-     */
-    private fun applyCenterCrop(view: TextureView, width: Int, height: Int) {
+    /** 整幅画面铺进 View，不做裁切：宁可留黑边，也不要无故放大。 */
+    private fun applyFitCenter(view: TextureView, width: Int, height: Int) {
         val viewWidth = view.width.toFloat()
         val viewHeight = view.height.toFloat()
         if (viewWidth <= 0f || viewHeight <= 0f) return
         val surfaceWidth = height.toFloat()
         val surfaceHeight = width.toFloat()
-        val scale = maxOf(viewWidth / surfaceWidth, viewHeight / surfaceHeight)
+        val scale = minOf(viewWidth / surfaceWidth, viewHeight / surfaceHeight)
         view.setTransform(
             Matrix().apply {
                 setScale(scale, scale)
