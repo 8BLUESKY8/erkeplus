@@ -1,6 +1,12 @@
 package gitee.leolin_me.erkepp.ui.attachments
 
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +58,7 @@ import java.util.Locale
  *
  * 两种视图：分条列表与双列卡片，图片都显示缩略图（文件名对用户没有意义）。
  * 删除有二次确认，并可选择放进系统回收站，勾选状态会被记住。
+ * 附件 ⇄ 回收站 之间用滑动过渡，避免直接切换的生硬感。
  */
 @Composable
 fun AttachmentsScreen(
@@ -124,133 +131,127 @@ fun AttachmentsScreen(
             }
         }
 
-        if (inTrash) {
-            if (!trashSupported) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        "当前系统没有回收站，删除即彻底删除",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+        AnimatedContent(
+            targetState = inTrash,
+            transitionSpec = {
+                if (targetState) {
+                    (slideInHorizontally { it } + fadeIn()) togetherWith
+                        (slideOutHorizontally { -it / 4 } + fadeOut())
+                } else {
+                    (slideInHorizontally { -it / 4 } + fadeIn()) togetherWith
+                        (slideOutHorizontally { it } + fadeOut())
                 }
-                return@Column
-            }
-            if (trashFiles.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("回收站是空的", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                return@Column
-            }
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(trashFiles, key = { it.name + it.uri }) { file ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Thumb(file, 44.dp)
-                        Spacer(Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+            },
+            label = "attachmentsSection",
+        ) { trashed ->
+            Column(modifier = Modifier.fillMaxSize()) {
+                if (trashed) {
+                    if (!trashSupported) {
+                        EmptyHint("当前系统没有回收站，删除即彻底删除")
+                    } else if (trashFiles.isEmpty()) {
+                        EmptyHint("回收站是空的")
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(trashFiles, key = { it.name + it.uri }) { file ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Thumb(file, 44.dp)
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = file.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = Downloads.formatSize(file.size),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    TextButton(onClick = { onRestore(file) }) { Text("还原") }
+                                    TextButton(onClick = { confirmTarget = file }) { Text("彻底删除") }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    if (active.isEmpty() && files.isEmpty()) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            Text("还没有下载任何附件", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(6.dp))
                             Text(
-                                text = file.name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = Downloads.formatSize(file.size),
+                                "在活动详情或作业里点附件即可下载",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        TextButton(onClick = { onRestore(file) }) { Text("还原") }
-                        TextButton(onClick = { confirmTarget = file }) { Text("彻底删除") }
-                    }
-                }
-            }
-            confirmTarget?.let { target ->
-                DeleteDialog(
-                    target = target,
-                    trashSupported = trashSupported,
-                    toTrash = false,
-                    onToTrashChange = { },
-                    onConfirm = {
-                        onDeleteForever(target)
-                        confirmTarget = null
-                    },
-                    onDismiss = { confirmTarget = null },
-                )
-            }
-            return@Column
-        }
+                    } else {
+                        if (active.isNotEmpty()) {
+                            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                                SectionTitle("正在下载")
+                                active.forEach { task ->
+                                    DownloadRow(
+                                        task = task,
+                                        onCancel = { onCancelDownload(task.url) },
+                                        onRetry = { onRetryDownload(task) },
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                }
+                            }
+                        }
 
-        if (active.isEmpty() && files.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("还没有下载任何附件", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "在活动详情或作业里点附件即可下载",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            return@Column
-        }
-
-        if (active.isNotEmpty()) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                SectionTitle("正在下载")
-                active.forEach { task ->
-                    DownloadRow(
-                        task = task,
-                        onCancel = { onCancelDownload(task.url) },
-                        onRetry = { onRetryDownload(task) },
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
-            }
-        }
-
-        if (files.isNotEmpty()) {
-            if (gridView) {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(files, key = { it.name + it.uri }) { file ->
-                        FileCard(
-                            file = file,
-                            onOpen = { openFile(file) },
-                            onShare = { onShare(file) },
-                            onDelete = { confirmTarget = file },
-                        )
-                    }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    item { SectionTitle("已下载") }
-                    items(files, key = { it.name + it.uri }) { file ->
-                        FileRow(
-                            file = file,
-                            onOpen = { openFile(file) },
-                            onShare = { onShare(file) },
-                            onDelete = { confirmTarget = file },
-                        )
+                        if (files.isNotEmpty()) {
+                            if (gridView) {
+                                LazyVerticalGrid(
+                                    columns = GridCells.Fixed(2),
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    items(files, key = { it.name + it.uri }) { file ->
+                                        FileCard(
+                                            file = file,
+                                            onOpen = { openFile(file) },
+                                            onShare = { onShare(file) },
+                                            onDelete = { confirmTarget = file },
+                                        )
+                                    }
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    item { SectionTitle("已下载") }
+                                    items(files, key = { it.name + it.uri }) { file ->
+                                        FileRow(
+                                            file = file,
+                                            onOpen = { openFile(file) },
+                                            onShare = { onShare(file) },
+                                            onDelete = { confirmTarget = file },
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -258,62 +259,68 @@ fun AttachmentsScreen(
     }
 
     confirmTarget?.let { target ->
-        DeleteDialog(
-            target = target,
-            trashSupported = trashSupported,
-            toTrash = toTrash,
-            onToTrashChange = {
-                toTrash = it
-                onDeleteToTrashChange(it)
+        val deletingFromTrash = inTrash
+        AlertDialog(
+            onDismissRequest = { confirmTarget = null },
+            title = { Text(if (deletingFromTrash) "彻底删除这个文件？" else "删除这个文件？") },
+            text = {
+                Column {
+                    Text(target.name, style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    if (deletingFromTrash) {
+                        Text(
+                            "彻底删除后无法恢复。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else if (trashSupported) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = toTrash,
+                                onCheckedChange = {
+                                    toTrash = it
+                                    onDeleteToTrashChange(it)
+                                },
+                            )
+                            Text("放进回收站，可以还原")
+                        }
+                    } else {
+                        Text(
+                            "当前系统没有回收站，删除后无法恢复。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             },
-            onConfirm = {
-                if (trashSupported && toTrash) onTrash(target) else onDeleteForever(target)
-                confirmTarget = null
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (deletingFromTrash) {
+                            onDeleteForever(target)
+                        } else if (trashSupported && toTrash) {
+                            onTrash(target)
+                        } else {
+                            onDeleteForever(target)
+                        }
+                        confirmTarget = null
+                    },
+                ) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
             },
-            onDismiss = { confirmTarget = null },
+            dismissButton = {
+                TextButton(onClick = { confirmTarget = null }) { Text("取消") }
+            },
         )
     }
 }
 
 @Composable
-private fun DeleteDialog(
-    target: AttachmentStorage.LocalFile,
-    trashSupported: Boolean,
-    toTrash: Boolean,
-    onToTrashChange: (Boolean) -> Unit,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("删除这个文件？") },
-        text = {
-            Column {
-                Text(target.name, style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.height(8.dp))
-                if (trashSupported) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = toTrash, onCheckedChange = onToTrashChange)
-                        Text("放进回收站，可以还原")
-                    }
-                } else {
-                    Text(
-                        "当前系统没有回收站，删除后无法恢复。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text("删除", color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
-        },
-    )
+private fun EmptyHint(text: String) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 @Composable
