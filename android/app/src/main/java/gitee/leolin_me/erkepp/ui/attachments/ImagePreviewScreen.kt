@@ -2,8 +2,11 @@ package gitee.leolin_me.erkepp.ui.attachments
 
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -134,9 +137,23 @@ private fun ZoomableImage(uri: Uri) {
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    scale = (scale * zoom).coerceIn(1f, 5f)
-                    offset = if (scale > 1f) offset + pan else Offset.Zero
+                // 只有在「双指」或「已放大后的单指」时才消费事件；
+                // 1 倍时单指横划不消费，留给外层 Pager 翻页。
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val pressed = event.changes.count { it.pressed }
+                        if (pressed == 0) break
+                        if (pressed >= 2) {
+                            scale = (scale * event.calculateZoom()).coerceIn(1f, 5f)
+                            if (scale > 1f) offset += event.calculatePan()
+                            event.changes.forEach { it.consume() }
+                        } else if (scale > 1f) {
+                            offset += event.calculatePan()
+                            event.changes.forEach { it.consume() }
+                        }
+                    }
                 }
             }
             .pointerInput(Unit) {
