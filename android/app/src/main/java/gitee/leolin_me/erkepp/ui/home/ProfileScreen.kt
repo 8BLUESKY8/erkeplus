@@ -24,6 +24,7 @@ fun ProfileScreen(
     session: Session,
     onOpenWeb: () -> Unit,
     onOpenMyActivities: () -> Unit,
+    onOpenAttachments: () -> Unit,
 ) {
     val profile = session.profile
     Column(
@@ -67,6 +68,15 @@ fun ProfileScreen(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("我的活动")
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        OutlinedButton(
+            onClick = onOpenAttachments,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("附件")
         }
 
         Spacer(Modifier.height(8.dp))

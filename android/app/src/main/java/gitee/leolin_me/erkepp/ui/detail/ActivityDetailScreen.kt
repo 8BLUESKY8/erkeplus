@@ -91,6 +91,7 @@ fun ActivityDetailScreen(
     onOpenWeb: (Long) -> Unit,
     onOpenUrl: (String) -> Unit,
     onOpenHomework: (Long, Boolean) -> Unit,
+    onOpenAttachment: (ActivityAttachment) -> Unit,
 ) {
     var detail by remember(activityId) { mutableStateOf<ActivityDetail?>(null) }
     var error by remember(activityId) { mutableStateOf<String?>(null) }
@@ -153,6 +154,7 @@ fun ActivityDetailScreen(
                 onOpenWeb = { onOpenWeb(activityId) },
                 onOpenUrl = onOpenUrl,
                 onOpenHomework = { onOpenHomework(activityId, detail!!.isPostHomework == 1) },
+                onOpenAttachment = onOpenAttachment,
             )
         }
 
@@ -222,6 +224,7 @@ private fun DetailContent(
     onOpenWeb: () -> Unit,
     onOpenUrl: (String) -> Unit,
     onOpenHomework: () -> Unit,
+    onOpenAttachment: (ActivityAttachment) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -394,7 +397,7 @@ private fun DetailContent(
                                         modifier = Modifier
                                             .size(84.dp)
                                             .clip(RoundedCornerShape(10.dp))
-                                            .clickable { onOpenUrl(image.url) },
+                                            .clickable { onOpenAttachment(image) },
                                     )
                                 }
                             }
@@ -403,7 +406,7 @@ private fun DetailContent(
                         detail.attachments.filterNot { it.type == 1 }.forEach { attachment ->
                             AttachmentRow(
                                 attachment = attachment,
-                                onClick = { onOpenUrl(attachment.url) },
+                                onClick = { onOpenAttachment(attachment) },
                             )
                         }
                     }

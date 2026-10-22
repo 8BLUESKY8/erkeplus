@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.webkit.ValueCallback
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -27,6 +28,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -43,7 +45,10 @@ import coil.Coil
 import coil.ImageLoader
 import coil.util.DebugLogger
 import gitee.leolin_me.erkepp.data.ActivityActions
+import gitee.leolin_me.erkepp.data.ActivityAttachment
 import gitee.leolin_me.erkepp.data.ActivityRepository
+import gitee.leolin_me.erkepp.data.AttachmentStorage
+import gitee.leolin_me.erkepp.data.Downloads
 import gitee.leolin_me.erkepp.data.ApiClient
 import gitee.leolin_me.erkepp.data.AppPreferences
 import gitee.leolin_me.erkepp.data.AuthRepository
@@ -56,6 +61,8 @@ import gitee.leolin_me.erkepp.data.WebPrefill
 import gitee.leolin_me.erkepp.ui.DisclaimerDialog
 import gitee.leolin_me.erkepp.ui.ErkeppTheme
 import gitee.leolin_me.erkepp.ui.WebShell
+import gitee.leolin_me.erkepp.ui.attachments.AttachmentsScreen
+import gitee.leolin_me.erkepp.ui.attachments.ImagePreviewScreen
 import gitee.leolin_me.erkepp.ui.detail.ActivityDetailScreen
 import gitee.leolin_me.erkepp.ui.detail.HomeworkScreen
 import gitee.leolin_me.erkepp.ui.home.DiscoverScreen
@@ -64,6 +71,7 @@ import gitee.leolin_me.erkepp.ui.home.ProfileScreen
 import gitee.leolin_me.erkepp.ui.login.ForgotPasswordScreen
 import gitee.leolin_me.erkepp.ui.login.LoginScreen
 import gitee.leolin_me.erkepp.ui.school.SchoolPickerScreen
+import gitee.leolin_me.erkepp.ui.settings.BlockRulesScreen
 import gitee.leolin_me.erkepp.ui.settings.SettingsScreen
 import gitee.leolin_me.erkepp.ui.settings.SettingsSection
 import kotlinx.coroutines.Job
@@ -133,18 +141,6 @@ class MainActivity : ComponentActivity() {
                 }
                 // 调试用：`am start ... --es probe homework_list` 可安全验证只读接口
                 val probe = remember { intent.getStringExtra("probe") }
-                LaunchedEffect(probe, session) {
-                    if (!BuildConfig.DEBUG || probe == null) return@LaunchedEffect
-                    val current = session ?: return@LaunchedEffect
-                    val detailId = intent.getLongExtra("detail_id", 0L)
-                    AppLog.d("probe", "start=$probe detail=$detailId")
-                    when (probe) {
-                        "homework_list" -> activityActions.homeworkList(current.token)
-                        "sign_count" -> if (detailId > 0) activityActions.signCount(current.token, detailId)
-                        "work_detail" -> if (detailId > 0) activityActions.workDetail(current.token, detailId)
-                        else -> AppLog.d("probe", "unknown probe=$probe")
-                    }
-                }
                 var school by remember { mutableStateOf(schoolStore.load()) }
                 var webUrl by remember { mutableStateOf<String?>(null) }
                 var tab by rememberSaveable { mutableStateOf(MainTab.DISCOVER) }
@@ -161,6 +157,91 @@ class MainActivity : ComponentActivity() {
                 }
                 var homeworkActivityId by remember {
                     mutableStateOf(intent.getLongExtra("homework_id", 0L).takeIf { it > 0L })
+                }
+                var attachmentsVisible by remember { mutableStateOf(intent.getBooleanExtra("attachments", false)) }
+                var attachmentFiles by remember { mutableStateOf<List<AttachmentStorage.LocalFile>>(emptyList()) }
+                var previewNames by remember { mutableStateOf<List<String>>(emptyList()) }
+                var previewIndex by remember { mutableIntStateOf(0) }
+                var pendingDownload by remember { mutableStateOf<ActivityAttachment?>(null) }
+                val downloadTasks by Downloads.tasks.collectAsState()
+                val activity = this
+
+                fun shareFile(file: AttachmentStorage.LocalFile) {
+                    runCatching {
+                        startActivity(
+                            Intent(Intent.ACTION_SEND)
+                                .setType(file.mime)
+                                .putExtra(Intent.EXTRA_STREAM, AttachmentStorage.shareableUri(activity, file))
+                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+                        )
+                    }
+                }
+
+                fun openAttachmentFile(file: AttachmentStorage.LocalFile) {
+                    if (file.mime.startsWith("image/")) {
+                        val images = attachmentFiles.filter { it.mime.startsWith("image/") }.map { it.name }
+                        previewNames = images
+                        previewIndex = images.indexOf(file.name).coerceAtLeast(0)
+                    } else {
+                        runCatching {
+                            startActivity(
+                                Intent(Intent.ACTION_VIEW)
+                                    .setDataAndType(AttachmentStorage.shareableUri(activity, file), file.mime)
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        }
+                    }
+                }
+
+                fun downloadAttachment(attachment: ActivityAttachment) {
+                    Downloads.enqueue(activity, attachment.url, attachment.name, attachment.size)
+                    Toast.makeText(activity, "已开始下载，进度见「我的 → 附件」", Toast.LENGTH_SHORT).show()
+                }
+
+                fun handleAttachmentTap(attachment: ActivityAttachment) {
+                    val existing = AttachmentStorage.find(activity, attachment.name)
+                    if (existing != null) {
+                        openAttachmentFile(existing)
+                    } else if (attachment.size > Downloads.LARGE_FILE_BYTES) {
+                        pendingDownload = attachment
+                    } else {
+                        downloadAttachment(attachment)
+                    }
+                }
+
+                LaunchedEffect(attachmentsVisible, downloadTasks.values.map { it.state }) {
+                    if (attachmentsVisible) attachmentFiles = AttachmentStorage.list(activity)
+                }
+
+                LaunchedEffect(probe, session) {
+                    if (!BuildConfig.DEBUG || probe == null) return@LaunchedEffect
+                    val current = session ?: return@LaunchedEffect
+                    val detailId = intent.getLongExtra("detail_id", 0L)
+                    AppLog.d("probe", "start=$probe detail=$detailId")
+                    when (probe) {
+                        "homework_list" -> activityActions.homeworkList(current.token)
+                        "sign_count" -> if (detailId > 0) activityActions.signCount(current.token, detailId)
+                        "work_detail" -> if (detailId > 0) activityActions.workDetail(current.token, detailId)
+                        "download" -> {
+                            val url = intent.getStringExtra("url")
+                            val name = intent.getStringExtra("name") ?: "probe.bin"
+                            if (url != null) {
+                                Downloads.enqueue(activity, url, name, intent.getLongExtra("size", 0L))
+                            }
+                        }
+                        "attachments" -> {
+                            attachmentFiles = AttachmentStorage.list(activity)
+                            attachmentsVisible = true
+                        }
+                        "preview_image" -> {
+                            attachmentFiles = AttachmentStorage.list(activity)
+                            val name = intent.getStringExtra("name")
+                            val images = attachmentFiles.filter { it.mime.startsWith("image/") }.map { it.name }
+                            previewNames = images
+                            previewIndex = images.indexOf(name).coerceAtLeast(0)
+                        }
+                        else -> AppLog.d("probe", "unknown probe=$probe")
+                    }
                 }
 
                 // 旧版本会话缺少 rawProfile：启动时补拉一次 my-info，供网页注入使用
@@ -304,22 +385,12 @@ class MainActivity : ComponentActivity() {
                                             },
                                         )
 
-                                        MainTab.PROFILE -> {
-                                            if (showMyActivities) {
-                                                MyActivitiesScreen(
-                                                    token = current.token,
-                                                    repository = activityRepository,
-                                                    onBack = { showMyActivities = false },
-                                                    onOpenActivity = { id -> detailActivityId = id },
-                                                )
-                                            } else {
-                                                ProfileScreen(
-                                                    session = current,
-                                                    onOpenWeb = { webUrl = AppConfig.HOME_URL },
-                                                    onOpenMyActivities = { showMyActivities = true },
-                                                )
-                                            }
-                                        }
+                                        MainTab.PROFILE -> ProfileScreen(
+                                            session = current,
+                                            onOpenWeb = { webUrl = AppConfig.HOME_URL },
+                                            onOpenMyActivities = { showMyActivities = true },
+                                            onOpenAttachments = { attachmentsVisible = true },
+                                        )
 
                                         MainTab.SETTINGS -> SettingsScreen(
                                             session = current,
@@ -401,6 +472,81 @@ class MainActivity : ComponentActivity() {
                                             detailActivityId = null
                                             webUrl = "https://${AppConfig.ALLOWED_HOST}/#/assignment/$id"
                                         }
+                                    },
+                                    onOpenAttachment = { attachment -> handleAttachmentTap(attachment) },
+                                )
+                            }
+
+                            // 我的活动、附件、屏蔽规则都做成全屏覆盖层，不留底部标签栏
+                            if (showMyActivities) {
+                                MyActivitiesScreen(
+                                    token = current.token,
+                                    repository = activityRepository,
+                                    onBack = { showMyActivities = false },
+                                    onOpenActivity = { id -> detailActivityId = id },
+                                )
+                            }
+
+                            if (settingsSection == SettingsSection.BLOCK_RULES) {
+                                BlockRulesScreen(
+                                    preferences = preferences,
+                                    onBack = { settingsSection = SettingsSection.ROOT },
+                                )
+                            }
+
+                            if (attachmentsVisible) {
+                                AttachmentsScreen(
+                                    files = attachmentFiles,
+                                    downloads = downloadTasks,
+                                    onBack = { attachmentsVisible = false },
+                                    onPreviewImage = { names, index ->
+                                        previewNames = names
+                                        previewIndex = index
+                                    },
+                                    onOpenFile = { file -> openAttachmentFile(file) },
+                                    onShare = { file -> shareFile(file) },
+                                    onDelete = { file ->
+                                        AttachmentStorage.delete(activity, file)
+                                        attachmentFiles = AttachmentStorage.list(activity)
+                                    },
+                                    onCancelDownload = { url -> Downloads.cancel(url) },
+                                    onRetryDownload = { task ->
+                                        Downloads.retry(activity, task.url, task.name, task.expectedSize)
+                                    },
+                                )
+                            }
+
+                            if (previewNames.isNotEmpty()) {
+                                ImagePreviewScreen(
+                                    names = previewNames,
+                                    startIndex = previewIndex,
+                                    resolve = { name -> attachmentFiles.firstOrNull { it.name == name } },
+                                    onBack = { previewNames = emptyList() },
+                                    onShare = { file -> shareFile(file) },
+                                )
+                            }
+
+                            pendingDownload?.let { attachment ->
+                                AlertDialog(
+                                    onDismissRequest = { pendingDownload = null },
+                                    title = { Text("这个文件有点大") },
+                                    text = {
+                                        Text(
+                                            "${attachment.name}\n${Downloads.formatSize(attachment.size)}，建议在 Wi-Fi 下下载。",
+                                        )
+                                    },
+                                    confirmButton = {
+                                        TextButton(
+                                            onClick = {
+                                                downloadAttachment(attachment)
+                                                pendingDownload = null
+                                            },
+                                        ) {
+                                            Text("继续下载")
+                                        }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = { pendingDownload = null }) { Text("取消") }
                                     },
                                 )
                             }

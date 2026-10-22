@@ -23,6 +23,8 @@ data class ActivityAttachment(
     val name: String,
     val url: String,
     val type: Int,
+    /** 文件大小（字节），用于下载前提示流量；0 表示未知。 */
+    val size: Long = 0L,
 ) {
     /** 显示用后缀：没有文件名时用类型兜底。 */
     val extension: String
@@ -183,6 +185,7 @@ internal fun JsonObject.attachmentList(key: String): List<ActivityAttachment> {
         }
         // 详情里的附件用 attachmentType，作业里的附件只有 type，两者都认
         val type = (item as? JsonObject)?.let { obj -> obj.int("attachmentType").takeIf { it != 0 } ?: obj.int("type") } ?: 0
-        ActivityAttachment(name = name, url = url, type = type)
+        val size = (item as? JsonObject)?.long("size") ?: 0L
+        ActivityAttachment(name = name, url = url, type = type, size = size)
     }
 }

@@ -73,11 +73,6 @@ fun SettingsScreen(
         onSectionChange(SettingsSection.ROOT)
     }
 
-    if (section == SettingsSection.BLOCK_RULES) {
-        BlockRulesScreen(preferences = preferences, onBack = { onSectionChange(SettingsSection.ROOT) })
-        return
-    }
-
     var categories by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
