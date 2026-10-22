@@ -266,7 +266,9 @@ internal fun parseActivityPage(response: kotlinx.serialization.json.JsonElement,
             enrollCount = item["enrollCount"]?.jsonPrimitive?.intOrNull ?: 0,
             peopleLimit = item["peopleLimit"]?.jsonPrimitive?.intOrNull ?: 0,
             organizationName = item["organizationName"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-            status = item["activityStatus"]?.jsonPrimitive?.intOrNull ?: 0,
+            // 列表接口用 activityStatus，我的活动接口用 status，两个都认
+            status = item["activityStatus"]?.jsonPrimitive?.intOrNull
+                ?: item["status"]?.jsonPrimitive?.intOrNull ?: 0,
             recommended = (item["isRecommend"]?.jsonPrimitive?.intOrNull ?: 0) == 1,
             limitType = item["limitType"]?.jsonPrimitive?.intOrNull ?: 0,
             full = (item["isfull"]?.jsonPrimitive?.intOrNull ?: 0) != 0,

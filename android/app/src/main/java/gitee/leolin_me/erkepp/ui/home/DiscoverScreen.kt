@@ -182,12 +182,17 @@ fun DiscoverScreen(
         scope.launch {
             loading = true
             error = null
+            // 先清空旧数据：否则新筛选的 total 会和上一批 items 拼在一起，
+            // 出现「已加载 20 / 共 5」这种自相矛盾的数字
+            items = emptyList()
+            total = 0
             runCatching { fetch(1) }
                 .onSuccess {
                     AppLog.d("discover", "reload ok total=${it.total} got=${it.items.size}")
                     if (gen == generation) {
                         items = it.items
-                        total = it.total
+                        // 服务端在搜索场景会给出比列表还小的 total，取两者较大值更接近事实
+                        total = maxOf(it.total, it.items.size)
                         page = 1
                         gridState.requestScrollToItem(0)
                     }
@@ -276,9 +281,9 @@ fun DiscoverScreen(
     }
     val visibleItems by remember(blockRules) {
         derivedStateOf {
-            val keyword = debouncedSearch.trim()
+            // 搜索由服务端完成；客户端再按标题过滤一次会把服务端匹配到的
+            // 非标题命中（例如按组织名匹配）全部滤掉，出现「显示 0」
             items.asSequence()
-                .filter { keyword.isEmpty() || it.name.contains(keyword, ignoreCase = true) }
                 .filter { hoursMin == null || it.hours >= hoursMin!! }
                 .filter { hoursMax == null || it.hours <= hoursMax!! }
                 .filterNot { blockRules.isBlocked(it.name) }

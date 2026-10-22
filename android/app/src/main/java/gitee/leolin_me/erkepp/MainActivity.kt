@@ -60,6 +60,7 @@ import gitee.leolin_me.erkepp.data.SessionStore
 import gitee.leolin_me.erkepp.data.WebPrefill
 import gitee.leolin_me.erkepp.ui.DisclaimerDialog
 import gitee.leolin_me.erkepp.ui.ErkeppTheme
+import gitee.leolin_me.erkepp.ui.SecondaryPage
 import gitee.leolin_me.erkepp.ui.WebShell
 import gitee.leolin_me.erkepp.ui.attachments.AttachmentsScreen
 import gitee.leolin_me.erkepp.ui.attachments.ImagePreviewScreen
@@ -233,6 +234,8 @@ class MainActivity : ComponentActivity() {
                             attachmentFiles = AttachmentStorage.list(activity)
                             attachmentsVisible = true
                         }
+                        "my_activities" -> showMyActivities = true
+                        "block_rules" -> settingsSection = SettingsSection.BLOCK_RULES
                         "preview_image" -> {
                             attachmentFiles = AttachmentStorage.list(activity)
                             val name = intent.getStringExtra("name")
@@ -450,80 +453,90 @@ class MainActivity : ComponentActivity() {
                             // 详情做成覆盖层：分页容器留在组合里，返回时列表不重载、位置不丢
                             val detailId = detailActivityId
                             if (detailId != null) {
-                                ActivityDetailScreen(
-                                    token = current.token,
-                                    repository = activityRepository,
-                                    activityId = detailId,
-                                    onBack = { detailActivityId = null },
-                                    onOpenWeb = { id ->
-                                        detailActivityId = null
-                                        webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
-                                    },
-                                    onOpenUrl = { url ->
-                                        runCatching {
-                                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                                        }
-                                    },
-                                    onOpenHomework = { id, viewing ->
-                                        if (viewing) {
-                                            // 查看作业用原生页：接口 `activity/query/work_3_0_1` 已实测
-                                            homeworkActivityId = id
-                                        } else {
+                                SecondaryPage {
+                                    ActivityDetailScreen(
+                                        token = current.token,
+                                        repository = activityRepository,
+                                        activityId = detailId,
+                                        onBack = { detailActivityId = null },
+                                        onOpenWeb = { id ->
                                             detailActivityId = null
-                                            webUrl = "https://${AppConfig.ALLOWED_HOST}/#/assignment/$id"
-                                        }
-                                    },
-                                    onOpenAttachment = { attachment -> handleAttachmentTap(attachment) },
-                                )
+                                            webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
+                                        },
+                                        onOpenUrl = { url ->
+                                            runCatching {
+                                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                            }
+                                        },
+                                        onOpenHomework = { id, viewing ->
+                                            if (viewing) {
+                                                // 查看作业用原生页：接口 `activity/query/work_3_0_1` 已实测
+                                                homeworkActivityId = id
+                                            } else {
+                                                detailActivityId = null
+                                                webUrl = "https://${AppConfig.ALLOWED_HOST}/#/assignment/$id"
+                                            }
+                                        },
+                                        onOpenAttachment = { attachment -> handleAttachmentTap(attachment) },
+                                    )
+                                }
                             }
 
                             // 我的活动、附件、屏蔽规则都做成全屏覆盖层，不留底部标签栏
                             if (showMyActivities) {
-                                MyActivitiesScreen(
-                                    token = current.token,
-                                    repository = activityRepository,
-                                    onBack = { showMyActivities = false },
-                                    onOpenActivity = { id -> detailActivityId = id },
-                                )
+                                SecondaryPage {
+                                    MyActivitiesScreen(
+                                        token = current.token,
+                                        repository = activityRepository,
+                                        onBack = { showMyActivities = false },
+                                        onOpenActivity = { id -> detailActivityId = id },
+                                    )
+                                }
                             }
 
                             if (settingsSection == SettingsSection.BLOCK_RULES) {
-                                BlockRulesScreen(
-                                    preferences = preferences,
-                                    onBack = { settingsSection = SettingsSection.ROOT },
-                                )
+                                SecondaryPage {
+                                    BlockRulesScreen(
+                                        preferences = preferences,
+                                        onBack = { settingsSection = SettingsSection.ROOT },
+                                    )
+                                }
                             }
 
                             if (attachmentsVisible) {
-                                AttachmentsScreen(
-                                    files = attachmentFiles,
-                                    downloads = downloadTasks,
-                                    onBack = { attachmentsVisible = false },
-                                    onPreviewImage = { names, index ->
-                                        previewNames = names
-                                        previewIndex = index
-                                    },
-                                    onOpenFile = { file -> openAttachmentFile(file) },
-                                    onShare = { file -> shareFile(file) },
-                                    onDelete = { file ->
-                                        AttachmentStorage.delete(activity, file)
-                                        attachmentFiles = AttachmentStorage.list(activity)
-                                    },
-                                    onCancelDownload = { url -> Downloads.cancel(url) },
-                                    onRetryDownload = { task ->
-                                        Downloads.retry(activity, task.url, task.name, task.expectedSize)
-                                    },
-                                )
+                                SecondaryPage {
+                                    AttachmentsScreen(
+                                        files = attachmentFiles,
+                                        downloads = downloadTasks,
+                                        onBack = { attachmentsVisible = false },
+                                        onPreviewImage = { names, index ->
+                                            previewNames = names
+                                            previewIndex = index
+                                        },
+                                        onOpenFile = { file -> openAttachmentFile(file) },
+                                        onShare = { file -> shareFile(file) },
+                                        onDelete = { file ->
+                                            AttachmentStorage.delete(activity, file)
+                                            attachmentFiles = AttachmentStorage.list(activity)
+                                        },
+                                        onCancelDownload = { url -> Downloads.cancel(url) },
+                                        onRetryDownload = { task ->
+                                            Downloads.retry(activity, task.url, task.name, task.expectedSize)
+                                        },
+                                    )
+                                }
                             }
 
                             if (previewNames.isNotEmpty()) {
-                                ImagePreviewScreen(
-                                    names = previewNames,
-                                    startIndex = previewIndex,
-                                    resolve = { name -> attachmentFiles.firstOrNull { it.name == name } },
-                                    onBack = { previewNames = emptyList() },
-                                    onShare = { file -> shareFile(file) },
-                                )
+                                SecondaryPage {
+                                    ImagePreviewScreen(
+                                        names = previewNames,
+                                        startIndex = previewIndex,
+                                        resolve = { name -> attachmentFiles.firstOrNull { it.name == name } },
+                                        onBack = { previewNames = emptyList() },
+                                        onShare = { file -> shareFile(file) },
+                                    )
+                                }
                             }
 
                             pendingDownload?.let { attachment ->
@@ -554,20 +567,22 @@ class MainActivity : ComponentActivity() {
                             // 查看作业覆盖层
                             val homeworkId = homeworkActivityId
                             if (homeworkId != null) {
-                                HomeworkScreen(
-                                    activityId = homeworkId,
-                                    loader = { activityActions.work(current.token, homeworkId) },
-                                    onBack = { homeworkActivityId = null },
-                                    onEdit = {
-                                        homeworkActivityId = null
-                                        webUrl = "https://${AppConfig.ALLOWED_HOST}/#/assignment/$homeworkId"
-                                    },
-                                    onOpenUrl = { url ->
-                                        runCatching {
-                                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                                        }
-                                    },
-                                )
+                                SecondaryPage {
+                                    HomeworkScreen(
+                                        activityId = homeworkId,
+                                        loader = { activityActions.work(current.token, homeworkId) },
+                                        onBack = { homeworkActivityId = null },
+                                        onEdit = {
+                                            homeworkActivityId = null
+                                            webUrl = "https://${AppConfig.ALLOWED_HOST}/#/assignment/$homeworkId"
+                                        },
+                                        onOpenUrl = { url ->
+                                            runCatching {
+                                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                            }
+                                        },
+                                    )
+                                }
                             }
                             }
                         }
