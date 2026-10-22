@@ -250,6 +250,20 @@ adb shell am start -n gitee.leolin_me.erkepp.debug/gitee.leolin_me.erkepp.MainAc
 - 作业附件只有 `type` 字段（活动详情的附件用 `attachmentType`），两者都要兼容。
 - 作业入口在官方只在这些情况下出现：活动已开始 / 已结束，或本人已提交过作业。
 
+## 作业提交（2026-10-22 挖参数，未实测）
+
+`POST activity/submit/work_3_0_1`，body：
+
+```json
+{"activityId": 570315, "introduce": "作业正文", "attachment": [
+  {"id": 0, "url": "https://...", "name": "a.png", "size": 400214, "type": 1}
+]}
+```
+
+- 正文不能为空（官方前端会提示「请填写作业」）。
+- 附件最多 9 个，单个不超过 5 MB；新增附件走阿里云 OSS（H5 的 `uploadOSS`），**客户端尚未接入**。
+- 客户端提交前有二次确认，请求与响应写 `[action]` 日志。
+
 ## 尚未验证
 
 - 报名、取消、签到等**写操作**（未验证，禁止先行接入）

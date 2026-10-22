@@ -62,9 +62,11 @@ import gitee.leolin_me.erkepp.ui.DisclaimerDialog
 import gitee.leolin_me.erkepp.ui.ErkeppTheme
 import gitee.leolin_me.erkepp.ui.SecondaryPage
 import gitee.leolin_me.erkepp.ui.WebShell
+import gitee.leolin_me.erkepp.ui.attachments.AttachmentActionsSheet
 import gitee.leolin_me.erkepp.ui.attachments.AttachmentsScreen
 import gitee.leolin_me.erkepp.ui.attachments.ImagePreviewScreen
 import gitee.leolin_me.erkepp.ui.detail.ActivityDetailScreen
+import gitee.leolin_me.erkepp.ui.detail.HomeworkEditScreen
 import gitee.leolin_me.erkepp.ui.detail.HomeworkScreen
 import gitee.leolin_me.erkepp.ui.home.DiscoverScreen
 import gitee.leolin_me.erkepp.ui.home.MyActivitiesScreen
@@ -163,6 +165,8 @@ class MainActivity : ComponentActivity() {
                 var previewNames by remember { mutableStateOf<List<String>>(emptyList()) }
                 var previewIndex by remember { mutableIntStateOf(0) }
                 var pendingDownload by remember { mutableStateOf<ActivityAttachment?>(null) }
+                var attachmentSheet by remember { mutableStateOf<ActivityAttachment?>(null) }
+                var homeworkEditId by remember { mutableStateOf<Long?>(null) }
                 val downloadTasks by Downloads.tasks.collectAsState()
                 val activity = this
 
@@ -199,14 +203,8 @@ class MainActivity : ComponentActivity() {
                 }
 
                 fun handleAttachmentTap(attachment: ActivityAttachment) {
-                    val existing = AttachmentStorage.find(activity, attachment.name)
-                    if (existing != null) {
-                        openAttachmentFile(existing)
-                    } else if (attachment.size > Downloads.LARGE_FILE_BYTES) {
-                        pendingDownload = attachment
-                    } else {
-                        downloadAttachment(attachment)
-                    }
+                    // 下载、预览、分享、其他应用打开都在面板里选，下载必须由用户点一下才发生
+                    attachmentSheet = attachment
                 }
 
                 LaunchedEffect(attachmentsVisible, downloadTasks.values.map { it.state }) {
@@ -234,6 +232,19 @@ class MainActivity : ComponentActivity() {
                             attachmentsVisible = true
                         }
                         "my_activities" -> showMyActivities = true
+                        "homework_edit" -> if (detailId > 0) homeworkEditId = detailId
+                        "attachment_sheet" -> {
+                            val url = intent.getStringExtra("url")
+                            val name = intent.getStringExtra("name") ?: "probe.png"
+                            if (url != null) {
+                                attachmentSheet = ActivityAttachment(
+                                    name = name,
+                                    url = url,
+                                    type = 1,
+                                    size = intent.getLongExtra("size", 0L),
+                                )
+                            }
+                        }
                         "stack_detail" -> {
                             // 复现「我的活动里点进详情」的层级：两层同时打开
                             showMyActivities = true
@@ -533,17 +544,67 @@ class MainActivity : ComponentActivity() {
                                         activityId = homeworkId,
                                         loader = { activityActions.work(current.token, homeworkId) },
                                         onBack = { homeworkActivityId = null },
-                                        onEdit = {
-                                            homeworkActivityId = null
-                                            webUrl = "https://${AppConfig.ALLOWED_HOST}/#/assignment/$homeworkId"
-                                        },
-                                        onOpenUrl = { url ->
-                                            runCatching {
-                                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                                            }
-                                        },
+                                        onEdit = { homeworkEditId = homeworkId },
+                                        onAttachment = { attachment -> attachmentSheet = attachment },
                                     )
                                 }
+                            }
+
+                            // 提交 / 修改作业：写操作，提交前有确认
+                            val editId = homeworkEditId
+                            if (editId != null) {
+                                SecondaryPage(onBack = { homeworkEditId = null }) {
+                                    HomeworkEditScreen(
+                                        activityId = editId,
+                                        activityName = "",
+                                        loader = { activityActions.work(current.token, editId) },
+                                        onSubmit = { text, files ->
+                                            activityActions.submitWork(current.token, editId, text, files)
+                                            Toast.makeText(activity, "作业已提交", Toast.LENGTH_SHORT).show()
+                                        },
+                                        onBack = { homeworkEditId = null },
+                                    )
+                                }
+                            }
+
+                            // 附件操作面板：下载 / 预览 / 其他应用打开 / 分享 / 删除
+                            attachmentSheet?.let { attachment ->
+                                val local = AttachmentStorage.find(activity, attachment.name)
+                                val isImage = AttachmentStorage.mimeOf(attachment.name).startsWith("image/")
+                                AttachmentActionsSheet(
+                                    attachment = attachment,
+                                    downloaded = local != null,
+                                    isImage = isImage,
+                                    onDownload = {
+                                        downloadAttachment(attachment)
+                                        attachmentSheet = null
+                                    },
+                                    onPreview = {
+                                        attachmentFiles = AttachmentStorage.list(activity)
+                                        val images = attachmentFiles
+                                            .filter { it.mime.startsWith("image/") }
+                                            .map { it.name }
+                                        previewNames = images
+                                        previewIndex = images.indexOf(attachment.name).coerceAtLeast(0)
+                                        attachmentSheet = null
+                                    },
+                                    onOpenWithOther = {
+                                        local?.let { openAttachmentFile(it) }
+                                        attachmentSheet = null
+                                    },
+                                    onShare = {
+                                        local?.let { shareFile(it) }
+                                        attachmentSheet = null
+                                    },
+                                    onDelete = {
+                                        local?.let { file ->
+                                            AttachmentStorage.delete(activity, file)
+                                            attachmentFiles = AttachmentStorage.list(activity)
+                                        }
+                                        attachmentSheet = null
+                                    },
+                                    onDismiss = { attachmentSheet = null },
+                                )
                             }
 
                             if (previewNames.isNotEmpty()) {

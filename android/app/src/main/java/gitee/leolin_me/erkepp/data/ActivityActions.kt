@@ -65,6 +65,52 @@ class ActivityActions(private val api: ApiClient) {
         return parseWork(data)
     }
 
+    /**
+     * 提交 / 修改作业。官方 `POST activity/submit/work_3_0_1`，body 为
+     * `{activityId, introduce, attachment[]}`；`attachment` 元素形状与详情里的附件一致。
+     *
+     * 写操作：调用前应有用户确认。返回码非 0 直接抛异常。
+     */
+    suspend fun submitWork(
+        token: String,
+        activityId: Long,
+        introduce: String,
+        attachments: List<ActivityAttachment>,
+    ) {
+        val files = kotlinx.serialization.json.buildJsonArray {
+            attachments.forEach { attachment ->
+                add(
+                    buildJsonObject {
+                        put("id", JsonPrimitive(0))
+                        put("url", JsonPrimitive(attachment.url))
+                        put("name", JsonPrimitive(attachment.name))
+                        put("size", JsonPrimitive(attachment.size))
+                        put("type", JsonPrimitive(attachment.type))
+                    },
+                )
+            }
+        }
+        val response = call(
+            method = "POST",
+            path = "activity/submit/work_3_0_1",
+            token = token,
+            extra = "activityId=$activityId chars=${introduce.length} files=${attachments.size}",
+        ) {
+            api.post(
+                path = "activity/submit/work_3_0_1",
+                params = buildJsonObject {
+                    put("activityId", JsonPrimitive(activityId))
+                    put("introduce", JsonPrimitive(introduce))
+                    put("attachment", files)
+                },
+                token = token,
+            )
+        } ?: error("提交失败：没有响应")
+
+        val code = response.code()
+        if (code != 0) error("提交失败：code=$code")
+    }
+
     // ---- 写操作：命名与日志就绪，但一处都不许接线 ----
 
     suspend fun enrollPerson(token: String, activityId: Long, personMaterial: String? = null): JsonElement? =

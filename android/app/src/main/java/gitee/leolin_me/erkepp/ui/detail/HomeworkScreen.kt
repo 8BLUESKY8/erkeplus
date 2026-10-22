@@ -62,7 +62,7 @@ fun HomeworkScreen(
     loader: suspend () -> ActivityWork?,
     onBack: () -> Unit,
     onEdit: () -> Unit,
-    onOpenUrl: (String) -> Unit,
+    onAttachment: (ActivityAttachment) -> Unit,
 ) {
     var work by remember(activityId) { mutableStateOf<ActivityWork?>(null) }
     var error by remember(activityId) { mutableStateOf<String?>(null) }
@@ -137,7 +137,7 @@ fun HomeworkScreen(
                             Spacer(Modifier.height(18.dp))
                             SectionLabel("附件（${work!!.attachments.size}）")
                             Spacer(Modifier.height(8.dp))
-                            Attachments(work!!.attachments, onOpenUrl)
+                            Attachments(work!!.attachments, onAttachment)
                         }
 
                         Spacer(Modifier.height(28.dp))
@@ -160,7 +160,7 @@ fun HomeworkScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Attachments(attachments: List<ActivityAttachment>, onOpenUrl: (String) -> Unit) {
+private fun Attachments(attachments: List<ActivityAttachment>, onAttachment: (ActivityAttachment) -> Unit) {
     val images = attachments.filter { it.type == 1 }
     val files = attachments.filter { it.type != 1 }
 
@@ -177,7 +177,7 @@ private fun Attachments(attachments: List<ActivityAttachment>, onOpenUrl: (Strin
                     modifier = Modifier
                         .size(96.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .clickable { onOpenUrl(image.url) },
+                        .clickable { onAttachment(image) },
                 )
             }
         }
@@ -187,7 +187,7 @@ private fun Attachments(attachments: List<ActivityAttachment>, onOpenUrl: (Strin
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onOpenUrl(file.url) }
+                .clickable { onAttachment(file) }
                 .padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
