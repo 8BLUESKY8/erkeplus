@@ -13,8 +13,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,6 +40,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -122,6 +127,8 @@ fun SignScanScreen(
     var submittedAction by remember { mutableStateOf<SignAction?>(null) }
     var showPaste by remember { mutableStateOf(false) }
     var pasteText by remember { mutableStateOf("") }
+    var captureTick by remember { mutableIntStateOf(0) }
+    var capturing by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -190,6 +197,15 @@ fun SignScanScreen(
                 PermissionState.GRANTED -> QrPreview(
                     active = ticket == null && outcome == null,
                     torch = torch,
+                    captureTick = captureTick,
+                    onCaptureResult = { text ->
+                        capturing = false
+                        if (text == null) {
+                            hint = "这张没解出来，靠近一点或点一下对焦再试"
+                        } else {
+                            accept(text, "still")
+                        }
+                    },
                     onDecoded = { text -> accept(text, "camera") },
                     onError = { message -> cameraError = message },
                     modifier = Modifier.fillMaxSize(),
@@ -239,13 +255,14 @@ fun SignScanScreen(
 
             // 取景框与提示
             if (permission == PermissionState.GRANTED && cameraError == null) {
-                ScanFrame(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(bottom = 60.dp)
-                        .fillMaxWidth(0.72f)
-                        .aspectRatio(1f),
-                )
+                // 取景框按可用空间算，横屏/矮屏也不会顶出画面
+                BoxWithConstraints(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val side = minOf(maxWidth * 0.72f, maxHeight * 0.5f)
+                    ScanFrame(modifier = Modifier.size(side).padding(bottom = 40.dp))
+                }
                 Text(
                     text = hint ?: "把活动现场的二维码放进框内",
                     color = if (hint == null) Color(0xE6FFFFFF) else Color(0xFFFFC46B),
@@ -253,8 +270,26 @@ fun SignScanScreen(
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 96.dp, start = 32.dp, end = 32.dp),
+                        .padding(bottom = 128.dp, start = 32.dp, end = 32.dp),
                 )
+                // 离得远、屏幕太小时预览分辨率不够，用全尺寸静帧兜底
+                TextButton(
+                    onClick = {
+                        if (!capturing) {
+                            capturing = true
+                            captureTick++
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 84.dp),
+                ) {
+                    Text(
+                        text = if (capturing) "正在拍…" else "扫不到？拍一张",
+                        color = Color(0xCCFFFFFF),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
 
             cameraError?.let { message ->
@@ -580,6 +615,8 @@ private fun ScanFrame(modifier: Modifier = Modifier) {
 private fun QrPreview(
     active: Boolean,
     torch: Boolean,
+    captureTick: Int,
+    onCaptureResult: (String?) -> Unit,
     onDecoded: (String) -> Unit,
     onError: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -612,13 +649,31 @@ private fun QrPreview(
     LaunchedEffect(active) { engine.setDecoding(active) }
     LaunchedEffect(torch) { engine.setTorch(torch) }
 
-    // 点一下对焦：画个短暂的对焦圈，告诉用户点到了哪里
+    // 双指缩放：远景扫码时靠它把码「拉近」，比单纯换个更大的预览还管用
+    var zoom by remember { mutableFloatStateOf(1f) }
     var focusPoint by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
     LaunchedEffect(focusPoint) {
         if (focusPoint != null) {
             delay(600)
             focusPoint = null
         }
+    }
+
+    // 屏幕方向变了就重开相机：显示方向和预览变换都得重算（activity 声明了 configChanges，
+    // 不重开的话画面会一直歪着）
+    val orientation = LocalConfiguration.current.orientation
+    var lastOrientation by remember { mutableIntStateOf(orientation) }
+    LaunchedEffect(orientation) {
+        if (orientation != lastOrientation) {
+            lastOrientation = orientation
+            engine.restart()
+        }
+    }
+    // 「拍一张」：外部按一次 +1，这里拍一张全尺寸静帧再解
+    val captureRef = remember { mutableStateOf<(String?) -> Unit>({}) }
+    SideEffect { captureRef.value = onCaptureResult }
+    LaunchedEffect(captureTick) {
+        if (captureTick > 0) engine.captureStill { text -> captureRef.value(text) }
     }
 
     Box(modifier = modifier) {
@@ -629,6 +684,15 @@ private fun QrPreview(
                     detectTapGestures { offset ->
                         focusPoint = offset
                         engine.focusAt(offset.x, offset.y, size.width, size.height)
+                    }
+                }
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, _, gestureZoom, _ ->
+                        if (gestureZoom != 1f) {
+                            val next = (zoom * gestureZoom).coerceIn(1f, 8f)
+                            // 有些不支持变焦的机型会返回 false，这时不显示倍率
+                            if (engine.setZoom(next)) zoom = next
+                        }
                     }
                 },
             factory = { ctx ->
@@ -671,6 +735,16 @@ private fun QrPreview(
                 )
                 drawCircle(color = Color(0xCCFFFFFF), radius = 3.dp.toPx(), center = point)
             }
+        }
+        if (zoom > 1.05f) {
+            Text(
+                text = "×%.1f".format(zoom),
+                color = Color(0xCCFFFFFF),
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 20.dp, top = 104.dp),
+            )
         }
     }
 }

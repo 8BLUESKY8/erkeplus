@@ -48,8 +48,13 @@ class QrCamera(private val context: Context, private val onDecoded: (String) -> 
     @Volatile private var accepting = false
     @Volatile private var desired = true
     @Volatile private var lastAttempt = 0L
+    private var frameBuffer: ByteArray? = null
     private val firstFrameLogged = java.util.concurrent.atomic.AtomicBoolean(false)
     private var continuousFocus = false
+    private var rotation = 90
+    private var swapped = true
+    /** 解码节流间隔：按实测解码耗时自适应，慢机器自动降频。 */
+    @Volatile private var decodeIntervalMs = 220L
     private val focusHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     /**
@@ -73,30 +78,43 @@ class QrCamera(private val context: Context, private val onDecoded: (String) -> 
         }
         return try {
             val params = cam.parameters
-            params.previewFormat = ImageFormat.NV21
+            // 预览格式：绝大多数机器支持 NV21；不支持时保留默认（解 Y 平面两者都成立）
+            runCatching { params.previewFormat = ImageFormat.NV21 }
             val viewWidth = texture.width.takeIf { it > 0 } ?: 1080
             val viewHeight = texture.height.takeIf { it > 0 } ?: 1920
             val size = choosePreviewSize(params, viewWidth, viewHeight)
             params.setPreviewSize(size.width, size.height)
             setUpFocus(cam, params)
             cam.parameters = params
-            // 竖屏应用固定 90°；预览被转正后，表面上的内容宽高互换
-            cam.setDisplayOrientation(90)
+            // 方向按摄像头信息与当前屏幕旋转算，不写死 90°：横屏/平板/异形屏都要对
+            rotation = computeDisplayOrientation(context)
+            swapped = rotation % 180 != 0
+            cam.setDisplayOrientation(rotation)
             cam.setPreviewTexture(texture.surfaceTexture)
             previewWidth = size.width
             previewHeight = size.height
             // 整幅画面都显示（留黑边），不再放大裁切：裁切会让视野变窄，看着像贴到屏幕上
-            applyFitCenter(texture, size.width, size.height)
+            applyFitCenter(texture)
             cam.startPreview()
             accepting = desired
             cam.setPreviewCallback { data, _ -> onFrame(data) }
             camera = cam
             if (torchOn) applyTorch(cam, true)
             startPeriodicFocus(cam)
+            val previewSizes = runCatching {
+                params.supportedPreviewSizes.orEmpty()
+                    .joinToString(",") { "${it.width}x${it.height}" }
+            }.getOrDefault("")
+            val pictureSizes = runCatching {
+                params.supportedPictureSizes.orEmpty()
+                    .take(6)
+                    .joinToString(",") { "${it.width}x${it.height}" }
+            }.getOrDefault("")
             AppLog.d(
                 "sign",
                 "camera open size=${size.width}x${size.height} view=${viewWidth}x$viewHeight " +
-                    "continuousFocus=$continuousFocus",
+                    "continuousFocus=$continuousFocus maxZoom=${params.maxZoom} " +
+                    "previews=$previewSizes pictures=$pictureSizes",
             )
             null
         } catch (t: Throwable) {
@@ -149,8 +167,7 @@ class QrCamera(private val context: Context, private val onDecoded: (String) -> 
     fun focusAt(x: Float, y: Float, viewWidth: Int, viewHeight: Int) {
         val cam = camera ?: return
         if (viewWidth <= 0 || viewHeight <= 0) return
-        val surfaceWidth = previewHeight.toFloat()
-        val surfaceHeight = previewWidth.toFloat()
+        val (surfaceWidth, surfaceHeight) = surfaceSize()
         if (surfaceWidth <= 0f || surfaceHeight <= 0f) return
         // 预览按「完整显示」摆放：先算缩放和偏移，再把触点换算回表面坐标
         val scale = minOf(viewWidth / surfaceWidth, viewHeight / surfaceHeight)
@@ -196,6 +213,13 @@ class QrCamera(private val context: Context, private val onDecoded: (String) -> 
         attach(texture)
     }
 
+    /** 屏幕方向变了：重新算一遍显示方向与预览变换。 */
+    fun restart() {
+        val texture = view ?: return
+        if (!texture.isAvailable) return
+        attach(texture)
+    }
+
     fun detach() {
         pause()
         view = null
@@ -210,6 +234,123 @@ class QrCamera(private val context: Context, private val onDecoded: (String) -> 
         torchOn = on
         val cam = camera ?: return false
         return applyTorch(cam, on)
+    }
+
+    /**
+     * 变焦：把屏幕上的双指缩放映射到相机档位。
+     *
+     * 远景扫码时这一下最有效——变焦后同样的预览分辨率只覆盖更窄的视野，
+     * 码上的像素密度直接上升，而码本身还留在画面里。
+     */
+    fun setZoom(factor: Float): Boolean {
+        val cam = camera ?: return false
+        return runCatching {
+            val params = cam.parameters
+            if (!params.isZoomSupported) return@runCatching false
+            val ratios = params.zoomRatios ?: return@runCatching false
+            if (ratios.isEmpty()) return@runCatching false
+            val target = (factor.coerceIn(1f, 8f) * 100f).toInt()
+            var best = 0
+            var bestDiff = Int.MAX_VALUE
+            ratios.forEachIndexed { index, ratio ->
+                val diff = kotlin.math.abs(ratio - target)
+                if (diff < bestDiff) {
+                    bestDiff = diff
+                    best = index
+                }
+            }
+            params.zoom = best.coerceIn(0, params.maxZoom)
+            cam.parameters = params
+            AppLog.d("sign", "zoom factor=$factor index=$best/${params.maxZoom} ratio=${ratios.getOrNull(best)}")
+            true
+        }.getOrDefault(false)
+    }
+
+    /**
+     * 拍一张全尺寸静帧再解。
+     *
+     * 预览最多给到 2400×1080，座位离大屏十几米时码上像素本来就不够；
+     * 静帧是 4096×3072，等于多出 4 倍边长，是「真的很远」时唯一靠谱的兜底。
+     */
+    fun captureStill(onResult: (String?) -> Unit) {
+        val cam = camera ?: return onResult(null)
+        val finished = java.util.concurrent.atomic.AtomicBoolean(false)
+        fun finish(text: String?) {
+            if (!finished.compareAndSet(false, true)) return
+            restartPreview()
+            onResult(text)
+        }
+        runCatching {
+            cam.takePicture(null, null) { data, _ ->
+                val text = runCatching { decodeJpeg(data) }.getOrNull()
+                finish(text)
+            }
+        }.onFailure {
+            AppLog.d("sign", "still failed ${it.javaClass.simpleName}")
+            finish(null)
+        }
+        // 个别机型 jpeg 回调可能不来，超时后恢复预览
+        focusHandler.postDelayed({ finish(null) }, 8000)
+    }
+
+    private fun restartPreview() {
+        val cam = camera ?: return
+        runCatching { cam.startPreview() }
+        runCatching { cam.setPreviewCallback { data, _ -> onFrame(data) } }
+        accepting = desired
+    }
+
+    /**
+     * 全尺寸 JPEG → 先整幅降采样解一次（快），不中再解**中心区域的原分辨率**一次。
+     *
+     * 远处的小码往往只有几十像素，整幅缩到 2048 宽后又糊了；中心区域按原分辨率解，
+     * 等于对静帧做了一次 2 倍数字变焦，才是「真的很远」时真正管用的那一下。
+     * 内存上两趟加起来峰值约 25MB，比直接解 12MP 位图省一半。
+     */
+    private fun decodeJpeg(data: ByteArray): String? {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        runCatching { android.graphics.BitmapFactory.decodeByteArray(data, 0, data.size, bounds) }
+        val width = bounds.outWidth
+        val height = bounds.outHeight
+        if (width <= 0 || height <= 0) return null
+
+        var sample = 1
+        while (maxOf(width, height) / sample > 2600) sample *= 2
+        val full = runCatching {
+            android.graphics.BitmapFactory.decodeByteArray(
+                data,
+                0,
+                data.size,
+                android.graphics.BitmapFactory.Options().apply { inSampleSize = sample },
+            )
+        }.getOrNull() ?: return null
+        val whole = runCatching { decodeQrFromBitmap(full) }.getOrNull()
+        AppLog.d(
+            "sign",
+            "still shot ${width}x$height sample=$sample decoded=${full.width}x${full.height} hit=${whole != null}",
+        )
+        full.recycle()
+        if (whole != null) return whole
+
+        // 第二趟：中心 50% 区域按原分辨率解
+        return runCatching {
+            val decoder = android.graphics.BitmapRegionDecoder.newInstance(data, 0, data.size, false)
+            val rect = android.graphics.Rect(width / 4, height / 4, width * 3 / 4, height * 3 / 4)
+            var regionSample = 1
+            while (maxOf(rect.width(), rect.height()) / regionSample > 2600) regionSample *= 2
+            val region = decoder.decodeRegion(
+                rect,
+                android.graphics.BitmapFactory.Options().apply { inSampleSize = regionSample },
+            )
+            decoder.recycle()
+            val hit = region?.let { runCatching { decodeQrFromBitmap(it) }.getOrNull() }
+            AppLog.d(
+                "sign",
+                "still center ${rect.width()}x${rect.height()} sample=$regionSample hit=${hit != null}",
+            )
+            region?.recycle()
+            hit
+        }.getOrNull()
     }
 
     private fun applyTorch(cam: Camera, on: Boolean): Boolean = runCatching {
@@ -236,30 +377,36 @@ class QrCamera(private val context: Context, private val onDecoded: (String) -> 
 
     private fun onFrame(data: ByteArray?) {
         if (data == null || !accepting || busy) return
-        val expected = previewWidth * previewHeight * 3 / 2
-        if (firstFrameLogged.compareAndSet(false, true)) {
-            AppLog.d(
-                "sign",
-                "camera frame bytes=${data.size} expected=$expected size=${previewWidth}x$previewHeight",
-            )
-        }
-        if (data.size < previewWidth * previewHeight) {
-            // 帧长和声明尺寸对不上时直接跳过，避免把错位的缓冲当图像解出乱码
-            if (firstFrameLogged.get()) {
-                AppLog.d("sign", "camera frame too short bytes=${data.size} expected=$expected")
-                firstFrameLogged.set(false)
+        val width = previewWidth
+        val height = previewHeight
+        val lumaSize = width * height
+        if (data.size < lumaSize) {
+            if (firstFrameLogged.compareAndSet(false, true)) {
+                AppLog.d("sign", "camera frame too short bytes=${data.size} need=$lumaSize")
             }
             return
         }
         val now = SystemClock.elapsedRealtime()
-        if (now - lastAttempt < 120) return
+        if (now - lastAttempt < decodeIntervalMs) return
         lastAttempt = now
         busy = true
-        val width = previewWidth
-        val height = previewHeight
-        // 预览回调复用同一块缓冲，必须拷一份再交给后台线程
-        val frame = data.copyOf()
+        if (firstFrameLogged.compareAndSet(false, true)) {
+            AppLog.d(
+                "sign",
+                "camera frame bytes=${data.size} size=${width}x$height",
+            )
+        }
+        // 只要 Y 平面（灰度），并复用同一块缓冲：2400×1080 的帧每 220ms 拷一次，
+        // 每次都新分配会明显增加 GC 压力
+        var buffer = frameBuffer
+        if (buffer == null || buffer.size != lumaSize) {
+            buffer = ByteArray(lumaSize)
+            frameBuffer = buffer
+        }
+        System.arraycopy(data, 0, buffer, 0, lumaSize)
+        val frame = buffer
         worker.execute {
+            val started = SystemClock.elapsedRealtime()
             try {
                 val source = PlanarYUVLuminanceSource(frame, width, height, 0, 0, width, height, false)
                 val text = reader.decodeWithState(BinaryBitmap(HybridBinarizer(source)))?.text
@@ -272,41 +419,62 @@ class QrCamera(private val context: Context, private val onDecoded: (String) -> 
             } catch (_: Throwable) {
                 // zxing 偶尔抛格式/校验异常，忽略继续扫
             } finally {
+                val cost = SystemClock.elapsedRealtime() - started
+                adaptInterval(cost)
                 busy = false
             }
         }
     }
 
+    /** 慢机器上别死磕高帧率：解码越慢，节流间隔越长，省电也不卡预览。 */
+    private fun adaptInterval(costMs: Long) {
+        val next = when {
+            costMs > 350 -> 600L
+            costMs > 150 -> 350L
+            costMs > 80 -> 250L
+            else -> 180L
+        }
+        if (next != decodeIntervalMs) {
+            decodeIntervalMs = next
+            AppLog.d("sign", "decode ${costMs}ms → throttle ${next}ms size=${previewWidth}x$previewHeight")
+        }
+    }
+
     /**
-     * 选预览尺寸：优先「转正后的长宽比」接近屏幕的，且别太吃 CPU。
+     * 选预览尺寸：优先「转正后的长宽比」接近屏幕的，其次宁可大一点。
      *
-     * 之前固定挑最小的 640×480（4:3），竖屏下要裁掉两边才能铺满，视野被压窄一倍多，
-     * 看起来就像手机贴在码上。现在按屏幕比例挑，16:9 的 1280×720 在竖屏下最接近。
+     * 远距离扫码的瓶颈是「码上有多少像素」，所以只要比例对得上就尽量用大尺寸：
+     * 本机 2400×1080 与屏幕同为 2.22 比例，比 1280×576 多出近 4 倍像素，
+     * 又不会因为裁切而缩窄视野。上限卡在 2400×1080，再大就是白烧 CPU。
      */
     private fun choosePreviewSize(params: Camera.Parameters, viewWidth: Int, viewHeight: Int): Camera.Size {
         val sizes = params.supportedPreviewSizes.orEmpty()
         val viewAspect = viewWidth.toFloat() / viewHeight.toFloat()
         val candidates = sizes.filter { it.width >= it.height }
             .ifEmpty { sizes }
-            .filter { it.width * it.height <= 1920 * 1080 }
+            .filter { it.width.toLong() * it.height <= 2400L * 1080L }
             .ifEmpty { sizes }
-        return candidates.minByOrNull { size ->
-            // 转正后长宽比 = 宽/高 的倒数
+        val matching = candidates.filter { size ->
             val rotatedAspect = size.height.toFloat() / size.width.toFloat()
-            val aspectPenalty = kotlin.math.abs(rotatedAspect - viewAspect) * 100f
-            // 面积小一点省电，作为次要因素
-            val areaPenalty = (size.width * size.height).toFloat() / (1920f * 1080f)
-            aspectPenalty + areaPenalty
+            kotlin.math.abs(rotatedAspect - viewAspect) <= viewAspect * 0.02f
+        }
+        if (matching.isNotEmpty()) {
+            return matching.maxByOrNull { it.width.toLong() * it.height }
+                ?: matching.first()
+        }
+        // 没有比例完全对得上的，就挑最接近的（宁可留黑边，不裁切）
+        return candidates.minByOrNull { size ->
+            val rotatedAspect = size.height.toFloat() / size.width.toFloat()
+            kotlin.math.abs(rotatedAspect - viewAspect)
         } ?: candidates.first()
     }
 
     /** 整幅画面铺进 View，不做裁切：宁可留黑边，也不要无故放大。 */
-    private fun applyFitCenter(view: TextureView, width: Int, height: Int) {
+    private fun applyFitCenter(view: TextureView) {
         val viewWidth = view.width.toFloat()
         val viewHeight = view.height.toFloat()
         if (viewWidth <= 0f || viewHeight <= 0f) return
-        val surfaceWidth = height.toFloat()
-        val surfaceHeight = width.toFloat()
+        val (surfaceWidth, surfaceHeight) = surfaceSize()
         val scale = minOf(viewWidth / surfaceWidth, viewHeight / surfaceHeight)
         view.setTransform(
             Matrix().apply {
@@ -318,6 +486,37 @@ class QrCamera(private val context: Context, private val onDecoded: (String) -> 
             },
         )
     }
+
+    /** 旋转 90/270 时预览表面宽高互换。 */
+    private fun surfaceSize(): Pair<Float, Float> = if (swapped) {
+        previewHeight.toFloat() to previewWidth.toFloat()
+    } else {
+        previewWidth.toFloat() to previewHeight.toFloat()
+    }
+
+    /**
+     * 显示方向：按后置/前置摄像头方向与屏幕旋转算，不写死 90°。
+     * 换台手机、横过来拿、平板，都能摆正。
+     */
+    private fun computeDisplayOrientation(context: Context): Int = runCatching {
+        val info = Camera.CameraInfo()
+        Camera.getCameraInfo(0, info)
+        val displayRotation = runCatching {
+            @Suppress("DEPRECATION")
+            val manager = context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+            when (manager.defaultDisplay.rotation) {
+                android.view.Surface.ROTATION_90 -> 90
+                android.view.Surface.ROTATION_180 -> 180
+                android.view.Surface.ROTATION_270 -> 270
+                else -> 0
+            }
+        }.getOrDefault(0)
+        if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
+            (360 - (info.orientation + displayRotation) % 360) % 360
+        } else {
+            (info.orientation - displayRotation + 360) % 360
+        }
+    }.getOrDefault(90)
 }
 
 /** 从一张图片里解二维码，用于「从相册选」与调试入口。 */
