@@ -68,6 +68,7 @@ import gitee.leolin_me.erkepp.data.ActionOutcome
 import gitee.leolin_me.erkepp.data.ActivityAttachment
 import gitee.leolin_me.erkepp.data.ActivityDetail
 import gitee.leolin_me.erkepp.data.ActivityNotice
+import gitee.leolin_me.erkepp.data.SignRecord
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.toUserMessage
 import gitee.leolin_me.erkepp.ui.formatHours
@@ -102,6 +103,8 @@ fun ActivityDetailScreen(
     onEnroll: suspend (Long) -> ActionOutcome = { ActionOutcome(false, -1, "未接线") },
     /** 取消报名：第二个参数是理由（报名已通过时必填）。 */
     onCancelEnroll: suspend (Long, String) -> ActionOutcome = { _, _ -> ActionOutcome(false, -1, "未接线") },
+    /** 打卡记录：官方 `activity/sign/one/list`。 */
+    loadSignHistory: suspend (Long) -> List<SignRecord> = { emptyList() },
     /** 外部让详情重新拉一次（例如刚签到完）。 */
     refreshKey: Int = 0,
     /** 离线沙盒：直接用这份数据渲染，跳过网络与公告。 */
@@ -124,6 +127,10 @@ fun ActivityDetailScreen(
     var cancelReason by remember(activityId) { mutableStateOf("") }
     var actionBusy by remember(activityId) { mutableStateOf(false) }
     var actionResult by remember(activityId) { mutableStateOf<ActionOutcome?>(null) }
+    // 打卡记录
+    var showHistory by remember(activityId) { mutableStateOf(false) }
+    var historyRecords by remember(activityId) { mutableStateOf<List<SignRecord>?>(null) }
+    var historyLoading by remember(activityId) { mutableStateOf(false) }
     val actionScope = rememberCoroutineScope()
 
     fun runAction(block: suspend () -> ActionOutcome) {
@@ -221,6 +228,16 @@ fun ActivityDetailScreen(
                 onCancelEnroll = {
                     cancelReason = ""
                     showCancelConfirm = true
+                },
+                onOpenSignHistory = {
+                    showHistory = true
+                    if (historyRecords == null && !historyLoading) {
+                        historyLoading = true
+                        actionScope.launch {
+                            historyRecords = runCatching { loadSignHistory(activityId) }.getOrDefault(emptyList())
+                            historyLoading = false
+                        }
+                    }
                 },
                 onOpenSignScan = {
                     val current = detail!!
@@ -432,6 +449,64 @@ fun ActivityDetailScreen(
             },
         )
     }
+
+    // 打卡记录：官方「打卡记录」那个入口，只读
+    if (showHistory) {
+        AlertDialog(
+            onDismissRequest = { showHistory = false },
+            title = { Text("打卡记录") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    val records = historyRecords
+                    when {
+                        historyLoading -> Text(
+                            text = "正在读取…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        records.isNullOrEmpty() -> Text(
+                            text = "暂无签到签退记录！",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        else -> records.forEach { record ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = record.label,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (record.action == "签到") {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    text = signTimeText(record.time),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showHistory = false }) { Text("知道了") }
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -448,6 +523,7 @@ private fun DetailContent(
     onOpenAttachment: (ActivityAttachment) -> Unit,
     onEnroll: () -> Unit,
     onCancelEnroll: () -> Unit,
+    onOpenSignHistory: () -> Unit,
     onOpenSignScan: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -526,6 +602,7 @@ private fun DetailContent(
                         detail = detail,
                         signWayNames = signWayNames,
                         onScan = onOpenSignScan,
+                        onOpenHistory = onOpenSignHistory,
                     )
                 }
 
@@ -845,6 +922,7 @@ private fun SignCard(
     detail: ActivityDetail,
     signWayNames: Map<Int, String>,
     onScan: () -> Unit,
+    onOpenHistory: () -> Unit,
 ) {
     val wayNames = detail.signWayIds.map { id -> signWayNames[id] ?: "方式 $id" }
     val hasQrWay = detail.signWayIds.any { it == 1 || it == 2 }
@@ -886,6 +964,14 @@ private fun SignCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        if (detail.applyStatus == 2 && detail.attendanceType != 4) {
+            TextButton(
+                onClick = onOpenHistory,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("打卡记录")
+            }
         }
     }
 }
@@ -1125,3 +1211,7 @@ private fun formatTime(millis: Long): String =
 
 private fun shortDate(millis: Long): String =
     SimpleDateFormat("MM-dd", Locale.CHINA).format(Date(millis))
+
+/** 打卡记录里的时间：到分钟就够。 */
+private fun signTimeText(millis: Long): String =
+    SimpleDateFormat("MM-dd HH:mm", Locale.CHINA).format(Date(millis))

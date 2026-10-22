@@ -108,6 +108,10 @@ fun SignScanScreen(
     resolveName: suspend (Long) -> String? = { null },
     /** 离线沙盒：不会去查活动名，也不联网。 */
     sandbox: Boolean = false,
+    /** 顶部标题；空串时按 sandbox 自动取。 */
+    title: String = "",
+    /** 不是签到码的文本交给它处理；返回 true 表示已处理（本页会被关掉）。 */
+    onOtherText: ((String) -> Boolean)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -143,6 +147,8 @@ fun SignScanScreen(
     fun accept(text: String, source: String) {
         val parsed = parseSignCode(text)
         if (parsed == null) {
+            // 首页扫一扫还要兼管活动分享码、组织码；交给外面分流
+            if (onOtherText?.invoke(text) == true) return
             hint = "这不是活动签到码"
             AppLog.d("sign", "reject source=$source text=${text.take(80)}")
             return
@@ -326,7 +332,7 @@ fun SignScanScreen(
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (sandbox) "扫码签到（沙盒）" else "扫码签到",
+                        text = title.ifBlank { if (sandbox) "扫码签到（沙盒）" else "扫码签到" },
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,

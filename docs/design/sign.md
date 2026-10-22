@@ -54,6 +54,30 @@ POST `activity/sign/in-out {id, userId, type, sp, signSwitch?}`，`userId` 与 `
 - **我的签到码**（生成 `qutuo://waitSign` 给管理员扫）：需要二维码生成与动态刷新，
   等确认你们活动用「管理员扫学生」再加。
 
+## 首页「扫一扫」（v0.7.2）
+
+官方主页右上角那个扫码是**通用入口**，扫到什么都往 `window.BackScan` 里丢，再按内容分流。
+这里照做，入口在发现页顶部右侧：
+
+| 扫到的东西 | 后续 |
+| --- | --- |
+| `qutuo://sign?…` / `qutuo://waitSign?…` | 进确认框，走与详情页同一套签到逻辑 |
+| `…?sourceName=schActivityCode@Xj&activityid=<id>` | 解析出活动 id，直接打开详情 |
+| 含 `joinOrganization` 的组织码 | 提示「组织码暂不支持，请到官方页面加入」 |
+| 其它 | 「这不是活动签到码」 |
+
+分流规则在 `data/ScanRouter.kt`，有单元测试兜着（签到码里也有 `activityId=`，
+不能被误判成分享码）。
+
+## 打卡记录（v0.7.2）
+
+签到卡片里的「打卡记录」，对应官方右上角菜单的同名项：
+
+- 请求：`POST /activity/sign/one/list {userId, activityId}`
+- 字段：`type`（1 签到、其它签退）、`signTime`（毫秒）、`isSupplement`（1 补签）
+- 入口条件与官方一致：`applyStatus=2` 且 `attendanceType != 4`
+- 空列表显示官方的原话「暂无签到签退记录！」
+
 ## 离线沙盒（v0.6.8，开发者模式）
 
 现场只有一次机会，所以先在本机把整条链路跑一遍。

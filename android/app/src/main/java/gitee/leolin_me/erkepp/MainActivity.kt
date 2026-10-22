@@ -59,6 +59,7 @@ import gitee.leolin_me.erkepp.data.DeviceId
 import gitee.leolin_me.erkepp.data.PasswordResetRepository
 import gitee.leolin_me.erkepp.data.SchoolRepository
 import gitee.leolin_me.erkepp.data.SchoolStore
+import gitee.leolin_me.erkepp.data.ScanRouter
 import gitee.leolin_me.erkepp.data.SessionStore
 import gitee.leolin_me.erkepp.data.WebPrefill
 import gitee.leolin_me.erkepp.ui.DisclaimerDialog
@@ -183,6 +184,7 @@ class MainActivity : ComponentActivity() {
                 var attachmentSheet by remember { mutableStateOf<ActivityAttachment?>(null) }
                 var homeworkEditId by remember { mutableStateOf<Long?>(null) }
                 var signScan by remember { mutableStateOf<SignTarget?>(null) }
+                var showHomeScan by remember { mutableStateOf(false) }
                 var presetSignText by remember { mutableStateOf<String?>(null) }
                 // 离线签到沙盒：假的详情数据 + 是否走本地提交
                 var sandboxConfig by remember { mutableStateOf(SignSandboxStore.load(this)) }
@@ -257,6 +259,9 @@ class MainActivity : ComponentActivity() {
                         "homework_list" -> activityActions.homeworkList(current.token)
                         "sign_dict" -> activityRepository.signWays(current.token)
                         "sign_records" -> activityActions.mySignRecords(current.token)
+                        "sign_history" -> if (detailId > 0) {
+                            activityActions.signHistoryRaw(current.token, detailId, current.profile.userId)
+                        }
                         "scan_image" -> {
                             val file = java.io.File(activity.filesDir, "qr.png")
                             val text = if (file.exists()) {
@@ -509,6 +514,7 @@ class MainActivity : ComponentActivity() {
                                                 settingsSection = SettingsSection.BLOCK_RULES
                                                 tab = MainTab.SETTINGS
                                             },
+                                            onOpenScan = { showHomeScan = true },
                                         )
 
                                         MainTab.PROFILE -> ProfileScreen(
@@ -575,6 +581,49 @@ class MainActivity : ComponentActivity() {
 
                             // 覆盖层按「谁压谁」的顺序写：先出现的在下，后出现的在上
                             // 我的活动、屏蔽规则、附件 → 详情 → 作业 → 图片预览
+
+                            // 首页扫一扫：签到码直接走签到流程，活动分享码打开详情
+                            if (showHomeScan) {
+                                SecondaryPage(onBack = { showHomeScan = false }) {
+                                    SignScanScreen(
+                                        target = SignTarget(0L, "", 0),
+                                        title = "扫一扫",
+                                        developerMode = preferences.developerMode,
+                                        submit = { ticket -> activityActions.sign(current.token, ticket) },
+                                        resolveName = { id ->
+                                            runCatching {
+                                                activityRepository.detail(current.token, id).name
+                                            }.getOrNull()
+                                        },
+                                        onOtherText = { text ->
+                                            val id = ScanRouter.activityIdFromShareLink(text)
+                                            when {
+                                                id != null -> {
+                                                    showHomeScan = false
+                                                    detailActivityId = id
+                                                    true
+                                                }
+
+                                                ScanRouter.isOrganizationCode(text) -> {
+                                                    Toast.makeText(
+                                                        activity,
+                                                        "组织码暂不支持，请到官方页面加入",
+                                                        Toast.LENGTH_SHORT,
+                                                    ).show()
+                                                    false
+                                                }
+
+                                                else -> false
+                                            }
+                                        },
+                                        onBack = { showHomeScan = false },
+                                        onSigned = {
+                                            Toast.makeText(activity, "签到已提交", Toast.LENGTH_SHORT).show()
+                                        },
+                                    )
+                                }
+                            }
+
                             if (showMyActivities) {
                                 SecondaryPage(onBack = { showMyActivities = false }) {
                                     MyActivitiesScreen(
@@ -726,6 +775,9 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onCancelEnroll = { id, reason ->
                                             activityActions.cancelEnroll(current.token, id, reason)
+                                        },
+                                        loadSignHistory = { id ->
+                                            activityActions.signHistory(current.token, id, current.profile.userId)
                                         },
                                         refreshKey = detailRefreshTick,
                                     )

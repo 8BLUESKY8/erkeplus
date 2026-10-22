@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -108,6 +109,7 @@ fun DiscoverScreen(
     initialSearch: String = "",
     onOpenActivity: (Long) -> Unit,
     onOpenBlockRules: () -> Unit = {},
+    onOpenScan: () -> Unit = {},
 ) {
     val categoriesEnabled = preferences.categoriesEnabled
     val showCategoryTags = preferences.showCategoryTags
@@ -409,9 +411,33 @@ fun DiscoverScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 8.dp, top = 12.dp),
+                .padding(start = 6.dp, end = 6.dp, top = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // 左：筛选（有生效条件时点一个小圆点）；中：搜索框；右：扫一扫
+            Box {
+                IconButton(onClick = { showFilterSheet = true }) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_tune),
+                        contentDescription = "筛选",
+                        tint = if (activeFilterCount > 0) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+                if (activeFilterCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 10.dp, end = 12.dp)
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                    )
+                }
+            }
             OutlinedTextField(
                 value = search,
                 onValueChange = { search = it },
@@ -423,22 +449,11 @@ fun DiscoverScreen(
                 singleLine = true,
                 shape = RoundedCornerShape(22.dp),
             )
-            IconButton(onClick = { showFilterSheet = true }) {
+            IconButton(onClick = onOpenScan) {
                 Icon(
-                    painter = painterResource(R.drawable.ic_tune),
-                    contentDescription = "筛选",
-                    tint = if (activeFilterCount > 0) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-            if (activeFilterCount > 0) {
-                Text(
-                    text = "$activeFilterCount",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    painter = painterResource(R.drawable.ic_scan),
+                    contentDescription = "扫一扫",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

@@ -172,6 +172,25 @@ class ActivityActions(private val api: ApiClient) {
         if (code != 0) error("提交失败：code=$code")
     }
 
+    /** 我的签到记录：官方 `POST activity/sign/one/list {userId, activityId}`。 */
+    suspend fun signHistoryRaw(token: String, activityId: Long, userId: Long): JsonElement? =
+        call("POST", "activity/sign/one/list", token, "activityId=$activityId userId=$userId") {
+            api.post(
+                path = "activity/sign/one/list",
+                params = buildJsonObject {
+                    put("activityId", JsonPrimitive(activityId))
+                    put("userId", JsonPrimitive(userId))
+                },
+                token = token,
+            )
+        }
+
+    /** 同上，转成领域对象（官方「打卡记录」列表）。 */
+    suspend fun signHistory(token: String, activityId: Long, userId: Long): List<SignRecord> {
+        val response = signHistoryRaw(token, activityId, userId) ?: return emptyList()
+        return parseSignRecords((response as JsonObject)["data"])
+    }
+
     // ---- 报名 / 取消报名：官方个人报名路径（团队报名暂不接）----
 
     /**

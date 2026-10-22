@@ -126,19 +126,25 @@ object SignSandboxStore {
  * 沙盒提交：造出与真实接口同形状的结果，并把整条链路写进日志（渠道 `[sign]`）。
  * **不发网络请求**。
  */
-suspend fun sandboxSubmit(config: SandboxConfig, ticket: SignTicket): SignOutcome {
+suspend fun sandboxSubmit(config: SandboxConfig, ticket: SignTicket): ActionOutcome {
     val started = System.currentTimeMillis()
     AppLog.d(
         "sign",
         "sandbox submit id=${ticket.activityId} type=${ticket.type} " +
             "signSwitch=${ticket.signSwitch} sp=${ticket.sp} userId=${ticket.userId} mode=${if (config.fail) "fail" else "ok"}",
     )
+    // 沙盒也要对得上号：码里是 #1、配置成 #2 却“成功”，那这套测试就没有意义
+    if (ticket.activityId != config.activityId) {
+        val message = "这串码不属于当前配置的活动（码里是 #${ticket.activityId}，配置是 #${config.activityId}）"
+        AppLog.d("sign", "sandbox reject: $message")
+        return ActionOutcome(false, 10002, message)
+    }
     delay(600)
     val elapsed = System.currentTimeMillis() - started
     val outcome = if (config.fail) {
-        SignOutcome(false, config.failCode, config.failMsg)
+        ActionOutcome(false, config.failCode, config.failMsg)
     } else {
-        SignOutcome(true, 0, "ok")
+        ActionOutcome(true, 0, "ok")
     }
     AppLog.d("sign", "sandbox submit result code=${outcome.code} msg=${outcome.message} elapsed=${elapsed}ms")
     return outcome
