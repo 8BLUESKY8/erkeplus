@@ -1,6 +1,6 @@
 package gitee.leolin_me.erkepp.ui.attachments
 
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -76,7 +76,12 @@ fun AttachmentsScreen(
     onCancelDownload: (String) -> Unit,
     onRetryDownload: (Downloads.Task) -> Unit,
 ) {
-    BackHandler(onBack = onBack)
+    // 回收站这一层自己接管返回：只回到附件页，不把整个页面退出；
+    // 附件页本身交给外层 SecondaryPage 的预测性返回。
+    PredictiveBackHandler(enabled = inTrash) { events ->
+        events.collect { }
+        onInTrashChange(false)
+    }
 
     var confirmTarget by remember { mutableStateOf<AttachmentStorage.LocalFile?>(null) }
     var toTrash by remember(deleteToTrash) { mutableStateOf(deleteToTrash) }

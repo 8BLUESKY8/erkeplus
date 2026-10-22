@@ -37,7 +37,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import gitee.leolin_me.erkepp.R
@@ -132,10 +134,23 @@ fun ImagePreviewScreen(
 private fun ZoomableImage(uri: Uri) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    var boxSize by remember { mutableStateOf(IntSize.Zero) }
+
+    // 放大后允许的位移上限：超出就夹住，避免图片被拖到屏幕外回不来
+    fun clamp(value: Offset, currentScale: Float, size: IntSize): Offset {
+        if (size.width == 0 || size.height == 0) return value
+        val maxX = size.width * (currentScale - 1f) / 2f
+        val maxY = size.height * (currentScale - 1f) / 2f
+        return Offset(
+            x = value.x.coerceIn(-maxX, maxX),
+            y = value.y.coerceIn(-maxY, maxY),
+        )
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .onSizeChanged { boxSize = it }
             .pointerInput(Unit) {
                 // 只有在「双指」或「已放大后的单指」时才消费事件；
                 // 1 倍时单指横划不消费，留给外层 Pager 翻页。
@@ -147,13 +162,17 @@ private fun ZoomableImage(uri: Uri) {
                         if (pressed == 0) break
                         if (pressed >= 2) {
                             scale = (scale * event.calculateZoom()).coerceIn(1f, 5f)
-                            if (scale > 1f) offset += event.calculatePan()
+                            if (scale > 1f) {
+                                offset = clamp(offset + event.calculatePan(), scale, boxSize)
+                            }
                             event.changes.forEach { it.consume() }
                         } else if (scale > 1f) {
-                            offset += event.calculatePan()
+                            offset = clamp(offset + event.calculatePan(), scale, boxSize)
                             event.changes.forEach { it.consume() }
                         }
                     }
+                    // 手势结束再夹一次：缩放过程中尺寸变了也要贴回边界
+                    offset = clamp(offset, scale, boxSize)
                 }
             }
             .pointerInput(Unit) {
@@ -164,6 +183,7 @@ private fun ZoomableImage(uri: Uri) {
                             offset = Offset.Zero
                         } else {
                             scale = 2.5f
+                            offset = Offset.Zero
                         }
                     },
                 )
