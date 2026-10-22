@@ -17,6 +17,7 @@ import com.google.zxing.NotFoundException
 import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
+import gitee.leolin_me.erkepp.AppLog
 import java.util.concurrent.Executors
 
 /**
@@ -47,6 +48,7 @@ class QrCamera(private val context: Context, private val onDecoded: (String) -> 
     @Volatile private var accepting = false
     @Volatile private var desired = true
     @Volatile private var lastAttempt = 0L
+    private val firstFrameLogged = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /**
      * 只控制「要不要解码」，不动相机：扫码弹确认框时预览仍然亮着，
@@ -147,6 +149,21 @@ class QrCamera(private val context: Context, private val onDecoded: (String) -> 
 
     private fun onFrame(data: ByteArray?) {
         if (data == null || !accepting || busy) return
+        val expected = previewWidth * previewHeight * 3 / 2
+        if (firstFrameLogged.compareAndSet(false, true)) {
+            AppLog.d(
+                "sign",
+                "camera frame bytes=${data.size} expected=$expected size=${previewWidth}x$previewHeight",
+            )
+        }
+        if (data.size < previewWidth * previewHeight) {
+            // 帧长和声明尺寸对不上时直接跳过，避免把错位的缓冲当图像解出乱码
+            if (firstFrameLogged.get()) {
+                AppLog.d("sign", "camera frame too short bytes=${data.size} expected=$expected")
+                firstFrameLogged.set(false)
+            }
+            return
+        }
         val now = SystemClock.elapsedRealtime()
         if (now - lastAttempt < 120) return
         lastAttempt = now

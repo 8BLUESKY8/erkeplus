@@ -46,7 +46,10 @@ import coil.ImageLoader
 import coil.util.DebugLogger
 import gitee.leolin_me.erkepp.data.ActivityActions
 import gitee.leolin_me.erkepp.data.ActivityAttachment
+import gitee.leolin_me.erkepp.data.ActivityDetail
 import gitee.leolin_me.erkepp.data.ActivityRepository
+import gitee.leolin_me.erkepp.data.SignSandboxStore
+import gitee.leolin_me.erkepp.data.sandboxSubmit
 import gitee.leolin_me.erkepp.data.AttachmentStorage
 import gitee.leolin_me.erkepp.data.Downloads
 import gitee.leolin_me.erkepp.data.ApiClient
@@ -75,6 +78,8 @@ import gitee.leolin_me.erkepp.ui.login.ForgotPasswordScreen
 import gitee.leolin_me.erkepp.ui.login.LoginScreen
 import gitee.leolin_me.erkepp.ui.school.SchoolPickerScreen
 import gitee.leolin_me.erkepp.ui.settings.BlockRulesScreen
+import gitee.leolin_me.erkepp.ui.settings.SignLogScreen
+import gitee.leolin_me.erkepp.ui.settings.SignSandboxScreen
 import gitee.leolin_me.erkepp.ui.settings.SettingsScreen
 import gitee.leolin_me.erkepp.ui.settings.SettingsSection
 import gitee.leolin_me.erkepp.ui.sign.SignScanScreen
@@ -179,6 +184,10 @@ class MainActivity : ComponentActivity() {
                 var homeworkEditId by remember { mutableStateOf<Long?>(null) }
                 var signScan by remember { mutableStateOf<SignTarget?>(null) }
                 var presetSignText by remember { mutableStateOf<String?>(null) }
+                // 离线签到沙盒：假的详情数据 + 是否走本地提交
+                var sandboxConfig by remember { mutableStateOf(SignSandboxStore.load(this)) }
+                var sandboxDetail by remember { mutableStateOf<ActivityDetail?>(null) }
+                var signScanSandbox by remember { mutableStateOf(false) }
                 // 签到成功后让详情重拉一次，及时显示「已签到」
                 var detailRefreshTick by remember { mutableIntStateOf(0) }
                 var attachmentsInTrash by remember { mutableStateOf(false) }
@@ -248,25 +257,6 @@ class MainActivity : ComponentActivity() {
                         "homework_list" -> activityActions.homeworkList(current.token)
                         "sign_dict" -> activityRepository.signWays(current.token)
                         "sign_records" -> activityActions.mySignRecords(current.token)
-                        // 只对不存在的活动（id=1）发两次签到请求，确认请求体形状与 sp 语义，
-                        // 不会碰任何真实活动与真实用户
-                        "sign_probe" -> {
-                            val base = SignTicket(
-                                activityId = 1L,
-                                userId = "0",
-                                sp = "1",
-                                type = 2,
-                                signSwitch = 1,
-                                raw = "probe-fake",
-                            )
-                            val stale = activityActions.sign(current.token, base)
-                            val fresh = activityActions.sign(
-                                current.token,
-                                base.copy(sp = System.currentTimeMillis().toString()),
-                            )
-                            AppLog.d("probe", "sign_probe stale=$stale")
-                            AppLog.d("probe", "sign_probe fresh=$fresh")
-                        }
                         "scan_image" -> {
                             val file = java.io.File(activity.filesDir, "qr.png")
                             val text = if (file.exists()) {
@@ -313,6 +303,36 @@ class MainActivity : ComponentActivity() {
                             attachmentsVisible = true
                         }
                         "my_activities" -> showMyActivities = true
+                        "sandbox" -> sandboxDetail = sandboxConfig.toDetail()
+                        // 沙盒 + 真相机：扫屏幕上的二维码（不带预设文本）
+                        "sandbox_camera" -> {
+                            sandboxConfig = SignSandboxStore.load(activity)
+                            sandboxDetail = sandboxConfig.toDetail()
+                            signScanSandbox = true
+                            signScan = SignTarget(
+                                activityId = sandboxConfig.activityId,
+                                activityName = sandboxConfig.name,
+                                signSwitch = sandboxConfig.signSwitch,
+                            )
+                        }
+                        // 沙盒整链路：假详情 → 扫码页（文本取自 files/qr.png）
+                        "sandbox_scan" -> {
+                            sandboxConfig = SignSandboxStore.load(activity)
+                            sandboxDetail = sandboxConfig.toDetail()
+                            signScanSandbox = true
+                            signScan = SignTarget(
+                                activityId = sandboxConfig.activityId,
+                                activityName = sandboxConfig.name,
+                                signSwitch = sandboxConfig.signSwitch,
+                            )
+                            val qrFile = java.io.File(activity.filesDir, "qr.png")
+                            presetSignText = if (qrFile.exists()) {
+                                android.graphics.BitmapFactory.decodeFile(qrFile.absolutePath)
+                                    ?.let { decodeQrFromBitmap(it) }
+                            } else {
+                                null
+                            }
+                        }
                         "sign_scan" -> if (detailId > 0) {
                             val loaded = runCatching { activityRepository.detail(current.token, detailId) }.getOrNull()
                             signScan = SignTarget(detailId, loaded?.name.orEmpty(), loaded?.signSwitch ?: 0)
@@ -575,6 +595,51 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
+                            // 签到沙盒：配置离线假活动（只在开发者模式下能进）
+                            if (settingsSection == SettingsSection.SIGN_SANDBOX) {
+                                SecondaryPage(onBack = { settingsSection = SettingsSection.ROOT }) {
+                                    SignSandboxScreen(
+                                        config = sandboxConfig,
+                                        onConfigChange = { updated ->
+                                            sandboxConfig = updated
+                                            SignSandboxStore.save(activity, updated)
+                                        },
+                                        onOpenDetail = { sandboxDetail = sandboxConfig.toDetail() },
+                                        onBack = { settingsSection = SettingsSection.ROOT },
+                                    )
+                                }
+                            }
+
+                            // 签到日志：现场出问题能一键复制带回来
+                            if (settingsSection == SettingsSection.SIGN_LOG) {
+                                SecondaryPage(onBack = { settingsSection = SettingsSection.ROOT }) {
+                                    SignLogScreen(onBack = { settingsSection = SettingsSection.ROOT })
+                                }
+                            }
+
+                            // 沙盒的假详情页：不联网，底部动作条也隐藏
+                            val fakeDetail = sandboxDetail
+                            if (fakeDetail != null) {
+                                SecondaryPage(onBack = { sandboxDetail = null }) {
+                                    ActivityDetailScreen(
+                                        token = current.token,
+                                        repository = activityRepository,
+                                        activityId = fakeDetail.id,
+                                        onBack = { sandboxDetail = null },
+                                        onOpenWeb = {},
+                                        onOpenUrl = {},
+                                        onOpenHomework = { _, _ -> },
+                                        onOpenAttachment = {},
+                                        onOpenSignScan = { target ->
+                                            signScanSandbox = true
+                                            signScan = target
+                                        },
+                                        detailOverride = fakeDetail,
+                                        sandbox = true,
+                                    )
+                                }
+                            }
+
                             if (attachmentsVisible) {
                                 SecondaryPage(onBack = {
                                     // 回收站里返回先回附件页，再返回才离开
@@ -696,19 +761,50 @@ class MainActivity : ComponentActivity() {
                             // 扫码签到压在详情之上：相机页必须独占，不能有下层内容透出来
                             val scan = signScan
                             if (scan != null) {
-                                SecondaryPage(onBack = { signScan = null }) {
+                                SecondaryPage(onBack = {
+                                    signScan = null
+                                    signScanSandbox = false
+                                }) {
                                     SignScanScreen(
-                                        token = current.token,
                                         target = scan,
                                         developerMode = preferences.developerMode,
-                                        repository = activityRepository,
-                                        actions = activityActions,
-                                        onBack = { signScan = null },
+                                        submit = { ticket ->
+                                            if (signScanSandbox) {
+                                                sandboxSubmit(sandboxConfig, ticket)
+                                            } else {
+                                                activityActions.sign(current.token, ticket)
+                                            }
+                                        },
+                                        resolveName = { id ->
+                                            // 沙盒不联网：对不上号就显示「活动 #id」
+                                            if (signScanSandbox) {
+                                                null
+                                            } else {
+                                                runCatching {
+                                                    activityRepository.detail(current.token, id).name
+                                                }.getOrNull()
+                                            }
+                                        },
+                                        onBack = {
+                                            signScan = null
+                                            signScanSandbox = false
+                                            presetSignText = null
+                                        },
                                         onSigned = {
-                                            detailRefreshTick++
-                                            AppLog.d("sign", "signed id=${scan.activityId}")
+                                            AppLog.d("sign", "signed id=${scan.activityId} sandbox=$signScanSandbox")
+                                            if (signScanSandbox) {
+                                                // 沙盒里让详情立刻变成「已签到」，链路才算闭环
+                                                sandboxConfig = sandboxConfig.copy(
+                                                    isSigner = 1,
+                                                    signInCount = sandboxConfig.signInCount + 1,
+                                                )
+                                                sandboxDetail = sandboxConfig.toDetail()
+                                            } else {
+                                                detailRefreshTick++
+                                            }
                                         },
                                         initialQrText = presetSignText,
+                                        sandbox = signScanSandbox,
                                     )
                                 }
                             }

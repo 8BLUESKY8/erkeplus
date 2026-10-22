@@ -53,3 +53,39 @@ POST `activity/sign/in-out {id, userId, type, sp, signSwitch?}`，`userId` 与 `
 - **不扫码直接签**：`sp` 可用本地时间通过时效校验，技术上可行，但这不是官方功能，不做。
 - **我的签到码**（生成 `qutuo://waitSign` 给管理员扫）：需要二维码生成与动态刷新，
   等确认你们活动用「管理员扫学生」再加。
+
+## 离线沙盒（v0.6.8，开发者模式）
+
+现场只有一次机会，所以先在本机把整条链路跑一遍。
+
+- 入口：设置 → 关于 → 开发者模式打开 → 「签到沙盒」。
+- 可配置：活动名称、活动 id、活动状态（5～8）、报名状态、签到开关（0/1/2）、
+  签到方式（1 动态 / 2 静态 / 3 GPS）、考勤标准、我是否已签到、模拟提交结果（成功，
+  或指定 code + msg）。
+- 「打开模拟活动详情」渲染的是一张本地详情页（`detailOverride`），底部会联网的动作条被隐藏，
+  签到卡片与真实页面完全一致。
+- 里头的「扫码签到」走的是同一套相机、解析、确认、结果逻辑；提交由 `sandboxSubmit` 本地
+  造结果并写日志，**不发任何请求**。沙盒标题带「（沙盒）」后缀，避免和真实签到混淆。
+- 提交成功后详情会立刻变成「已签到」，但只在本次会话生效，重开应用回到配置值。
+
+配套测试二维码由 `.tools/make-qr.java` 生成（JDK 单文件运行，不进 App）：
+
+| 文件 | 内容 | 扫到后 |
+| --- | --- | --- |
+| `check-in.png` | `qutuo://sign?...&isSignIn=action` | type=2 signSwitch=1，签到 |
+| `check-out.png` | `qutuo://sign?...&isSignIn=` | type=2 signSwitch=2，签退（会触发“上一轮的码”提醒） |
+| `wait-sign.png` | `qutuo://waitSign?...` | type=1，签到/签退 |
+| `not-a-sign-code.png` | 普通网址 | 提示“这不是活动签到码” |
+
+## 日志
+
+渠道 `[sign]`，落在 `files/logs/erkepp.log`，现场可直接在
+「设置 → 开发者模式 → 签到日志」里一键复制。关键行：
+
+```
+scan page open id=… signSwitch=… sandbox=… build=0.6.8/23
+camera frame bytes=460800 expected=460800 size=640x480
+scan source=camera id=… type=2 signSwitch=1 sp=…
+submit start id=… type=… signSwitch=… sp=… userId=…
+submit done code=0 msg=ok elapsed=619ms
+```

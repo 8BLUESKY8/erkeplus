@@ -61,9 +61,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import gitee.leolin_me.erkepp.AppLog
+import gitee.leolin_me.erkepp.BuildConfig
 import gitee.leolin_me.erkepp.R
-import gitee.leolin_me.erkepp.data.ActivityActions
-import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.SignAction
 import gitee.leolin_me.erkepp.data.SignOutcome
 import gitee.leolin_me.erkepp.data.SignTicket
@@ -90,15 +89,17 @@ data class SignTarget(
  */
 @Composable
 fun SignScanScreen(
-    token: String,
     target: SignTarget,
     developerMode: Boolean,
-    repository: ActivityRepository,
-    actions: ActivityActions,
+    submit: suspend (SignTicket) -> SignOutcome,
     onBack: () -> Unit,
     onSigned: () -> Unit,
     /** 调试用：直接把一段扫码文本当成本次扫到的内容（`--es qr <文本>`）。 */
     initialQrText: String? = null,
+    /** 扫到别的活动的码时，用它把活动名查回来；沙盒不提供。 */
+    resolveName: suspend (Long) -> String? = { null },
+    /** 离线沙盒：不会去查活动名，也不联网。 */
+    sandbox: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -159,16 +160,21 @@ fun SignScanScreen(
         }
     }
 
-    // 调试入口：把外部给的文本当作扫到的内容
     LaunchedEffect(Unit) {
+        AppLog.d(
+            "sign",
+            "scan page open id=${target.activityId} signSwitch=${target.signSwitch} " +
+                "sandbox=$sandbox build=${BuildConfig.VERSION_NAME}/${BuildConfig.VERSION_CODE}",
+        )
         if (!initialQrText.isNullOrBlank()) accept(initialQrText, "probe")
     }
 
-    // 扫到的码属于另一个活动时，去把它的名字取回来，确认框里更好认
+    // 扫到的码属于另一个活动时，去把它的名字取回来，确认框里更好认（沙盒不联网）
     LaunchedEffect(ticket) {
         val current = ticket ?: return@LaunchedEffect
+        if (sandbox) return@LaunchedEffect
         if (current.activityId == target.activityId) return@LaunchedEffect
-        otherName = runCatching { repository.detail(token, current.activityId).name }.getOrNull()
+        otherName = runCatching { resolveName(current.activityId) }.getOrNull()
     }
 
     SecondaryPage(onBack = onBack) {
@@ -282,7 +288,7 @@ fun SignScanScreen(
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "扫码签到",
+                        text = if (sandbox) "扫码签到（沙盒）" else "扫码签到",
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
@@ -380,10 +386,24 @@ fun SignScanScreen(
                     onClick = {
                         submitting = true
                         submittedAction = current.action
+                        val started = System.currentTimeMillis()
+                        AppLog.d(
+                            "sign",
+                            "submit start id=${current.activityId} type=${current.type} " +
+                                "signSwitch=${current.signSwitch} sp=${current.sp} " +
+                                "userId=${current.userId} sandbox=$sandbox",
+                        )
                         scope.launch {
-                            val response = actions.sign(token, current)
+                            val response = runCatching { submit(current) }.getOrElse { error ->
+                                SignOutcome(false, -1, error.javaClass.simpleName + ": " + error.message)
+                            }
                             submitting = false
                             outcome = response
+                            AppLog.d(
+                                "sign",
+                                "submit done code=${response.code} msg=${response.message} " +
+                                    "elapsed=${System.currentTimeMillis() - started}ms",
+                            )
                             if (response.success) onSigned()
                         }
                     },

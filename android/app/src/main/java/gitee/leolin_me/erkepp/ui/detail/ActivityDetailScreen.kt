@@ -95,6 +95,10 @@ fun ActivityDetailScreen(
     onOpenSignScan: (SignTarget) -> Unit = {},
     /** 外部让详情重新拉一次（例如刚签到完）。 */
     refreshKey: Int = 0,
+    /** 离线沙盒：直接用这份数据渲染，跳过网络与公告。 */
+    detailOverride: ActivityDetail? = null,
+    /** 沙盒模式下隐藏会联网的底部按钮。 */
+    sandbox: Boolean = false,
 ) {
     var detail by remember(activityId) { mutableStateOf<ActivityDetail?>(null) }
     var error by remember(activityId) { mutableStateOf<String?>(null) }
@@ -107,7 +111,13 @@ fun ActivityDetailScreen(
     var signWayNames by remember(activityId) { mutableStateOf<Map<Int, String>>(emptyMap()) }
 
 
-    LaunchedEffect(activityId, reloadKey, refreshKey) {
+    LaunchedEffect(activityId, reloadKey, refreshKey, detailOverride) {
+        if (detailOverride != null) {
+            detail = detailOverride
+            loading = false
+            error = null
+            return@LaunchedEffect
+        }
         loading = true
         error = null
         runCatching { repository.detail(token, activityId) }
@@ -130,9 +140,13 @@ fun ActivityDetailScreen(
     LaunchedEffect(detail?.signWay, detail?.identity) {
         val current = detail ?: return@LaunchedEffect
         if (current.identity != 1 || current.signWay.isBlank()) return@LaunchedEffect
-        if (signWayNames.isEmpty()) {
-            runCatching { repository.signWays(token) }.onSuccess { signWayNames = it }
+        if (signWayNames.isNotEmpty()) return@LaunchedEffect
+        if (sandbox) {
+            // 沙盒不联网：字典名字用本校实测值，仅用于本地演示
+            signWayNames = mapOf(1 to "动态二维码", 2 to "静态二维码", 3 to "GPS定位")
+            return@LaunchedEffect
         }
+        runCatching { repository.signWays(token) }.onSuccess { signWayNames = it }
     }
 
     Box(
@@ -161,6 +175,7 @@ fun ActivityDetailScreen(
                 detail = detail!!,
                 noticePreview = notices.firstOrNull()?.plainText,
                 signWayNames = signWayNames,
+                sandbox = sandbox,
                 onOpenNotices = {
                     noticeIndex = 0
                     showNotices = true
@@ -245,6 +260,7 @@ private fun DetailContent(
     detail: ActivityDetail,
     noticePreview: String?,
     signWayNames: Map<Int, String>,
+    sandbox: Boolean,
     onOpenNotices: () -> Unit,
     onOpenWeb: () -> Unit,
     onOpenUrl: (String) -> Unit,
@@ -451,31 +467,36 @@ private fun DetailContent(
             }
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-        ) {
-            // 作业入口按官方实际行为给：活动已开始/已结束，或本人已交过作业（查看作业）
-            if (detail.identity == 1 && (detail.status == 7 || detail.status == 8 || detail.isPostHomework == 1)) {
-                androidx.compose.material3.OutlinedButton(
-                    onClick = onOpenHomework,
-                    modifier = Modifier.fillMaxWidth(),
+        // 沙盒不显示底部动作条：那两个按钮都会联网
+        if (!sandbox) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+            ) {
+                // 作业入口按官方实际行为给：活动已开始/已结束，或本人已交过作业（查看作业）
+                if (detail.identity == 1 &&
+                    (detail.status == 7 || detail.status == 8 || detail.isPostHomework == 1)
                 ) {
-                    Text(if (detail.isPostHomework == 1) "查看作业" else "交作业")
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = onOpenHomework,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (detail.isPostHomework == 1) "查看作业" else "交作业")
+                    }
+                    Spacer(Modifier.height(8.dp))
                 }
-                Spacer(Modifier.height(8.dp))
-            }
-            Button(onClick = onOpenWeb, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    when {
-                        detail.identity == 1 && detail.applyStatus == 2 -> "报名已通过 · 在官方页面查看"
-                        detail.identity == 1 -> "已报名 · 在官方页面查看"
-                        detail.status == 5 -> "去官方页面报名"
-                        else -> "在官方页面打开"
-                    },
-                )
+                Button(onClick = onOpenWeb, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        when {
+                            detail.identity == 1 && detail.applyStatus == 2 -> "报名已通过 · 在官方页面查看"
+                            detail.identity == 1 -> "已报名 · 在官方页面查看"
+                            detail.status == 5 -> "去官方页面报名"
+                            else -> "在官方页面打开"
+                        },
+                    )
+                }
             }
         }
     }

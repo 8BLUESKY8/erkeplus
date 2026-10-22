@@ -48,8 +48,8 @@ import gitee.leolin_me.erkepp.data.UpdateChecker
 import gitee.leolin_me.erkepp.data.UpdateResult
 import kotlinx.coroutines.launch
 
-/** 设置页当前停在哪一层。 */
-enum class SettingsSection { ROOT, BLOCK_RULES }
+/** 设置页当前停在哪一层。SIGN_* 两项只在开发者模式下出现。 */
+enum class SettingsSection { ROOT, BLOCK_RULES, SIGN_SANDBOX, SIGN_LOG }
 
 /**
  * 设置：发现页、活动卡片、内容屏蔽、账号、关于。
@@ -219,6 +219,40 @@ fun SettingsScreen(
                 checked = preferences.developerMode,
                 onCheckedChange = { preferences.developerMode = it },
             )
+            if (preferences.developerMode) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSectionChange(SettingsSection.SIGN_SANDBOX) }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("签到沙盒", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            text = "离线假活动：配置状态、扫码、提交全流程，不联网",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSectionChange(SettingsSection.SIGN_LOG) }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("签到日志", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            text = "扫码 / 提交的关键日志，可一键复制",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
