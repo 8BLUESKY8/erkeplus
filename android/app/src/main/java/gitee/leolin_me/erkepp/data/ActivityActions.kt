@@ -8,8 +8,11 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
-/** 签到结果，直接把 `code` / `msg` 交给界面，不在客户端猜测业务含义。 */
-data class SignOutcome(val success: Boolean, val code: Int, val message: String)
+/** 写操作的统一结果：直接把 `code` / `msg` 交给界面，不在客户端猜测业务含义。 */
+data class ActionOutcome(val success: Boolean, val code: Int, val message: String)
+
+/** 签到沿用旧名字，避免调用方大改。 */
+typealias SignOutcome = ActionOutcome
 
 /**
  * 活动写操作与相关只读查询的封装。
@@ -169,19 +172,57 @@ class ActivityActions(private val api: ApiClient) {
         if (code != 0) error("提交失败：code=$code")
     }
 
-    // ---- 写操作：命名与日志就绪，但一处都不许接线 ----
+    // ---- 报名 / 取消报名：官方个人报名路径（团队报名暂不接）----
 
-    suspend fun enrollPerson(token: String, activityId: Long, personMaterial: String? = null): JsonElement? =
-        call("POST", "activity/enroll/person", token, "id=$activityId") {
+    /**
+     * 个人报名：官方 `POST activity/enroll/person {id, personMaterial}`。
+     *
+     * `personMaterial` 是报名材料数组；没有材料的活动官方也传空数组，这里照做。
+     * 需要填材料的活动（`enrollMaterial=1`）界面层会要求去官方页面，不调用这里。
+     */
+    suspend fun enrollPerson(token: String, activityId: Long): ActionOutcome {
+        val response = call(
+            method = "POST",
+            path = "activity/enroll/person",
+            token = token,
+            extra = "id=$activityId",
+        ) {
             api.post(
                 path = "activity/enroll/person",
                 params = buildJsonObject {
                     put("id", JsonPrimitive(activityId))
-                    if (!personMaterial.isNullOrBlank()) put("personMaterial", JsonPrimitive(personMaterial))
+                    put("personMaterial", kotlinx.serialization.json.buildJsonArray { })
                 },
                 token = token,
             )
-        }
+        } ?: return ActionOutcome(false, -1, "没有响应，请检查网络")
+        return response.toActionOutcome()
+    }
+
+    /**
+     * 取消报名：官方 `POST activity/enroll/cancel/person {id, applyInfo}`。
+     *
+     * 报名已通过时 `applyInfo`（理由）必填，提交后变成「取消审核」；
+     * 未通过时官方仍会带这个字段，空串即可。距开始不足 1 小时的判断在界面层做。
+     */
+    suspend fun cancelEnroll(token: String, activityId: Long, applyInfo: String): ActionOutcome {
+        val response = call(
+            method = "POST",
+            path = "activity/enroll/cancel/person",
+            token = token,
+            extra = "id=$activityId reason=${applyInfo.length}字",
+        ) {
+            api.post(
+                path = "activity/enroll/cancel/person",
+                params = buildJsonObject {
+                    put("id", JsonPrimitive(activityId))
+                    put("applyInfo", JsonPrimitive(applyInfo))
+                },
+                token = token,
+            )
+        } ?: return ActionOutcome(false, -1, "没有响应，请检查网络")
+        return response.toActionOutcome()
+    }
 
     suspend fun enrollTeam(
         token: String,
@@ -200,15 +241,6 @@ class ActivityActions(private val api: ApiClient) {
         }
         api.post(path = "activity/enroll/team", params = body, token = token)
     }
-
-    suspend fun cancelEnroll(token: String, activityId: Long): JsonElement? =
-        call("POST", "activity/enroll/cancel/person", token, "id=$activityId") {
-            api.post(
-                path = "activity/enroll/cancel/person",
-                params = buildJsonObject { put("id", JsonPrimitive(activityId)) },
-                token = token,
-            )
-        }
 
     suspend fun signRepair(token: String, activityId: Long, userIds: List<Long>): JsonElement? =
         call("POST", "activity/sign/repair", token, "activityId=$activityId users=${userIds.size}") {
@@ -247,4 +279,17 @@ class ActivityActions(private val api: ApiClient) {
 
     private fun JsonElement.code(): Int =
         runCatching { (this as JsonObject)["code"]?.jsonPrimitive?.content?.toIntOrNull() }.getOrNull() ?: -1
+
+    /** 把 `{code, msg}` 摊成界面能直接用的小对象。 */
+    private fun JsonElement.toActionOutcome(): ActionOutcome {
+        val code = code()
+        val msg = runCatching {
+            (this as JsonObject)["msg"]?.jsonPrimitive?.content
+        }.getOrNull().orEmpty()
+        return ActionOutcome(
+            success = code == 0,
+            code = code,
+            message = msg.ifBlank { if (code == 0) "成功" else "失败（code=$code）" },
+        )
+    }
 }

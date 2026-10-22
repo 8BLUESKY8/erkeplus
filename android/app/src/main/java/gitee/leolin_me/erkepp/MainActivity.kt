@@ -721,6 +721,12 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onOpenAttachment = { attachment -> handleAttachmentTap(attachment) },
                                         onOpenSignScan = { target -> signScan = target },
+                                        onEnroll = { id ->
+                                            activityActions.enrollPerson(current.token, id)
+                                        },
+                                        onCancelEnroll = { id, reason ->
+                                            activityActions.cancelEnroll(current.token, id, reason)
+                                        },
                                         refreshKey = detailRefreshTick,
                                     )
                                 }

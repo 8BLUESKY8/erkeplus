@@ -35,6 +35,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -44,6 +46,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +64,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import gitee.leolin_me.erkepp.R
+import gitee.leolin_me.erkepp.data.ActionOutcome
 import gitee.leolin_me.erkepp.data.ActivityAttachment
 import gitee.leolin_me.erkepp.data.ActivityDetail
 import gitee.leolin_me.erkepp.data.ActivityNotice
@@ -72,6 +76,7 @@ import gitee.leolin_me.erkepp.ui.statusColor
 import gitee.leolin_me.erkepp.ui.statusLabel
 import gitee.leolin_me.erkepp.ui.sign.SignTarget
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -93,6 +98,10 @@ fun ActivityDetailScreen(
     onOpenHomework: (Long, Boolean) -> Unit,
     onOpenAttachment: (ActivityAttachment) -> Unit,
     onOpenSignScan: (SignTarget) -> Unit = {},
+    /** 报名：只在用户确认后才会调用。 */
+    onEnroll: suspend (Long) -> ActionOutcome = { ActionOutcome(false, -1, "未接线") },
+    /** 取消报名：第二个参数是理由（报名已通过时必填）。 */
+    onCancelEnroll: suspend (Long, String) -> ActionOutcome = { _, _ -> ActionOutcome(false, -1, "未接线") },
     /** 外部让详情重新拉一次（例如刚签到完）。 */
     refreshKey: Int = 0,
     /** 离线沙盒：直接用这份数据渲染，跳过网络与公告。 */
@@ -109,6 +118,30 @@ fun ActivityDetailScreen(
     var showNotices by remember(activityId) { mutableStateOf(false) }
     // 签到方式字典：signWay 里存的是学校配置的 id，名字要单独查
     var signWayNames by remember(activityId) { mutableStateOf<Map<Int, String>>(emptyMap()) }
+    // 报名 / 取消报名：确认框、理由、结果
+    var showEnrollConfirm by remember(activityId) { mutableStateOf(false) }
+    var showCancelConfirm by remember(activityId) { mutableStateOf(false) }
+    var cancelReason by remember(activityId) { mutableStateOf("") }
+    var actionBusy by remember(activityId) { mutableStateOf(false) }
+    var actionResult by remember(activityId) { mutableStateOf<ActionOutcome?>(null) }
+    val actionScope = rememberCoroutineScope()
+
+    fun runAction(block: suspend () -> ActionOutcome) {
+        if (actionBusy) return
+        actionBusy = true
+        actionScope.launch {
+            val outcome = runCatching { block() }
+                .getOrElse { error ->
+                    ActionOutcome(false, -1, error.message ?: error.javaClass.simpleName)
+                }
+            actionBusy = false
+            actionResult = outcome
+            if (outcome.success) {
+                // 报名状态变了，重新拉一次详情
+                reloadKey++
+            }
+        }
+    }
 
 
     LaunchedEffect(activityId, reloadKey, refreshKey, detailOverride) {
@@ -184,6 +217,11 @@ fun ActivityDetailScreen(
                 onOpenUrl = onOpenUrl,
                 onOpenHomework = { onOpenHomework(activityId, detail!!.isPostHomework == 1) },
                 onOpenAttachment = onOpenAttachment,
+                onEnroll = { showEnrollConfirm = true },
+                onCancelEnroll = {
+                    cancelReason = ""
+                    showCancelConfirm = true
+                },
                 onOpenSignScan = {
                     val current = detail!!
                     onOpenSignScan(
@@ -252,6 +290,148 @@ fun ActivityDetailScreen(
             },
         )
     }
+
+    // 报名确认：写操作，绝不自动提交
+    val current = detail
+    if (showEnrollConfirm && current != null) {
+        AlertDialog(
+            onDismissRequest = { if (!actionBusy) showEnrollConfirm = false },
+            title = { Text("确认报名") },
+            text = {
+                Column {
+                    Text(text = current.name, style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "审核：" + if (current.signAudit == 1) "需要管理员审核" else "无需审核，报名即通过",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (current.peopleLimit > 0) {
+                        Text(
+                            text = "名额：${current.joinMemberCount}/${current.peopleLimit}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text(
+                        text = "活动时间：" + formatRange(current.startTime, current.endTime),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "确认后会立即提交报名。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !actionBusy,
+                    onClick = {
+                        showEnrollConfirm = false
+                        runAction { onEnroll(current.id) }
+                    },
+                ) {
+                    Text(if (actionBusy) "提交中…" else "确认报名")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEnrollConfirm = false }) { Text("再想想") }
+            },
+        )
+    }
+
+    // 取消报名确认：报名已通过时官方要求填理由，提交后进入「取消审核」
+    if (showCancelConfirm && current != null) {
+        val full = current.peopleLimit > 0 && current.joinMemberCount >= current.peopleLimit
+        AlertDialog(
+            onDismissRequest = { if (!actionBusy) showCancelConfirm = false },
+            title = { Text("取消报名") },
+            text = {
+                Column {
+                    Text(text = current.name, style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(8.dp))
+                    if (current.cancelNeedsReason) {
+                        Text(
+                            text = "报名已通过，取消需要管理员审核，请写明理由。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = cancelReason,
+                            onValueChange = { cancelReason = it },
+                            label = { Text("取消理由") },
+                            minLines = 2,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        Text(
+                            text = "取消后名额会释放。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (full) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "这个活动名额已满，取消后大概率报不回来。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                val canSubmit = !actionBusy && (!current.cancelNeedsReason || cancelReason.isNotBlank())
+                TextButton(
+                    enabled = canSubmit,
+                    onClick = {
+                        showCancelConfirm = false
+                        val reason = cancelReason.trim()
+                        runAction { onCancelEnroll(current.id, reason) }
+                    },
+                ) {
+                    Text(if (actionBusy) "提交中…" else "确认取消")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCancelConfirm = false }) { Text("保留报名") }
+            },
+        )
+    }
+
+    // 报名结果：成功失败都直接给服务端 msg
+    val outcome = actionResult
+    if (outcome != null) {
+        AlertDialog(
+            onDismissRequest = { actionResult = null },
+            title = { Text(if (outcome.success) "已提交" else "没有成功") },
+            text = {
+                Column {
+                    Text(
+                        text = outcome.message,
+                        color = if (outcome.success) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "code=${outcome.code}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { actionResult = null }) { Text("知道了") }
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -266,6 +446,8 @@ private fun DetailContent(
     onOpenUrl: (String) -> Unit,
     onOpenHomework: () -> Unit,
     onOpenAttachment: (ActivityAttachment) -> Unit,
+    onEnroll: () -> Unit,
+    onCancelEnroll: () -> Unit,
     onOpenSignScan: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -487,15 +669,37 @@ private fun DetailContent(
                     }
                     Spacer(Modifier.height(8.dp))
                 }
-                Button(onClick = onOpenWeb, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        when {
-                            detail.identity == 1 && detail.applyStatus == 2 -> "报名已通过 · 在官方页面查看"
-                            detail.identity == 1 -> "已报名 · 在官方页面查看"
-                            detail.status == 5 -> "去官方页面报名"
-                            else -> "在官方页面打开"
-                        },
-                    )
+                // 报名 / 取消报名：官方规则下能做的直接做，做不了的说清原因
+                when {
+                    detail.identity == 0 && detail.canEnroll -> {
+                        Button(onClick = onEnroll, modifier = Modifier.fillMaxWidth()) {
+                            Text("立即报名")
+                        }
+                    }
+
+                    detail.identity == 0 && detail.enrollBlockedReason.isNotBlank() -> {
+                        Text(
+                            text = detail.enrollBlockedReason,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    detail.identity == 1 && detail.canCancelEnroll -> {
+                        OutlinedButton(onClick = onCancelEnroll, modifier = Modifier.fillMaxWidth()) {
+                            Text("取消报名")
+                        }
+                    }
+
+                    detail.identity == 1 -> {
+                        Text(
+                            text = detail.applyStatusText,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+                TextButton(onClick = onOpenWeb, modifier = Modifier.fillMaxWidth()) {
+                    Text("在官方页面查看")
                 }
             }
         }

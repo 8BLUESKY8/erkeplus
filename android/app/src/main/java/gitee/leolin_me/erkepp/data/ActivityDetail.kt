@@ -99,6 +99,10 @@ data class ActivityDetail(
     /** 已签到人数 / 已签退人数，仅 participant 详情接口会返回。 */
     val signInCount: Int = 0,
     val signOutCount: Int = 0,
+    /** 是否需要填写报名材料：1 需要。0 时原生报名可以直接提交。 */
+    val enrollMaterial: Int = 0,
+    /** 取消报名的审核状态，非空表示「取消审核中」。 */
+    val cancelStatus: String? = null,
     /** 数据来自哪个接口：`non-member` 或 `participant`。 */
     val source: String,
 ) {
@@ -120,6 +124,54 @@ data class ActivityDetail(
             status in 5..8 &&
             signSwitch != 0 &&
             signWayIds.any { it == 1 || it == 2 }
+
+    /**
+     * 能不能在 App 里直接报名。
+     *
+     * 官方个人报名只要 `id` 与报名材料，所以只有「不需要填材料」的活动才放手；
+     * 需要材料的回官方页面，避免造出一个半成品表单。年级/学院/诚信值等限制
+     * 由服务端判定，这里只把明显不成立的情况挡在前面。
+     */
+    val canEnroll: Boolean
+        get() = identity == 0 &&
+            status == 5 &&
+            enrollEndTime > System.currentTimeMillis() &&
+            (peopleLimit <= 0 || joinMemberCount < peopleLimit) &&
+            enrollMaterial == 0
+
+    /** 不能报名的原因，用于按钮下方的提示；空串表示可以报名。 */
+    val enrollBlockedReason: String
+        get() = when {
+            identity != 0 -> ""
+            status != 5 -> "活动当前不在报名中"
+            enrollEndTime in 1..System.currentTimeMillis() -> "报名已截止"
+            peopleLimit > 0 && joinMemberCount >= peopleLimit -> "名额已满"
+            enrollMaterial == 1 -> "这个活动需要填写报名材料，请到官方页面报名"
+            else -> ""
+        }
+
+    /**
+     * 能不能取消报名。官方规则：距活动开始不足 1 小时不允许；
+     * 报名已通过（applyStatus=2）时取消要填理由，提交后走「取消审核」。
+     */
+    val canCancelEnroll: Boolean
+        get() = identity == 1 &&
+            applyStatus in 1..2 &&
+            cancelStatus.isNullOrBlank() &&
+            (startTime <= 0 || startTime - System.currentTimeMillis() > 60 * 60 * 1000L)
+
+    /** 取消时是否必须填理由（官方仅在报名已通过时强制）。 */
+    val cancelNeedsReason: Boolean
+        get() = applyStatus == 2
+
+    /** 报名状态文案。 */
+    val applyStatusText: String
+        get() = when {
+            !cancelStatus.isNullOrBlank() -> "取消审核中"
+            applyStatus == 2 -> "报名已通过"
+            applyStatus == 1 -> "已提交，等待审核"
+            else -> "已报名"
+        }
 }
 
 internal fun parseActivityDetail(data: JsonObject, source: String): ActivityDetail = ActivityDetail(
@@ -160,6 +212,8 @@ internal fun parseActivityDetail(data: JsonObject, source: String): ActivityDeta
     isSigner = data.int("isSigner"),
     signInCount = data.int("signInCount"),
     signOutCount = data.int("signOutCount"),
+    enrollMaterial = data.int("enrollMaterial"),
+    cancelStatus = data.text("cancelStatus").takeIf { it.isNotBlank() },
     source = source,
 )
 

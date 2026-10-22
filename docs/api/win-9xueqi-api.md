@@ -32,6 +32,21 @@
 | `/login/banner` | `{}` | `code:0` | 登录页轮播 |
 | `/page/activity/list` | 见下 | `total`、`pageSize`、`list[]` | 活动列表 |
 
+## 报名与取消报名（来自 H5 源码，v0.7.1 接入原生）
+
+```
+POST /activity/enroll/person        { id, personMaterial: [] }      // 个人报名
+POST /activity/enroll/cancel/person { id, applyInfo }               // 取消报名
+```
+
+- `personMaterial` 是报名材料数组；活动没有材料时官方也传空数组。
+  `enrollMaterial=1` 的活动需要先填材料，App 端不接，引导去官方页面。
+- 取消报名：**距活动开始不足 1 小时不允许**（H5 直接弹提示）。
+- `applyInfo` 是取消理由：`applyStatus=2`（报名已通过）时**必填**，提交后变为「取消审核」；
+  未通过时官方也带这个字段（空串），成功后名额立即释放。
+- 成功后 H5 会重新拉一次详情；取消成功的文案区分「已成功取消报名」和
+  「报名取消申请已提交，等待审核」。
+
 ## `/page/activity/list` 参数（实测抓取）
 
 ```json
