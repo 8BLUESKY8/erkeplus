@@ -13,10 +13,13 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 
 /**
- * 实测处在报名期的活动状态。2026-10-23 抓到的报名期样本有 1、3、5 三种：
- * 1（武术与民族传统武术展演）、3（21天单词打卡）、5（毕业生德育铸魂引领活动）。
+ * 学生端能报名的活动状态。实测只有 5：1 和 3 是未审核（官方页面底部就写「未审核」），
+ * 4 待报名、6 待开始、7 进行中、8 已结束都不在报名期。
  */
-private val ENROLLING_STATUS = setOf(1, 3, 5)
+private val ENROLLING_STATUS = setOf(5)
+
+/** 未审核（1）与被驳回（3），学生端不可报名。 */
+private val UNAPPROVED_STATUS = setOf(1, 3)
 
 /** 按钮提示里的时间：只要月日时分，年份省掉。 */
 private fun shortTime(millis: Long): String =
@@ -143,8 +146,7 @@ data class ActivityDetail(
      * 需要材料的回官方页面，避免造出一个半成品表单。年级/学院/诚信值等限制
      * 由服务端判定，这里只把明显不成立的情况挡在前面。
      *
-     * 状态只放行实测处在报名期的那几种（1、3、5）；4 待报名、6 待开始、7 进行中、
-     * 8 已结束一律不给入口，具体原因由 [enrollBlockedReason] 说明。
+     * 状态只放行 5（报名中）；具体原因由 [enrollBlockedReason] 说明。
      */
     val canEnroll: Boolean
         get() = identity == 0 &&
@@ -168,13 +170,18 @@ data class ActivityDetail(
             if (identity != 0) return ""
             val now = System.currentTimeMillis()
             return when {
+                status in UNAPPROVED_STATUS -> "活动还没通过审核，暂时不能报名"
                 status == 8 -> "活动已结束"
                 status == 7 -> "活动已开始，报名已截止"
                 status == 6 -> "报名已截止"
-                // 时间是硬约束，先说时间；时间解释不了才按状态说
+                status == 4 -> if (enrollStartTime > now) {
+                    "报名还没开始，${shortTime(enrollStartTime)} 开始"
+                } else {
+                    "报名还没开始"
+                }
+                // 时间是硬约束，再说一次时间；时间解释不了才说状态
                 enrollStartTime > now -> "报名还没开始，${shortTime(enrollStartTime)} 开始"
                 enrollEndTime in 1..now -> "报名已截止"
-                status == 4 -> "报名还没开始"
                 status !in ENROLLING_STATUS && status != 0 -> "这个活动的状态暂不支持报名，请到官方页面报名"
                 peopleLimit > 0 && joinMemberCount >= peopleLimit -> "名额已满"
                 enrollMaterial == 1 -> "这个活动需要填写报名材料，请到官方页面报名"

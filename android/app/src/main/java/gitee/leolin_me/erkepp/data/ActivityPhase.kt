@@ -3,20 +3,24 @@ package gitee.leolin_me.erkepp.data
 /**
  * 活动阶段（用户视角的「这条活动现在能不能报名」）。
  *
- * 官方把整个生命周期塞在 `activityStatus` 一个数字里。实测这个数字并不严格对应时间：
+ * 官方把整个生命周期塞在 `activityStatus` 一个数字里，而学生端真正能看到的只有一部分：
  *
- * | status | 实测阶段的例子 |
- * | --- | --- |
- * | 1 | 报名期（武术与民族传统武术展演，报名 10-22 起） |
- * | 3 | 报名期（21天单词打卡，报名 10-23 09:00 起） |
- * | 4 | 待报名（2026级外国语新生迎新破冰活动，报名 10-24 00:00 起） |
- * | 5 | 报名期 |
- * | 6 | 报名已截止、活动未开始 |
- * | 7 | 进行中 |
- * | 8 | 已结束 |
+ * | status | 学生端看到的样子 | 样本 |
+ * | --- | --- | --- |
+ * | 1 | 未审核（底部按钮就是「未审核」，0 学时） | 572514 武术与民族传统武术展演 |
+ * | 3 | 未审核 | 576140 21天单词打卡 |
+ * | 4 | 待报名 | 576596 2026级外国语新生迎新破冰活动 |
+ * | 5 | 报名中 | 566950 毕业生德育铸魂引领活动 |
+ * | 6 | 报名已截止、活动未开始 | 575705 |
+ * | 7 | 进行中 | 574792 |
+ * | 8 | 已结束 | 569941 |
  *
- * 报名期同时存在 1、3、5 三种数字，说明它混进了新旧两套流程的编号。因此阶段**优先按四个
- * 时间点算**，只有时间全缺时才退回数字。这样官方再调整编号也不会把「报名中」标成空白。
+ * 1 和 3 是没通过审核的活动：官方页面底部按钮写「未审核」，学时也还没结算（详情里 `hours`
+ * 为 0，只有 `definedHours`）。它们只在按状态过滤列表时才会冒出来，学生端不展示，所以
+ * 本类一律给 [ActivityPhase.UNKNOWN]，既不画角标也不给报名入口。
+ *
+ * 其余活动阶段按四个时间点算，时间缺失时才退回数字。这样官方再调整编号也不会
+ * 把「报名中」标成空白。
  */
 enum class ActivityPhase {
     /** 报名还没开始。 */
@@ -34,14 +38,17 @@ enum class ActivityPhase {
     /** 活动已结束。 */
     FINISHED,
 
-    /** 时间缺失且数字也认不出来。 */
+    /** 未审核、时间缺失或编号认不出来。 */
     UNKNOWN,
 }
+
+/** 未审核（1）与被驳回（3）：学生端不可报名，也没有阶段。 */
+private val UNAPPROVED_STATUS = setOf(1, 3)
 
 /**
  * 按时间算阶段。任一时间传 0 表示未知，未知的边界不参与判断。
  *
- * 判定顺序：活动是否已开始 → 报名是否已截止 → 报名是否还没开始 → 全缺时看数字。
+ * 判定顺序：是否未审核 → 活动是否已开始 → 报名是否已截止 → 报名是否还没开始 → 全缺时看数字。
  */
 fun phaseOf(
     enrollStartTime: Long,
@@ -51,6 +58,7 @@ fun phaseOf(
     status: Int = 0,
     now: Long = System.currentTimeMillis(),
 ): ActivityPhase {
+    if (status in UNAPPROVED_STATUS) return ActivityPhase.UNKNOWN
     if (startTime > 0 && now >= startTime) {
         return if (endTime > 0 && now > endTime) ActivityPhase.FINISHED else ActivityPhase.RUNNING
     }
@@ -60,12 +68,7 @@ fun phaseOf(
     return ActivityPhase.ENROLLING
 }
 
-/**
- * 时间全缺时的兜底。
- *
- * 1 和 3 在官方前端另有「审核中 / 被驳回」的含义（创建者视角），但它们同时也是
- * 公开列表里真实可报名的活动，所以这里不硬猜，直接给 [ActivityPhase.UNKNOWN]。
- */
+/** 时间全缺时的兜底。1、3 不给阶段，理由见类注释。 */
 fun phaseFromStatus(status: Int): ActivityPhase = when (status) {
     4 -> ActivityPhase.PENDING_ENROLL
     5 -> ActivityPhase.ENROLLING

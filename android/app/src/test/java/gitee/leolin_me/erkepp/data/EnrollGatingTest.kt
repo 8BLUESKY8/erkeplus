@@ -109,9 +109,13 @@ class EnrollGatingTest {
     }
 
     @Test
-    fun `status 3 is enrolling too`() {
-        // 2026-10-23 实测：报名中的活动有 1、3、5 三种编号，3 是最常见的一种
-        assertTrue(detail(status = 3).canEnroll)
+    fun `unapproved activity gets no entry`() {
+        // 1 和 3 是未审核：官方页面底部写「未审核」，学时也还是 0
+        for (status in listOf(1, 3)) {
+            val unapproved = detail(status = status)
+            assertFalse(unapproved.canEnroll)
+            assertEquals("活动还没通过审核，暂时不能报名", unapproved.enrollBlockedReason)
+        }
     }
 
     @Test

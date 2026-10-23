@@ -182,8 +182,8 @@ private fun MyActivityRow(item: ActivityItem, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(4.dp))
-            // 阶段按时间算，避免服务端换编号时这里冒出「状态 3」
-            val phaseText = phaseLabel(item.phase())
+            // 阶段按时间算；自己创建的活动还停在审核流程里，阶段算不出来时用编号补一句人话
+            val phaseText = phaseLabel(item.phase()).ifEmpty { myListStatusText(item.status) }
             Text(
                 text = if (phaseText.isEmpty()) {
                     "${formatHoursText(item.hours)}学时"
@@ -202,6 +202,20 @@ private fun MyActivityRow(item: ActivityItem, onClick: () -> Unit) {
             )
         }
     }
+}
+
+/**
+ * 我的活动里的流程状态。
+ *
+ * 这里的编号是「申报流程」的编号（官方创建者视角）：1 审核中、3 被驳回、4 待报名、
+ * 9 完结审核中；报名之后的 5~8 与活动生命周期一致，已被阶段覆盖，不需要在这里重复。
+ */
+private fun myListStatusText(status: Int): String = when (status) {
+    1 -> "审核中"
+    3 -> "被驳回"
+    4 -> "待报名"
+    9 -> "完结审核中"
+    else -> ""
 }
 
 private fun formatHoursText(value: Double): String =

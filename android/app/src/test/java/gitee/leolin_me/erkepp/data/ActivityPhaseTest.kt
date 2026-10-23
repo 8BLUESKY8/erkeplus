@@ -85,10 +85,19 @@ class ActivityPhaseTest {
 
     @Test
     fun `unknown status stays unknown instead of guessing`() {
-        // 1 和 3 在官方前端另有审核含义，时间缺失时不硬猜
+        assertEquals(ActivityPhase.UNKNOWN, at(status = 0))
+    }
+
+    @Test
+    fun `unapproved activities never report a phase`() {
+        // 1 和 3 是未审核：官方页面底部就写「未审核」，学时也没结算
         assertEquals(ActivityPhase.UNKNOWN, at(status = 1))
         assertEquals(ActivityPhase.UNKNOWN, at(status = 3))
-        assertEquals(ActivityPhase.UNKNOWN, at(status = 0))
+        // 哪怕报名时间已经开了也不给阶段
+        assertEquals(
+            ActivityPhase.UNKNOWN,
+            at(enrollStart = now - hour, enrollEnd = now + day, start = now + 2 * day, status = 3),
+        )
     }
 
     @Test
