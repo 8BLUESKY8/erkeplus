@@ -374,7 +374,7 @@ fun SignScanScreen(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
-                    if (developerMode) {
+                    if (BuildConfig.DEBUG && developerMode) {
                         TextButton(onClick = { showPaste = true }) {
                             Text("粘贴二维码文本", color = Color(0x99FFFFFF), style = MaterialTheme.typography.bodySmall)
                         }
@@ -420,7 +420,7 @@ fun SignScanScreen(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    if (developerMode) {
+                    if (BuildConfig.DEBUG && developerMode) {
                         Spacer(Modifier.height(8.dp))
                         Text(
                             text = "type=${current.type} signSwitch=${current.signSwitch} " +
@@ -489,7 +489,7 @@ fun SignScanScreen(
                             MaterialTheme.colorScheme.error
                         },
                     )
-                    if (developerMode) {
+                    if (BuildConfig.DEBUG && developerMode) {
                         Spacer(Modifier.height(8.dp))
                         Text(
                             text = "code=${result.code} msg=${result.message}",
@@ -521,7 +521,7 @@ fun SignScanScreen(
         )
     }
 
-    if (showPaste) {
+    if (BuildConfig.DEBUG && showPaste) {
         AlertDialog(
             onDismissRequest = { showPaste = false },
             title = { Text("粘贴二维码文本") },

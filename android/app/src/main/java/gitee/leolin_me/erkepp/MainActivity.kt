@@ -153,7 +153,7 @@ class MainActivity : ComponentActivity() {
                     mutableStateOf(loaded)
                 }
                 // 调试用：`am start ... --es probe homework_list` 可安全验证只读接口
-                val probe = remember { intent.getStringExtra("probe") }
+                val probe = remember { if (BuildConfig.DEBUG) intent.getStringExtra("probe") else null }
                 // 调试用：`am start ... --es search 挑战杯` 预填发现页搜索词，免去手打
                 val debugSearch = remember {
                     if (BuildConfig.DEBUG) intent.getStringExtra("search").orEmpty() else ""
@@ -616,8 +616,9 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
-                            // 签到沙盒：配置离线假活动（只在开发者模式下能进）
-                            if (settingsSection == SettingsSection.SIGN_SANDBOX) {
+                            // 签到沙盒 / 签到日志 / 沙盒详情：只在 debug 包存在。
+                            // BuildConfig.DEBUG 是常量，release 里这几段会被 R8 整体裁掉。
+                            if (BuildConfig.DEBUG && settingsSection == SettingsSection.SIGN_SANDBOX) {
                                 SecondaryPage(onBack = { settingsSection = SettingsSection.ROOT }) {
                                     SignSandboxScreen(
                                         config = sandboxConfig,
@@ -632,14 +633,14 @@ class MainActivity : ComponentActivity() {
                             }
 
                             // 签到日志：现场出问题能一键复制带回来
-                            if (settingsSection == SettingsSection.SIGN_LOG) {
+                            if (BuildConfig.DEBUG && settingsSection == SettingsSection.SIGN_LOG) {
                                 SecondaryPage(onBack = { settingsSection = SettingsSection.ROOT }) {
                                     SignLogScreen(onBack = { settingsSection = SettingsSection.ROOT })
                                 }
                             }
 
-                            // 沙盒的假详情页：不联网，底部动作条也隐藏
-                            val fakeDetail = sandboxDetail
+                            // 沙盒的假详情页：不联网，底部动作条也隐藏；release 里不编译进来
+                            val fakeDetail = if (BuildConfig.DEBUG) sandboxDetail else null
                             if (fakeDetail != null) {
                                 SecondaryPage(onBack = { sandboxDetail = null }) {
                                     ActivityDetailScreen(
