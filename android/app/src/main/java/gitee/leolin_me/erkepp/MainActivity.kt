@@ -79,6 +79,7 @@ import gitee.leolin_me.erkepp.ui.home.DiscoverScreen
 import gitee.leolin_me.erkepp.ui.home.ProfileScreen
 import gitee.leolin_me.erkepp.ui.login.ForgotPasswordScreen
 import gitee.leolin_me.erkepp.ui.login.LoginScreen
+import gitee.leolin_me.erkepp.ui.profile.ChangePasswordScreen
 import gitee.leolin_me.erkepp.ui.profile.CreditScreen
 import gitee.leolin_me.erkepp.ui.profile.PersonalInfoScreen
 import gitee.leolin_me.erkepp.ui.school.SchoolPickerScreen
@@ -183,6 +184,7 @@ class MainActivity : ComponentActivity() {
                 var settingsSection by remember { mutableStateOf(SettingsSection.ROOT) }
                 var showCredit by remember { mutableStateOf(false) }
                 var showPersonalInfo by remember { mutableStateOf(false) }
+                var showChangePassword by remember { mutableStateOf(false) }
                 // 「我的」上的诚信值摘要：进这一页时拉一次，失败就显示「—」，不挡别的入口
                 var creditDetail by remember { mutableStateOf<CreditDetail?>(null) }
                 // 支持 `am start ... --el detail_id 566506` 直接开详情，方便调试和截图
@@ -964,7 +966,32 @@ class MainActivity : ComponentActivity() {
                                     PersonalInfoScreen(
                                         token = current.token,
                                         repository = profileRepository,
+                                        onOpenPassword = { showChangePassword = true },
                                         onBack = { showPersonalInfo = false },
+                                    )
+                                }
+                            }
+
+                            // 修改密码：成功后官方会让当前凭证失效，这里同步清会话回登录页
+                            if (showChangePassword) {
+                                SecondaryPage(onBack = { showChangePassword = false }) {
+                                    ChangePasswordScreen(
+                                        token = current.token,
+                                        repository = profileRepository,
+                                        onBack = { showChangePassword = false },
+                                        onPasswordChanged = {
+                                            showChangePassword = false
+                                            showPersonalInfo = false
+                                            webUrl = null
+                                            sessionStore.clear()
+                                            session = null
+                                            tab = MainTab.DISCOVER
+                                            Toast.makeText(
+                                                activity,
+                                                "密码已修改，请用新密码登录",
+                                                Toast.LENGTH_LONG,
+                                            ).show()
+                                        },
                                     )
                                 }
                             }

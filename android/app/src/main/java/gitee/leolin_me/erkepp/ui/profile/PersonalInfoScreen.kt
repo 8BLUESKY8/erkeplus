@@ -1,5 +1,6 @@
 package gitee.leolin_me.erkepp.ui.profile
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -45,6 +46,7 @@ import gitee.leolin_me.erkepp.data.toUserMessage
 fun PersonalInfoScreen(
     token: String,
     repository: ProfileRepository,
+    onOpenPassword: () -> Unit,
     onBack: () -> Unit,
 ) {
     var details by remember { mutableStateOf<ProfileDetails?>(null) }
@@ -114,8 +116,9 @@ fun PersonalInfoScreen(
                     InfoRow("年级", current.grade.ifBlank { "—" }, last = true)
                 }
                 Spacer(Modifier.height(12.dp))
-                InfoCard("账号") {
-                    InfoRow("手机号", current.maskedMobile, last = true)
+                InfoCard("账号安全") {
+                    InfoRow("手机号", current.maskedMobile)
+                    ActionRow("登录密码", "修改", onClick = onOpenPassword, last = true)
                 }
                 Spacer(Modifier.height(16.dp))
                 Text(
@@ -176,6 +179,50 @@ private fun InfoCard(title: String, content: @Composable () -> Unit) {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
             )
             content()
+        }
+    }
+}
+
+@Composable
+private fun ActionRow(
+    label: String,
+    action: String,
+    onClick: () -> Unit,
+    last: Boolean = false,
+) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.width(96.dp),
+            )
+            Text(
+                text = action,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "›",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (!last) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp)
+                    .height(1.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+            ) {}
         }
     }
 }

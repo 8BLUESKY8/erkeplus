@@ -72,6 +72,24 @@ class ProfileRepository(private val api: ApiClient) {
         return parse(data)
     }
 
+    /**
+     * 修改登录密码。
+     *
+     * 官方成功后会让当前凭证失效（H5 直接清 TOKEN 回登录页），调用方必须清本地会话。
+     */
+    suspend fun updatePassword(token: String, oldPwd: String, newPwd: String, repeat: String) {
+        val response = api.post(
+            path = "student/user/update-pwd",
+            params = buildJsonObject {
+                put("oldPwd", kotlinx.serialization.json.JsonPrimitive(oldPwd))
+                put("newPwd", kotlinx.serialization.json.JsonPrimitive(newPwd))
+                put("newPwdRepeat", kotlinx.serialization.json.JsonPrimitive(repeat))
+            },
+            token = token,
+        )
+        response.requireSuccess()
+    }
+
     private fun parse(data: JsonObject): ProfileDetails {
         fun text(key: String): String = (data[key] as? JsonPrimitive)?.contentOrNull.orEmpty()
         fun int(key: String): Int = (data[key] as? JsonPrimitive)?.intOrNull ?: 0
