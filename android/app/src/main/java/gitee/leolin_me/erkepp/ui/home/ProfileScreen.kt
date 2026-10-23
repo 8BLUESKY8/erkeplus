@@ -21,14 +21,18 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import gitee.leolin_me.erkepp.data.CreditDetail
 import gitee.leolin_me.erkepp.data.Session
+import gitee.leolin_me.erkepp.ui.rememberCoverRequest
 
 /**
  * 「我的」：个人信息、三个数字（学分 / 学时 / 诚信值）和入口。
@@ -43,6 +47,7 @@ fun ProfileScreen(
     onOpenCredit: () -> Unit,
     onOpenAttachments: () -> Unit,
     onOpenWeb: () -> Unit,
+    onRefreshProfile: () -> Unit,
 ) {
     val profile = session.profile
     Column(
@@ -53,23 +58,11 @@ fun ProfileScreen(
     ) {
         Spacer(Modifier.height(24.dp))
 
-        // 头像用姓名首字：没有头像接口，与其放个假图，不如放个字
+        // 头像来自官方 my-info 的 avatar，缓存在会话里；没有就退回姓名首字
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = profile.name.take(1),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
+            Avatar(profile.avatar, profile.name)
             Spacer(Modifier.width(14.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = profile.name,
                     style = MaterialTheme.typography.headlineSmall,
@@ -86,6 +79,7 @@ fun ProfileScreen(
                     )
                 }
             }
+            TextButton(onClick = onRefreshProfile) { Text("刷新资料") }
         }
 
         Spacer(Modifier.height(14.dp))
@@ -142,6 +136,32 @@ fun ProfileScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun Avatar(url: String?, name: String) {
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (url != null) {
+            AsyncImage(
+                model = rememberCoverRequest(url, 56, maxWidthPx = 224),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Text(
+                text = name.take(1),
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
     }
 }
 

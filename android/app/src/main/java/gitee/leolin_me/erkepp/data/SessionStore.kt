@@ -57,6 +57,9 @@ class SessionStore(context: Context) {
             put("credit", JsonPrimitive(session.profile.credit))
             put("hours", JsonPrimitive(session.profile.hours))
             put("userId", JsonPrimitive(session.profile.userId))
+            put("grade", JsonPrimitive(session.profile.grade))
+            put("className", JsonPrimitive(session.profile.className))
+            session.profile.avatar?.let { put("avatar", JsonPrimitive(it)) }
         }
         val root = buildJsonObject {
             put("token", JsonPrimitive(session.token))
@@ -87,6 +90,9 @@ class SessionStore(context: Context) {
                 credit = profile["credit"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
                 hours = profile["hours"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
                 userId = profile["userId"]?.jsonPrimitive?.longOrNull ?: 0L,
+                grade = text("grade"),
+                className = text("className"),
+                avatar = text("avatar").takeIf { it.isNotBlank() },
             ),
         )
     }

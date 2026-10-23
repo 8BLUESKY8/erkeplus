@@ -2,8 +2,9 @@
 # Usage:
 #   build.cmd            -> debug APK
 #   build.cmd release    -> signed release APK
+#   build.cmd both       -> both APKs, debug first (handy before a manual check)
 param(
-    [ValidateSet('debug', 'release')][string]$Mode = 'debug'
+    [ValidateSet('debug', 'release', 'both')][string]$Mode = 'debug'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,21 +21,26 @@ if (-not $env:ERKE_KS_DIR) {
     $env:ERKE_KS_DIR = Join-Path $env:USERPROFILE '.android\keystore'
 }
 
-$task = if ($Mode -eq 'release') { 'assembleRelease' } else { 'assembleDebug' }
-& (Join-Path $root 'gradlew.bat') $task --console=plain
+$modes = if ($Mode -eq 'both') { @('debug', 'release') } else { @($Mode) }
+$tasks = @()
+foreach ($m in $modes) {
+    if ($m -eq 'release') { $tasks += 'assembleRelease' } else { $tasks += 'assembleDebug' }
+}
+& (Join-Path $root 'gradlew.bat') @tasks --console=plain
 if ($LASTEXITCODE -ne 0) { throw "build failed: exit $LASTEXITCODE" }
-
-$apkDir = Join-Path $root "app\build\outputs\apk\$Mode"
-$apk = Get-ChildItem $apkDir -Filter *.apk -ErrorAction SilentlyContinue |
-    Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if (-not $apk) { throw "APK not found in $apkDir" }
 
 $outDir = Join-Path $root 'out'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-$dest = Join-Path $outDir $apk.Name
-Copy-Item $apk.FullName $dest -Force
 
-""
-"APK   : $dest"
-"SIZE  : $([math]::Round($apk.Length / 1MB, 2)) MB"
-"SHA256: $((Get-FileHash $dest -Algorithm SHA256).Hash)"
+foreach ($m in $modes) {
+    $apkDir = Join-Path $root "app\build\outputs\apk\$m"
+    $apk = Get-ChildItem $apkDir -Filter *.apk -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $apk) { throw "APK not found in $apkDir" }
+    $dest = Join-Path $outDir $apk.Name
+    Copy-Item $apk.FullName $dest -Force
+    ""
+    "APK   : $dest"
+    "SIZE  : $([math]::Round($apk.Length / 1MB, 2)) MB"
+    "SHA256: $((Get-FileHash $dest -Algorithm SHA256).Hash)"
+}

@@ -90,7 +90,7 @@
 - 接口实测记录：[docs/api/win-9xueqi-api.md](docs/api/win-9xueqi-api.md)
 - 术语与状态编号：[GLOSSARY.md](GLOSSARY.md)
 - 页面设计取舍：[docs/design](docs/design)
-- 从源码构建：`cd android && build.cmd`（Windows，需 JDK 17+，脚本会自己锁定 JDK，不依赖 PATH 里的 java）
+- 从源码构建：`cd android && build.cmd`（Windows，需 JDK 17+，脚本会自己锁定 JDK，不依赖 PATH 里的 java）；`build.cmd release` 出签名包，`build.cmd both` 两个都出
 - 本软件由 DeepSeekHarness 辅助开发，虽经人工修正，仍可能存在错误，请注意辨别。
 
 ## 结语

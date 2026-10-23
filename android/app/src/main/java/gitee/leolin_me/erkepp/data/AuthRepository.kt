@@ -21,6 +21,8 @@ data class UserProfile(
     val grade: String = "",
     /** 班级名，例如「信息与计算科学26-1」。 */
     val className: String = "",
+    /** 头像地址；官方 `my-info` 的 `avatar` 字段，可能为空。 */
+    val avatar: String? = null,
 )
 
 data class Session(
@@ -69,6 +71,7 @@ class AuthRepository(private val api: ApiClient) {
             userId = data["id"]?.jsonPrimitive?.intOrNull?.toLong() ?: 0L,
             grade = text("grade"),
             className = text("className"),
+            avatar = text("avatar").takeIf { it.isNotBlank() },
         )
         return profile to data.toString()
     }

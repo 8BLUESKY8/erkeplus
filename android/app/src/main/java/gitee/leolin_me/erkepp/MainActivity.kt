@@ -474,6 +474,31 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
+                            // 头像 / 年级这些字段在旧会话里没有：进「我的」时补拉一次并落盘，
+                            // 之后就一直用缓存，只有点「刷新资料」才会再取
+                            fun reloadProfile() {
+                                val s = session ?: return
+                                scope.launch {
+                                    runCatching { authRepository.fetchProfile(s.token) }
+                                        .onSuccess { (profile, raw) ->
+                                            val updated = s.copy(profile = profile, rawProfile = raw)
+                                            sessionStore.save(updated)
+                                            session = updated
+                                        }
+                                }
+                            }
+                            LaunchedEffect(tab, session?.profile?.avatar) {
+                                val s = session
+                                if (tab == MainTab.PROFILE && s != null && s.profile.avatar == null) {
+                                    runCatching { authRepository.fetchProfile(s.token) }
+                                        .onSuccess { (profile, raw) ->
+                                            val updated = s.copy(profile = profile, rawProfile = raw)
+                                            sessionStore.save(updated)
+                                            session = updated
+                                        }
+                                }
+                            }
+
                             // 落定后再算「重新进入发现页」，避免拖动中途就触发
                             LaunchedEffect(pagerState) {
                                 var previous = pagerState.settledPage
@@ -511,7 +536,9 @@ class MainActivity : ComponentActivity() {
                                             onOpenActivity = { id -> detailActivityId = id },
                                             onOpenBlockRules = {
                                                 settingsSection = SettingsSection.BLOCK_RULES
-                                                tab = MainTab.SETTINGS
+                                                // 必须走 goTab：只改 tab 的话 pager 还停在发现页，
+                                                // 返回后就成了「底部高亮在设置、页面还是发现页」
+                                                goTab(MainTab.SETTINGS)
                                             },
                                             onOpenScan = { showHomeScan = true },
                                         )
@@ -522,6 +549,7 @@ class MainActivity : ComponentActivity() {
                                             onOpenCredit = { showCredit = true },
                                             onOpenAttachments = { attachmentsVisible = true },
                                             onOpenWeb = { webUrl = AppConfig.HOME_URL },
+                                            onRefreshProfile = { reloadProfile() },
                                         )
 
                                         MainTab.SETTINGS -> SettingsScreen(
@@ -917,6 +945,10 @@ class MainActivity : ComponentActivity() {
                                     CreditScreen(
                                         token = current.token,
                                         repository = creditRepository,
+                                        onOpenActivity = { id ->
+                                            showCredit = false
+                                            detailActivityId = id
+                                        },
                                         onBack = { showCredit = false },
                                     )
                                 }

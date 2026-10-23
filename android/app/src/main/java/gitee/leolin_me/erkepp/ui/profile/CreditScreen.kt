@@ -62,6 +62,7 @@ import kotlinx.coroutines.launch
 fun CreditScreen(
     token: String,
     repository: CreditRepository,
+    onOpenActivity: (Long) -> Unit,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -202,7 +203,8 @@ fun CreditScreen(
 
                     else -> LazyColumn(state = listState) {
                         items(records, key = { "${tab}-${it.relationId}-${it.startTime}" }) { record ->
-                            RecordRow(record)
+                            // 官方点卡片会跳到对应活动，这里保持一致
+                            RecordRow(record = record, onClick = { onOpenActivity(record.relationId) })
                         }
                         if (records.size < total) {
                             item {
@@ -307,10 +309,11 @@ private fun ScoreCard(credit: Double, grade: String, updateTime: Long) {
 }
 
 @Composable
-private fun RecordRow(record: CreditRecord) {
+private fun RecordRow(record: CreditRecord, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
