@@ -13,6 +13,17 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 
 /**
+ * 实测处在报名期的活动状态。2026-10-23 抓到的报名期样本有 1、3、5 三种：
+ * 1（武术与民族传统武术展演）、3（21天单词打卡）、5（毕业生德育铸魂引领活动）。
+ */
+private val ENROLLING_STATUS = setOf(1, 3, 5)
+
+/** 按钮提示里的时间：只要月日时分，年份省掉。 */
+private fun shortTime(millis: Long): String =
+    java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(millis))
+
+
+/**
  * 活动附件。
  *
  * 官方详情页的 `attachment` 是**数组**，每项形如
@@ -131,23 +142,44 @@ data class ActivityDetail(
      * 官方个人报名只要 `id` 与报名材料，所以只有「不需要填材料」的活动才放手；
      * 需要材料的回官方页面，避免造出一个半成品表单。年级/学院/诚信值等限制
      * 由服务端判定，这里只把明显不成立的情况挡在前面。
+     *
+     * 状态只放行实测处在报名期的那几种（1、3、5）；4 待报名、6 待开始、7 进行中、
+     * 8 已结束一律不给入口，具体原因由 [enrollBlockedReason] 说明。
      */
     val canEnroll: Boolean
         get() = identity == 0 &&
-            status == 5 &&
-            enrollEndTime > System.currentTimeMillis() &&
+            status in ENROLLING_STATUS &&
+            enrollWindowOpen &&
             (peopleLimit <= 0 || joinMemberCount < peopleLimit) &&
             enrollMaterial == 0
 
+    /** 报名窗口是否还开着。时间缺哪个就不卡哪个。 */
+    private val enrollWindowOpen: Boolean
+        get() {
+            val now = System.currentTimeMillis()
+            val afterStart = enrollStartTime <= 0 || now >= enrollStartTime
+            val beforeEnd = enrollEndTime <= 0 || now <= enrollEndTime
+            return afterStart && beforeEnd
+        }
+
     /** 不能报名的原因，用于按钮下方的提示；空串表示可以报名。 */
     val enrollBlockedReason: String
-        get() = when {
-            identity != 0 -> ""
-            status != 5 -> "活动当前不在报名中"
-            enrollEndTime in 1..System.currentTimeMillis() -> "报名已截止"
-            peopleLimit > 0 && joinMemberCount >= peopleLimit -> "名额已满"
-            enrollMaterial == 1 -> "这个活动需要填写报名材料，请到官方页面报名"
-            else -> ""
+        get() {
+            if (identity != 0) return ""
+            val now = System.currentTimeMillis()
+            return when {
+                status == 8 -> "活动已结束"
+                status == 7 -> "活动已开始，报名已截止"
+                status == 6 -> "报名已截止"
+                // 时间是硬约束，先说时间；时间解释不了才按状态说
+                enrollStartTime > now -> "报名还没开始，${shortTime(enrollStartTime)} 开始"
+                enrollEndTime in 1..now -> "报名已截止"
+                status == 4 -> "报名还没开始"
+                status !in ENROLLING_STATUS && status != 0 -> "这个活动的状态暂不支持报名，请到官方页面报名"
+                peopleLimit > 0 && joinMemberCount >= peopleLimit -> "名额已满"
+                enrollMaterial == 1 -> "这个活动需要填写报名材料，请到官方页面报名"
+                else -> ""
+            }
         }
 
     /**

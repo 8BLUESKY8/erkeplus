@@ -25,8 +25,10 @@ data class ActivityItem(
     val classifySecondName: String?,
     val startTime: Long,
     val endTime: Long,
+    /** 报名开始时间；0 表示未知。列表接口通常会返回，是判断「待报名」的依据。 */
+    val enrollStartTime: Long = 0L,
     /** 报名截止时间；列表接口不一定返回，0 表示未知。 */
-    val enrollEndTime: Long,
+    val enrollEndTime: Long = 0L,
     val enrollCount: Int,
     /** 人数上限；0 表示不限。 */
     val peopleLimit: Int,
@@ -296,6 +298,7 @@ internal fun parseActivityPage(response: kotlinx.serialization.json.JsonElement,
             classifySecondName = item["classifySecondName"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() },
             startTime = item["startTime"]?.jsonPrimitive?.longOrNull ?: 0L,
             endTime = item["endTime"]?.jsonPrimitive?.longOrNull ?: 0L,
+            enrollStartTime = item["enrollStartTime"]?.jsonPrimitive?.longOrNull ?: 0L,
             enrollEndTime = item["enrollEndTime"]?.jsonPrimitive?.longOrNull ?: 0L,
             enrollCount = item["enrollCount"]?.jsonPrimitive?.intOrNull ?: 0,
             peopleLimit = item["peopleLimit"]?.jsonPrimitive?.intOrNull ?: 0,

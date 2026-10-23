@@ -20,6 +20,7 @@ class EnrollGatingTest {
         identity: Int = 0,
         status: Int = 5,
         applyStatus: Int = 0,
+        enrollStartTime: Long = now - 24 * hour,
         enrollEndTime: Long = now + 2 * hour,
         startTime: Long = now + 48 * hour,
         peopleLimit: Int = 30,
@@ -39,7 +40,7 @@ class EnrollGatingTest {
         hoursToCreditRatio = 0.0,
         startTime = startTime,
         endTime = startTime + hour,
-        enrollStartTime = now - 24 * hour,
+        enrollStartTime = enrollStartTime,
         enrollEndTime = enrollEndTime,
         address = "",
         contact = "",
@@ -101,10 +102,35 @@ class EnrollGatingTest {
     }
 
     @Test
-    fun `cannot enroll when status is not enrolling`() {
+    fun `cannot enroll once the activity started`() {
         val started = detail(status = 7)
         assertFalse(started.canEnroll)
-        assertEquals("活动当前不在报名中", started.enrollBlockedReason)
+        assertEquals("活动已开始，报名已截止", started.enrollBlockedReason)
+    }
+
+    @Test
+    fun `status 3 is enrolling too`() {
+        // 2026-10-23 实测：报名中的活动有 1、3、5 三种编号，3 是最常见的一种
+        assertTrue(detail(status = 3).canEnroll)
+    }
+
+    @Test
+    fun `waiting for enrollment says when it opens`() {
+        val future = detail(status = 4, enrollStartTime = now + 3 * hour, enrollEndTime = now + 5 * hour)
+        assertFalse(future.canEnroll)
+        assertTrue(future.enrollBlockedReason.startsWith("报名还没开始"))
+    }
+
+    @Test
+    fun `missing enroll start does not block enrollment`() {
+        assertTrue(detail(enrollStartTime = 0).canEnroll)
+    }
+
+    @Test
+    fun `unknown status gets no native entry`() {
+        val weird = detail(status = 9)
+        assertFalse(weird.canEnroll)
+        assertTrue(weird.enrollBlockedReason.contains("官方页面"))
     }
 
     @Test

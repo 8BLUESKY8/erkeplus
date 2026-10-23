@@ -70,22 +70,35 @@ import gitee.leolin_me.erkepp.data.ActivitySearch
 import gitee.leolin_me.erkepp.data.AppPreferences
 import gitee.leolin_me.erkepp.data.BlockRules
 import gitee.leolin_me.erkepp.data.ReenterBehavior
+import gitee.leolin_me.erkepp.data.phase
 import gitee.leolin_me.erkepp.data.toUserMessage
 import gitee.leolin_me.erkepp.ui.formatHours
 import gitee.leolin_me.erkepp.ui.gridCardWidthDp
+import gitee.leolin_me.erkepp.ui.phaseColor
+import gitee.leolin_me.erkepp.ui.phaseLabel
 import gitee.leolin_me.erkepp.ui.prefetchCovers
 import gitee.leolin_me.erkepp.ui.rememberCoverRequest
-import gitee.leolin_me.erkepp.ui.statusColor
-import gitee.leolin_me.erkepp.ui.statusLabel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val StatusOptions = listOf(
-    "5" to "报名中",
+    // 报名期的活动官方给了三种编号（1、3、5），只传 5 会漏掉当时正在报名的那批
+    "1,3,5" to "报名中",
     "6" to "待开始",
     "7" to "进行中",
-    "4,5,6,7" to "全部",
+    // 4 是「待报名」，服务端在列表接口里恒为 0 条，留着只是保证编号连续
+    "1,3,4,5,6,7,8" to "全部",
 )
+
+/**
+ * 旧版本存下来的筛选值换成新集合：`5` 只覆盖旧编号，`4,5,6,7` 漏掉状态 1、3、8。
+ * 扫描类筛选存在 SharedPreferences 里，升级后如果原样读出来，用户会以为「全部」还是全部。
+ */
+private fun normalizeStatusFilter(value: String): String = when (value) {
+    "5" -> "1,3,5"
+    "4,5,6,7" -> "1,3,4,5,6,7,8"
+    else -> value
+}
 
 /** 列表每页条数（官方 H5 传 10，这里传 20 少翻一倍页数）。 */
 private const val PAGE_SIZE = 20
@@ -132,7 +145,7 @@ fun DiscoverScreen(
 
     var search by rememberSaveable { mutableStateOf(initialSearch) }
     var debouncedSearch by remember { mutableStateOf(initialSearch.trim()) }
-    var statusFilter by rememberSaveable { mutableStateOf(preferences.filterStatus) }
+    var statusFilter by rememberSaveable { mutableStateOf(normalizeStatusFilter(preferences.filterStatus)) }
     var classifyId by rememberSaveable { mutableIntStateOf(preferences.filterClassify) }
     var sortType by rememberSaveable { mutableIntStateOf(preferences.filterSort) }
     var enrolledOnly by rememberSaveable { mutableStateOf(preferences.filterEnrolled) }
@@ -704,11 +717,16 @@ private fun ActivityCard(
             if (item.recommended) {
                 Badge(text = "推荐", modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
             }
-            Badge(
-                text = statusLabel(item.status),
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
-                color = statusColor(item.status),
-            )
+            // 阶段优先看时间；数字认不出来时不画空角标
+            val phase = item.phase()
+            val phaseText = phaseLabel(phase)
+            if (phaseText.isNotEmpty()) {
+                Badge(
+                    text = phaseText,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                    color = phaseColor(phase),
+                )
+            }
         }
         Spacer(Modifier.height(8.dp))
         Text(

@@ -78,14 +78,16 @@ import gitee.leolin_me.erkepp.data.ActionOutcome
 import gitee.leolin_me.erkepp.data.ActivityAttachment
 import gitee.leolin_me.erkepp.data.ActivityDetail
 import gitee.leolin_me.erkepp.data.ActivityNotice
-import gitee.leolin_me.erkepp.data.SignRecord
+import gitee.leolin_me.erkepp.data.ActivityPhase
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.ActivityShare
+import gitee.leolin_me.erkepp.data.SignRecord
+import gitee.leolin_me.erkepp.data.phase
 import gitee.leolin_me.erkepp.data.toUserMessage
 import gitee.leolin_me.erkepp.ui.formatHours
+import gitee.leolin_me.erkepp.ui.phaseColor
+import gitee.leolin_me.erkepp.ui.phaseLabel
 import gitee.leolin_me.erkepp.ui.rememberCoverRequest
-import gitee.leolin_me.erkepp.ui.statusColor
-import gitee.leolin_me.erkepp.ui.statusLabel
 import gitee.leolin_me.erkepp.ui.sign.SignTarget
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -577,9 +579,10 @@ private fun DetailContent(
                 Spacer(Modifier.height(14.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    val label = statusLabel(detail.status)
+                    val phase = detail.phase()
+                    val label = phaseLabel(phase)
                     if (label.isNotEmpty()) {
-                        Pill(text = label, color = statusColor(detail.status))
+                        Pill(text = label, color = phaseColor(phase))
                         Spacer(Modifier.width(8.dp))
                     }
                     if (detail.classifyName.isNotBlank()) {
@@ -625,7 +628,7 @@ private fun DetailContent(
                     }
                 }
 
-                if (detail.status == 5 && detail.enrollEndTime > System.currentTimeMillis()) {
+                if (detail.phase() == ActivityPhase.ENROLLING && detail.enrollEndTime > System.currentTimeMillis()) {
                     Spacer(Modifier.height(10.dp))
                     CountdownChip(detail.enrollEndTime)
                 }
@@ -774,8 +777,9 @@ private fun DetailContent(
                     .padding(horizontal = 16.dp, vertical = 10.dp),
             ) {
                 // 作业入口按官方实际行为给：活动已开始/已结束，或本人已交过作业（查看作业）
+                val phase = detail.phase()
                 if (detail.identity == 1 &&
-                    (detail.status == 7 || detail.status == 8 || detail.isPostHomework == 1)
+                    (phase == ActivityPhase.RUNNING || phase == ActivityPhase.FINISHED || detail.isPostHomework == 1)
                 ) {
                     androidx.compose.material3.OutlinedButton(
                         onClick = onOpenHomework,

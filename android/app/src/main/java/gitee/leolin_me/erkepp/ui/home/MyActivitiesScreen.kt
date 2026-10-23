@@ -41,7 +41,9 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import gitee.leolin_me.erkepp.data.ActivityItem
 import gitee.leolin_me.erkepp.data.ActivityRepository
+import gitee.leolin_me.erkepp.data.phase
 import gitee.leolin_me.erkepp.data.toUserMessage
+import gitee.leolin_me.erkepp.ui.phaseLabel
 import gitee.leolin_me.erkepp.ui.rememberCoverRequest
 import kotlinx.coroutines.launch
 
@@ -180,8 +182,14 @@ private fun MyActivityRow(item: ActivityItem, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(4.dp))
+            // 阶段按时间算，避免服务端换编号时这里冒出「状态 3」
+            val phaseText = phaseLabel(item.phase())
             Text(
-                text = "${formatHoursText(item.hours)}学时 · ${statusText(item.status)}",
+                text = if (phaseText.isEmpty()) {
+                    "${formatHoursText(item.hours)}学时"
+                } else {
+                    "${formatHoursText(item.hours)}学时 · $phaseText"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -194,14 +202,6 @@ private fun MyActivityRow(item: ActivityItem, onClick: () -> Unit) {
             )
         }
     }
-}
-
-private fun statusText(status: Int): String = when (status) {
-    5 -> "报名中"
-    6 -> "待开始"
-    7 -> "进行中"
-    8 -> "已结束"
-    else -> "状态 $status"
 }
 
 private fun formatHoursText(value: Double): String =
