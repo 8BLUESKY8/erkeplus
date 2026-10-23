@@ -314,6 +314,26 @@ adb shell am start -n gitee.leolin_me.erkepp.debug/gitee.leolin_me.erkepp.MainAc
   实测已守约的 `amount` 是 0，失约是扣分（1.67）。
 - 页面上的「信用优异」= `credit` 落在哪个分数段，不是单独字段。
 
+## 个人资料字段（2026-10-23 实测）
+
+`GET student/user/my-info` 里有两个容易搞混的数字：
+
+| 字段 | 含义 | 实测值 |
+| --- | --- | --- |
+| `credit` | **诚信值**（0~100），与 `credit/user/detail` 的 `credit` 一致 | 98.33 |
+| `score` | **学分**，与成绩单 `#/scoreReport` 一致 | 0 |
+| `hours` | 学时 | 0 |
+
+客户端曾把 `credit` 当学分显示（「我的」页 98.3 学分），成绩单却是 0，就是这个原因。
+
+头像与其他资料：
+
+- `avatar` 是头像地址，`cardPhoto` 是成绩单上的证件照，两者都在阿里云 OSS。
+- **头像不限文件类型**：实测用户上传的 GIF 被原样保存，但文件名改成 `.jpg`、
+  服务端返回 `Content-Type: image/jpeg`，而文件头仍是 `GIF89a`。
+  按 MIME 判断的解码器（Coil）会把它当静态图，只画第一帧；客户端因此改为自己取字节、
+  按文件头调用 `ImageDecoder`，才能正常播放动图。
+
 ## 作业（2026-10-21 实测）
 
 | 场景 | 路由 | 接口 |

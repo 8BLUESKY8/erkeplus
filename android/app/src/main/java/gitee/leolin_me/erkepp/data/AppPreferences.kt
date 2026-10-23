@@ -111,6 +111,14 @@ class AppPreferences(context: Context) {
     /** 发现页「全部」要加载哪些状态。默认只含已发布的 5~8；1、3 未审核、4 待报名要用户自己勾。 */
     var loadStatuses: Set<Int> by prefCategories(KEY_LOAD_STATUSES, DEFAULT_LOAD_STATUSES)
 
+    /**
+     * 会话里缓存的个人资料版本。
+     *
+     * 加了新字段（头像、学分）后，老会话里没有这些值；版本低于当前值时补拉一次 `my-info`，
+     * 拉完写回就不再多请求。
+     */
+    var profileSchema: Int by prefInt(KEY_PROFILE_SCHEMA, 0)
+
     private fun prefBoolean(key: String, default: Boolean) = object : ReadWriteProperty<Any?, Boolean> {
         private var state by mutableStateOf(store.getBoolean(key, default))
 
@@ -191,6 +199,7 @@ class AppPreferences(context: Context) {
         const val KEY_CARD_TEXT = "card_custom_text"
         const val KEY_DEVELOPER = "developer_mode"
         const val KEY_LOAD_STATUSES = "load_statuses"
+        const val KEY_PROFILE_SCHEMA = "profile_schema"
 
         val DEFAULT_CATEGORIES = setOf(1440, 1441, 1444)
 

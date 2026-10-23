@@ -1,9 +1,7 @@
 package gitee.leolin_me.erkepp.ui.home
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,13 +24,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import gitee.leolin_me.erkepp.data.CreditDetail
 import gitee.leolin_me.erkepp.data.Session
-import gitee.leolin_me.erkepp.ui.rememberCoverRequest
+import gitee.leolin_me.erkepp.ui.profile.AvatarImage
 
 /**
  * 「我的」：个人信息、三个数字（学分 / 学时 / 诚信值）和入口。
@@ -95,11 +91,11 @@ fun ProfileScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            StatCard("学分", format(profile.credit), Modifier.weight(1f))
+            StatCard("学分", format(profile.score), Modifier.weight(1f))
             StatCard("学时", format(profile.hours), Modifier.weight(1f))
             StatCard(
                 label = "诚信值",
-                value = credit?.let { formatScore(it.credit) } ?: "—",
+                value = credit?.let { formatScore(it.credit) } ?: formatScore(profile.credit),
                 modifier = Modifier
                     .weight(1f)
                     .clickable(onClick = onOpenCredit),
@@ -141,28 +137,14 @@ fun ProfileScreen(
 
 @Composable
 private fun Avatar(url: String?, name: String) {
-    Box(
+    AvatarImage(
+        url = url,
+        name = name,
+        contentDescription = "头像",
         modifier = Modifier
             .size(56.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primaryContainer),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (url != null) {
-            AsyncImage(
-                model = rememberCoverRequest(url, 56, maxWidthPx = 224),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            Text(
-                text = name.take(1),
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-        }
-    }
+            .clip(CircleShape),
+    )
 }
 
 @Composable

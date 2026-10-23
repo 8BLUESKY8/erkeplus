@@ -14,8 +14,15 @@ data class UserProfile(
     val studentNo: String,
     val college: String,
     val major: String,
+    /**
+     * 诚信值（0~100），官方 `my-info` 的 `credit` 字段。
+     *
+     * 注意它**不是学分**：成绩单 `#/scoreReport` 里的学分是 [score]。
+     */
     val credit: Double,
     val hours: Double,
+    /** 学分，`my-info` 的 `score` 字段；没有学时就是 0。 */
+    val score: Double = 0.0,
     val userId: Long = 0L,
     /** 年级，例如「2026级」；服务端没给就是空串。 */
     val grade: String = "",
@@ -68,6 +75,7 @@ class AuthRepository(private val api: ApiClient) {
             major = text("majorName"),
             credit = number("credit"),
             hours = number("hours"),
+            score = number("score"),
             userId = data["id"]?.jsonPrimitive?.intOrNull?.toLong() ?: 0L,
             grade = text("grade"),
             className = text("className"),

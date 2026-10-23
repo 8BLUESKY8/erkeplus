@@ -56,6 +56,7 @@ class SessionStore(context: Context) {
             put("major", JsonPrimitive(session.profile.major))
             put("credit", JsonPrimitive(session.profile.credit))
             put("hours", JsonPrimitive(session.profile.hours))
+            put("score", JsonPrimitive(session.profile.score))
             put("userId", JsonPrimitive(session.profile.userId))
             put("grade", JsonPrimitive(session.profile.grade))
             put("className", JsonPrimitive(session.profile.className))
@@ -89,6 +90,7 @@ class SessionStore(context: Context) {
                 major = text("major"),
                 credit = profile["credit"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
                 hours = profile["hours"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+                score = profile["score"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
                 userId = profile["userId"]?.jsonPrimitive?.longOrNull ?: 0L,
                 grade = text("grade"),
                 className = text("className"),

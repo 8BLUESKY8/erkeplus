@@ -99,6 +99,14 @@ enum class MainTab(val label: String, val iconRes: Int) {
     SETTINGS("设置", R.drawable.ic_settings),
 }
 
+/**
+ * 本地会话里个人资料的结构版本。
+ *
+ * 每次给 `my-info` 加新字段（头像、学分…）就 +1：老会话缺少这些值，进「我的」时会补拉一次，
+ * 拉完写回并记下版本，之后不再重复请求。
+ */
+private const val PROFILE_SCHEMA = 1
+
 class MainActivity : ComponentActivity() {
 
     private var pendingFileCallback: ValueCallback<Array<Uri>>? = null
@@ -484,17 +492,20 @@ class MainActivity : ComponentActivity() {
                                             val updated = s.copy(profile = profile, rawProfile = raw)
                                             sessionStore.save(updated)
                                             session = updated
+                                            preferences.profileSchema = PROFILE_SCHEMA
                                         }
                                 }
                             }
-                            LaunchedEffect(tab, session?.profile?.avatar) {
-                                val s = session
-                                if (tab == MainTab.PROFILE && s != null && s.profile.avatar == null) {
+                            LaunchedEffect(tab, preferences.profileSchema) {
+                                val s = session ?: return@LaunchedEffect
+                                // 老会话里没有头像 / 学分：补拉一次并落盘，之后走缓存
+                                if (tab == MainTab.PROFILE && preferences.profileSchema < PROFILE_SCHEMA) {
                                     runCatching { authRepository.fetchProfile(s.token) }
                                         .onSuccess { (profile, raw) ->
                                             val updated = s.copy(profile = profile, rawProfile = raw)
                                             sessionStore.save(updated)
                                             session = updated
+                                            preferences.profileSchema = PROFILE_SCHEMA
                                         }
                                 }
                             }

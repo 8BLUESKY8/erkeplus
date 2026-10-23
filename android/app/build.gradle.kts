@@ -95,6 +95,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
+    // 官方头像不限类型，动图也要能放
+    implementation(libs.coil.gif)
     // 扫码只用解码，不引 CameraX / zxing-android-embedded：省体积，界面保持自绘
     implementation(libs.zxing.core)
     implementation(libs.androidx.profileinstaller)
