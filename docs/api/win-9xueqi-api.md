@@ -308,7 +308,11 @@ adb shell am start -n gitee.leolin_me.erkepp.debug/gitee.leolin_me.erkepp.MainAc
 
 - **分数段给的是小数**（`100.0`），`intOrNull` 读出来是 null，直接用会把 100 读成 0。
   客户端统一按 double 读再截断。
-- `type`：`1` 待守约、`2` 已守约、`3` 已失约、`4` 申诉记录。
+- `type`：`1` 待守约、`2` 已守约、`3` 已失约（H5 传的是 `chooseValue - 1`，标签 2/3/4 对应
+  chooseValue）。**申诉记录不走这个接口**，它是独立的 `GET credit/user/appeal-list`
+  （参数 `{searchName, pageNum, pageSize}`）。`credit/user/list` 传 `0`、`3`、`4` 都返回失约记录，
+  拿 `type=4` 当申诉列表会把「已失约」和「申诉记录」混在一起。
+- 申诉条目的 `appealStatus`：`1` 申诉待审核、`3` 申诉被驳回、其它算已通过。
 - 待守约的条目只有活动的字段（`relationName`、`logo`、`startTime`、`endTime`、`status`）；
   已守约 / 已失约多出 `amount`、`operator`（`+`/`-`）、`attendanceType`、`ctime`、`comment`。
   实测已守约的 `amount` 是 0，失约是扣分（1.67）。

@@ -54,6 +54,15 @@ data class CreditRecord(
     val status: Int,
 )
 
+/** 一条申诉记录。`status` 是 `appealStatus`：1 待审核、3 被驳回、其它为已通过。 */
+data class CreditAppeal(
+    val relationId: Long,
+    val name: String,
+    val logo: String?,
+    val time: Long,
+    val status: Int,
+)
+
 class CreditRepository(private val api: ApiClient) {
 
     suspend fun detail(token: String): CreditDetail {
@@ -74,6 +83,40 @@ class CreditRepository(private val api: ApiClient) {
         val parsed = parseCreditGrades(data)
         AppLog.d("credit", "grades=${parsed.size} raw=${data.toString().take(160)}")
         return parsed
+    }
+
+    /**
+     * 申诉记录。
+     *
+     * 注意：**不是** `credit/user/list` 的 type=4——官方 H5 的「申诉记录」走的是独立接口
+     * `credit/user/appeal-list`。`credit/user/list` 只有 type 1/2/3（待守约/已守约/已失约），
+     * 传 0、3、4 都会返回失约记录，拿它当申诉列表会把两者混在一起。
+     */
+    suspend fun appeals(token: String, page: Int, pageSize: Int = 20): Pair<Int, List<CreditAppeal>> {
+        val response = api.get(
+            path = "credit/user/appeal-list",
+            params = buildJsonObject {
+                put("searchName", JsonPrimitive(""))
+                put("pageNum", JsonPrimitive(page))
+                put("pageSize", JsonPrimitive(pageSize))
+            },
+            token = token,
+        )
+        response.requireSuccess()
+        val data = response.jsonObject["data"] as? JsonObject ?: return 0 to emptyList()
+        val total = data.int("total")
+        val list = (data["list"] as? JsonArray)?.mapNotNull { element ->
+            val item = element as? JsonObject ?: return@mapNotNull null
+            CreditAppeal(
+                relationId = item.num("relationId"),
+                name = item.str("relationName"),
+                logo = item.str("logo").takeIf { it.isNotBlank() },
+                // 申诉时间字段没有实测样本，服务端给哪个用哪个
+                time = item.num("appealTime").takeIf { it > 0 } ?: item.num("ctime"),
+                status = item.int("appealStatus"),
+            )
+        }.orEmpty()
+        return total to list
     }
 
     /** 记录列表：返回总数与当前页。 */

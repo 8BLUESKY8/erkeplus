@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import gitee.leolin_me.erkepp.data.CreditAppeal
 import gitee.leolin_me.erkepp.data.CreditDetail
 import gitee.leolin_me.erkepp.data.CreditGrade
 import gitee.leolin_me.erkepp.data.CreditRecord
@@ -77,6 +78,8 @@ fun CreditScreen(
     var total by remember { mutableIntStateOf(0) }
     var page by remember { mutableIntStateOf(1) }
     var listLoading by remember { mutableStateOf(false) }
+    // 申诉记录是另一个接口，单独存
+    var appeals by remember { mutableStateOf<List<CreditAppeal>>(emptyList()) }
 
     // 分数与分数段分两个协程并行拉：页面先出分数，等级晚一点补上，不用等两个 RTT 串行
     LaunchedEffect(Unit) {
@@ -92,33 +95,47 @@ fun CreditScreen(
 
     suspend fun loadRecords(targetPage: Int) {
         listLoading = true
-        runCatching { repository.records(token, tab, targetPage) }
-            .onSuccess { (count, list) ->
-                total = count
-                records = if (targetPage == 1) list else records + list
-                page = targetPage
-                error = null
-            }
-            .onFailure { error = it.toUserMessage() }
+        if (tab == TAB_APPEAL) {
+            runCatching { repository.appeals(token, targetPage) }
+                .onSuccess { (count, list) ->
+                    total = count
+                    appeals = if (targetPage == 1) list else appeals + list
+                    page = targetPage
+                    error = null
+                }
+                .onFailure { error = it.toUserMessage() }
+        } else {
+            runCatching { repository.records(token, tab, targetPage) }
+                .onSuccess { (count, list) ->
+                    total = count
+                    records = if (targetPage == 1) list else records + list
+                    page = targetPage
+                    error = null
+                }
+                .onFailure { error = it.toUserMessage() }
+        }
         listLoading = false
     }
 
     // 切标签重拉第一页
     LaunchedEffect(tab) {
         records = emptyList()
+        appeals = emptyList()
         total = 0
         loadRecords(1)
     }
+
+    val shownCount = if (tab == TAB_APPEAL) appeals.size else records.size
 
     val listState = rememberLazyListState()
     val nearEnd by remember {
         derivedStateOf {
             val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            last >= records.size - 3
+            last >= shownCount - 3
         }
     }
-    LaunchedEffect(nearEnd, records.size, total) {
-        if (nearEnd && !listLoading && records.size < total) loadRecords(page + 1)
+    LaunchedEffect(nearEnd, shownCount, total) {
+        if (nearEnd && !listLoading && shownCount < total) loadRecords(page + 1)
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -193,7 +210,7 @@ fun CreditScreen(
                         contentAlignment = Alignment.Center,
                     ) { CircularProgressIndicator() }
 
-                    records.isEmpty() -> Box(
+                    tab == TAB_APPEAL && appeals.isEmpty() -> Box(
                         Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -202,6 +219,34 @@ fun CreditScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+
+                    records.isEmpty() && tab != TAB_APPEAL -> Box(
+                        Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = error ?: emptyText(tab),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    tab == TAB_APPEAL -> LazyColumn(state = listState) {
+                        items(appeals, key = { "${it.relationId}-${it.time}" }) { appeal ->
+                            AppealRow(appeal = appeal, onClick = { onOpenActivity(appeal.relationId) })
+                        }
+                        if (appeals.size < total) {
+                            item {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) { CircularProgressIndicator(Modifier.size(20.dp)) }
+                            }
+                        }
+                        item { Spacer(Modifier.height(24.dp)) }
                     }
 
                     else -> LazyColumn(state = listState) {
@@ -309,6 +354,67 @@ private fun ScoreCard(credit: Double, grade: String, updateTime: Long) {
             }
         }
     }
+}
+
+@Composable
+private fun AppealRow(appeal: CreditAppeal, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 56.dp, height = 56.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            if (appeal.logo != null) {
+                AsyncImage(
+                    model = rememberCoverRequest(appeal.logo, 56, maxWidthPx = 224),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = appeal.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (appeal.time > 0) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "提交于 ${shortRange(appeal.time, 0)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Text(
+            text = appealStatusText(appeal.status),
+            style = MaterialTheme.typography.labelMedium,
+            color = when (appeal.status) {
+                1 -> MaterialTheme.colorScheme.primary
+                3 -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+    }
+}
+
+/** 申诉状态：1 待审核、3 被驳回、其它算通过（与官方 H5 一致）。 */
+private fun appealStatusText(status: Int): String = when (status) {
+    1 -> "申诉待审核"
+    3 -> "申诉被驳回"
+    else -> "申诉已通过"
 }
 
 @Composable
