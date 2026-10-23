@@ -29,8 +29,8 @@ android {
         applicationId = "gitee.leolin_me.erkepp"
         minSdk = 26
         targetSdk = 36
-        versionCode = 32
-        versionName = "0.8.4"
+        versionCode = 33
+        versionName = "0.8.5"
     }
 
     signingConfigs {

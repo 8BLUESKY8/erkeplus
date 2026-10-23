@@ -47,13 +47,15 @@ fun PersonalInfoScreen(
     token: String,
     repository: ProfileRepository,
     onOpenPassword: () -> Unit,
+    onOpenMobile: (String) -> Unit,
+    refreshKey: Int = 0,
     onBack: () -> Unit,
 ) {
     var details by remember { mutableStateOf<ProfileDetails?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(refreshKey) {
         loading = true
         runCatching { repository.details(token) }
             .onSuccess { details = it; error = null }
@@ -117,7 +119,11 @@ fun PersonalInfoScreen(
                 }
                 Spacer(Modifier.height(12.dp))
                 InfoCard("账号安全") {
-                    InfoRow("手机号", current.maskedMobile)
+                    ActionRow(
+                        label = "手机号",
+                        action = current.maskedMobile,
+                        onClick = { onOpenMobile(current.mobile) },
+                    )
                     ActionRow("登录密码", "修改", onClick = onOpenPassword, last = true)
                 }
                 Spacer(Modifier.height(16.dp))

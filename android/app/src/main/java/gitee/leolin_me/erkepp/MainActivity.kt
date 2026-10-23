@@ -79,6 +79,7 @@ import gitee.leolin_me.erkepp.ui.home.DiscoverScreen
 import gitee.leolin_me.erkepp.ui.home.ProfileScreen
 import gitee.leolin_me.erkepp.ui.login.ForgotPasswordScreen
 import gitee.leolin_me.erkepp.ui.login.LoginScreen
+import gitee.leolin_me.erkepp.ui.profile.ChangeMobileScreen
 import gitee.leolin_me.erkepp.ui.profile.ChangePasswordScreen
 import gitee.leolin_me.erkepp.ui.profile.CreditScreen
 import gitee.leolin_me.erkepp.ui.profile.PersonalInfoScreen
@@ -185,6 +186,9 @@ class MainActivity : ComponentActivity() {
                 var showCredit by remember { mutableStateOf(false) }
                 var showPersonalInfo by remember { mutableStateOf(false) }
                 var showChangePassword by remember { mutableStateOf(false) }
+                var showChangeMobile by remember { mutableStateOf(false) }
+                var pendingMobile by remember { mutableStateOf("") }
+                var personalInfoTick by remember { mutableIntStateOf(0) }
                 // 「我的」上的诚信值摘要：进这一页时拉一次，失败就显示「—」，不挡别的入口
                 var creditDetail by remember { mutableStateOf<CreditDetail?>(null) }
                 // 支持 `am start ... --el detail_id 566506` 直接开详情，方便调试和截图
@@ -967,7 +971,30 @@ class MainActivity : ComponentActivity() {
                                         token = current.token,
                                         repository = profileRepository,
                                         onOpenPassword = { showChangePassword = true },
+                                        onOpenMobile = { mobile ->
+                                            pendingMobile = mobile
+                                            showChangeMobile = true
+                                        },
+                                        refreshKey = personalInfoTick,
                                         onBack = { showPersonalInfo = false },
+                                    )
+                                }
+                            }
+
+                            // 更换手机号：验证码发到旧号，成功后回到资料页并刷新
+                            if (showChangeMobile) {
+                                SecondaryPage(onBack = { showChangeMobile = false }) {
+                                    ChangeMobileScreen(
+                                        token = current.token,
+                                        repository = profileRepository,
+                                        currentMobile = pendingMobile,
+                                        onBack = { showChangeMobile = false },
+                                        onUpdated = {
+                                            showChangeMobile = false
+                                            personalInfoTick++
+                                            reloadProfile()
+                                            Toast.makeText(activity, "手机号已更换", Toast.LENGTH_SHORT).show()
+                                        },
                                     )
                                 }
                             }

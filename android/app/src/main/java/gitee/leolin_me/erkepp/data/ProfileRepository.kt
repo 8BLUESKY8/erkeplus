@@ -90,6 +90,38 @@ class ProfileRepository(private val api: ApiClient) {
         response.requireSuccess()
     }
 
+    /**
+     * 更换手机号：先给**当前**手机号发验证码，再带着验证码与新号提交。
+     *
+     * 官方没有「新号也收一次码」的环节，`code` 是旧号收到的那个。
+     */
+    suspend fun sendMobileCaptcha(token: String, mobile: String) {
+        val response = api.post(
+            path = "common/captcha/mobile",
+            params = buildJsonObject {
+                put("countryCode", kotlinx.serialization.json.JsonPrimitive("86"))
+                put("mobile", kotlinx.serialization.json.JsonPrimitive(mobile))
+                put("type", kotlinx.serialization.json.JsonPrimitive(2))
+            },
+            token = token,
+        )
+        response.requireSuccess()
+    }
+
+    suspend fun updateMobile(token: String, oldMobile: String, code: String, newMobile: String) {
+        val response = api.post(
+            path = "student/user/update-mobile",
+            params = buildJsonObject {
+                put("oldMobile", kotlinx.serialization.json.JsonPrimitive(oldMobile))
+                put("countryCode", kotlinx.serialization.json.JsonPrimitive(86))
+                put("code", kotlinx.serialization.json.JsonPrimitive(code))
+                put("newMobile", kotlinx.serialization.json.JsonPrimitive(newMobile))
+            },
+            token = token,
+        )
+        response.requireSuccess()
+    }
+
     private fun parse(data: JsonObject): ProfileDetails {
         fun text(key: String): String = (data[key] as? JsonPrimitive)?.contentOrNull.orEmpty()
         fun int(key: String): Int = (data[key] as? JsonPrimitive)?.intOrNull ?: 0
@@ -116,3 +148,7 @@ class ProfileRepository(private val api: ApiClient) {
 
 /** 组装 `personTag` 提交值：`[8,9]` → `"8,9"`。 */
 internal fun personTagValue(ids: List<Int>): String = ids.joinToString(",")
+
+/** 更换手机号时的输入校验：大陆号码，1 开头、共 11 位。 */
+fun isValidMobile(mobile: String): Boolean =
+    mobile.length == 11 && mobile[0] == '1' && mobile.all { it.isDigit() }
