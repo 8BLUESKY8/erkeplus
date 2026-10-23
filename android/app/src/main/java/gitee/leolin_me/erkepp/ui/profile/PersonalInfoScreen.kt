@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -24,8 +25,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import gitee.leolin_me.erkepp.data.ProfileDetails
 import gitee.leolin_me.erkepp.data.ProfileRepository
 import gitee.leolin_me.erkepp.data.toUserMessage
+import kotlinx.coroutines.launch
 
 /**
  * 详细个人资料。
@@ -54,8 +58,15 @@ fun PersonalInfoScreen(
     var details by remember { mutableStateOf<ProfileDetails?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
+    // 每写成功一次自增，触发重新拉资料
+    var localTick by remember { mutableIntStateOf(0) }
+    var editing by remember { mutableStateOf<String?>(null) }
+    var nations by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
+    var submitting by remember { mutableStateOf(false) }
+    var writeError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(refreshKey) {
+    LaunchedEffect(refreshKey, localTick) {
         loading = true
         runCatching { repository.details(token) }
             .onSuccess { details = it; error = null }
@@ -106,9 +117,16 @@ fun PersonalInfoScreen(
                 Spacer(Modifier.height(12.dp))
                 InfoCard("基本信息") {
                     InfoRow("学号", current.studentNo)
-                    InfoRow("性别", current.genderText)
-                    InfoRow("民族", current.ethnic.ifBlank { "未填写" })
-                    InfoRow("政治面貌", current.politicsText)
+                    ActionRow("性别", current.genderText, onClick = { editing = "gender" })
+                    ActionRow("民族", current.ethnic.ifBlank { "未填写" }, onClick = {
+                        editing = "ethnic"
+                        if (nations.isEmpty()) {
+                            scope.launch {
+                                nations = runCatching { repository.nations(token) }.getOrDefault(emptyList())
+                            }
+                        }
+                    })
+                    ActionRow("政治面貌", current.politicsText, onClick = { editing = "politics" }, last = true)
                 }
                 Spacer(Modifier.height(12.dp))
                 InfoCard("院系") {
@@ -136,6 +154,119 @@ fun PersonalInfoScreen(
             }
         }
     }
+
+    // 三处单字段修改共用一套选择对话框；一次只提交一个字段（官方 update-info 如此）
+    val current = details
+    if (current != null && editing != null && !submitting) {
+        val title = when (editing) {
+            "gender" -> "选择性别"
+            "ethnic" -> "选择民族"
+            else -> "选择政治面貌"
+        }
+        val options = when (editing) {
+            "gender" -> listOf(1 to "男", 2 to "女")
+            "ethnic" -> nations
+            else -> listOf(
+                0 to "群众",
+                1 to "共青团员",
+                2 to "中共党员",
+                3 to "其他党派",
+                4 to "中共预备党员",
+            )
+        }
+        val selected = when (editing) {
+            "gender" -> current.gender
+            "ethnic" -> current.ethnicId
+            else -> current.politics
+        }
+        ChoiceDialog(
+            title = title,
+            options = options,
+            selected = selected,
+            error = writeError,
+            onDismiss = {
+                editing = null
+                writeError = null
+            },
+            onPick = { value ->
+                val field = editing
+                submitting = true
+                writeError = null
+                scope.launch {
+                    runCatching {
+                        when (field) {
+                            "gender" -> repository.updateGender(token, value)
+                            "ethnic" -> repository.updateEthnic(token, value)
+                            else -> repository.updatePolitics(token, value)
+                        }
+                    }
+                        .onSuccess {
+                            editing = null
+                            localTick++
+                        }
+                        .onFailure { writeError = it.toUserMessage() }
+                    submitting = false
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun ChoiceDialog(
+    title: String,
+    options: List<Pair<Int, String>>,
+    selected: Int,
+    error: String?,
+    onDismiss: () -> Unit,
+    onPick: (Int) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                if (options.isEmpty()) {
+                    Text(
+                        text = "列表还没加载出来，稍后再试。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                options.forEach { (value, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(value) }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (value == selected) {
+                            Text(
+                                text = "当前",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }
 
 @Composable

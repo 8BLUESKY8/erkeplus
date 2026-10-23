@@ -122,6 +122,40 @@ class ProfileRepository(private val api: ApiClient) {
         response.requireSuccess()
     }
 
+    /** 民族文化列表：下标 + 1 就是提交用的 `ethnicId`（与官方 H5 的算法一致）。 */
+    suspend fun nations(token: String): List<Pair<Int, String>> {
+        val response = api.get("student/get/nation_list", buildJsonObject { }, token)
+        response.requireSuccess()
+        val array = response.jsonObject["data"] as? JsonArray ?: return emptyList()
+        return array.mapIndexedNotNull { index, element ->
+            val item = element as? JsonObject ?: return@mapIndexedNotNull null
+            val name = (item["name"] as? JsonPrimitive)?.contentOrNull ?: return@mapIndexedNotNull null
+            (index + 1) to name
+        }
+    }
+
+    /** 改性别：1 男、2 女。 */
+    suspend fun updateGender(token: String, gender: Int) =
+        updateField(token, "gender", kotlinx.serialization.json.JsonPrimitive(gender))
+
+    /** 改政治面貌：0 群众、1 共青团员、2 中共党员、3 其他党派、4 中共预备党员。 */
+    suspend fun updatePolitics(token: String, politics: Int) =
+        updateField(token, "politics", kotlinx.serialization.json.JsonPrimitive(politics))
+
+    /** 改民族：`ethnicId` 是民族列表下标 + 1。 */
+    suspend fun updateEthnic(token: String, ethnicId: Int) =
+        updateField(token, "ethnicId", kotlinx.serialization.json.JsonPrimitive(ethnicId))
+
+    /** `update-info` 一次只认一个字段，所以统一走这里。 */
+    private suspend fun updateField(token: String, key: String, value: kotlinx.serialization.json.JsonPrimitive) {
+        val response = api.post(
+            path = "student/user/update-info",
+            params = buildJsonObject { put(key, value) },
+            token = token,
+        )
+        response.requireSuccess()
+    }
+
     private fun parse(data: JsonObject): ProfileDetails {
         fun text(key: String): String = (data[key] as? JsonPrimitive)?.contentOrNull.orEmpty()
         fun int(key: String): Int = (data[key] as? JsonPrimitive)?.intOrNull ?: 0
