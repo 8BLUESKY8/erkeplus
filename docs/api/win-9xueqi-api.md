@@ -315,7 +315,6 @@ adb shell am start -n gitee.leolin_me.erkepp.debug/gitee.leolin_me.erkepp.MainAc
 - 页面上的「信用优异」= `credit` 落在哪个分数段，不是单独字段。
 
 ## 个人资料字段（2026-10-23 实测）
-
 `GET student/user/my-info` 里有两个容易搞混的数字：
 
 | 字段 | 含义 | 实测值 |
@@ -333,6 +332,29 @@ adb shell am start -n gitee.leolin_me.erkepp.debug/gitee.leolin_me.erkepp.MainAc
   服务端返回 `Content-Type: image/jpeg`，而文件头仍是 `GIF89a`。
   按 MIME 判断的解码器（Coil）会把它当静态图，只画第一帧；客户端因此改为自己取字节、
   按文件头调用 `ImageDecoder`，才能正常播放动图。
+
+## 个人信息接口（2026-10-23 从 H5 源码核对）
+
+读：
+
+| 端点 | 参数 | 说明 |
+| --- | --- | --- |
+| `GET student/user/my/info/mine` | `{}` | 详细资料，比 `my-info` 多 `mobile`、`ethnic`、`ethnicId`、`politics`、`politicsName`、`personTag` |
+| `GET student/user/my-person-info` | `{}` | 「我的信息」页用的资料，字段与上面基本一致 |
+| `GET student/get/nation_list` | `{}` | 民族数组，提交时用「下标 + 1」 |
+| `GET dict/user/tag` | `{}` | 标签字典 `[{id, name}]` |
+
+写（H5 源码里的调用，**未实测**）：
+
+| 端点 | 参数 | 说明 |
+| --- | --- | --- |
+| `POST student/user/update-info` | `{gender}` / `{politics}` / `{ethnicId}` / `{avatar}` | 一次只提交一个字段 |
+| `POST student/user/update-mobile` | `{oldMobile, countryCode:86, code, newMobile}` | 验证码经 `POST common/captcha/mobile {mobile:<旧号>, type:2}` 发到旧号 |
+| `POST student/user/update-pwd` | `{oldPwd, newPwd, newPwdRepeat}` | 成功后 token 失效，官方清 `TOKEN` 回登录页 |
+| `POST student/user/update-person-tag` | `{personTag:"8,9,5"}` | 逗号分隔的标签 id |
+| `POST student/photo/update` | `{cardPhoto} ` | 成绩单证件照；头像不走这里 |
+
+`politics` 取值：`0` 群众、`1` 共青团员、`2` 中共党员、`3` 其他党派、`4` 中共预备党员。
 
 ## 作业（2026-10-21 实测）
 
