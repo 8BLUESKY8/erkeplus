@@ -156,6 +156,31 @@ class ProfileRepository(private val api: ApiClient) {
         response.requireSuccess()
     }
 
+    /** 标签字典 `dict/user/tag`：`[{id, name}]`。 */
+    suspend fun tagDictionary(token: String): List<Pair<Int, String>> {
+        val response = api.get("dict/user/tag", buildJsonObject { }, token)
+        response.requireSuccess()
+        val array = response.jsonObject["data"] as? JsonArray ?: return emptyList()
+        return array.mapNotNull { element ->
+            val item = element as? JsonObject ?: return@mapNotNull null
+            val id = (item["id"] as? JsonPrimitive)?.intOrNull ?: return@mapNotNull null
+            val name = (item["name"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+            id to name
+        }
+    }
+
+    /** 保存标签：`personTag` 是逗号分隔的 id 串。 */
+    suspend fun updateTags(token: String, ids: List<Int>) {
+        val response = api.post(
+            path = "student/user/update-person-tag",
+            params = buildJsonObject {
+                put("personTag", kotlinx.serialization.json.JsonPrimitive(personTagValue(ids)))
+            },
+            token = token,
+        )
+        response.requireSuccess()
+    }
+
     private fun parse(data: JsonObject): ProfileDetails {
         fun text(key: String): String = (data[key] as? JsonPrimitive)?.contentOrNull.orEmpty()
         fun int(key: String): Int = (data[key] as? JsonPrimitive)?.intOrNull ?: 0

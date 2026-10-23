@@ -83,6 +83,7 @@ import gitee.leolin_me.erkepp.ui.profile.ChangeMobileScreen
 import gitee.leolin_me.erkepp.ui.profile.ChangePasswordScreen
 import gitee.leolin_me.erkepp.ui.profile.CreditScreen
 import gitee.leolin_me.erkepp.ui.profile.PersonalInfoScreen
+import gitee.leolin_me.erkepp.ui.profile.TagsScreen
 import gitee.leolin_me.erkepp.ui.school.SchoolPickerScreen
 import gitee.leolin_me.erkepp.ui.settings.BlockRulesScreen
 import gitee.leolin_me.erkepp.ui.settings.SignLogScreen
@@ -187,6 +188,8 @@ class MainActivity : ComponentActivity() {
                 var showPersonalInfo by remember { mutableStateOf(false) }
                 var showChangePassword by remember { mutableStateOf(false) }
                 var showChangeMobile by remember { mutableStateOf(false) }
+                var showTags by remember { mutableStateOf(false) }
+                var pendingTagIds by remember { mutableStateOf<List<Int>>(emptyList()) }
                 var pendingMobile by remember { mutableStateOf("") }
                 var personalInfoTick by remember { mutableIntStateOf(0) }
                 // 「我的」上的诚信值摘要：进这一页时拉一次，失败就显示「—」，不挡别的入口
@@ -975,8 +978,28 @@ class MainActivity : ComponentActivity() {
                                             pendingMobile = mobile
                                             showChangeMobile = true
                                         },
+                                        onOpenTags = { ids ->
+                                            pendingTagIds = ids
+                                            showTags = true
+                                        },
                                         refreshKey = personalInfoTick,
                                         onBack = { showPersonalInfo = false },
+                                    )
+                                }
+                            }
+
+                            // 标签：字典多选，保存后回到资料页并刷新
+                            if (showTags) {
+                                SecondaryPage(onBack = { showTags = false }) {
+                                    TagsScreen(
+                                        token = current.token,
+                                        repository = profileRepository,
+                                        initialIds = pendingTagIds,
+                                        onBack = { showTags = false },
+                                        onSaved = {
+                                            showTags = false
+                                            personalInfoTick++
+                                        },
                                     )
                                 }
                             }

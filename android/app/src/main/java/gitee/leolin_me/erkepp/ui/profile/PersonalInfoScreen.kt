@@ -52,12 +52,14 @@ fun PersonalInfoScreen(
     repository: ProfileRepository,
     onOpenPassword: () -> Unit,
     onOpenMobile: (String) -> Unit,
+    onOpenTags: (List<Int>) -> Unit,
     refreshKey: Int = 0,
     onBack: () -> Unit,
 ) {
     var details by remember { mutableStateOf<ProfileDetails?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
+    var tagDict by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
     // 每写成功一次自增，触发重新拉资料
     var localTick by remember { mutableIntStateOf(0) }
     var editing by remember { mutableStateOf<String?>(null) }
@@ -71,6 +73,10 @@ fun PersonalInfoScreen(
         runCatching { repository.details(token) }
             .onSuccess { details = it; error = null }
             .onFailure { error = it.toUserMessage() }
+        // 标签字典只在第一次进来时拉，用来把 id 显示成名字
+        if (tagDict.isEmpty()) {
+            tagDict = runCatching { repository.tagDictionary(token) }.getOrDefault(emptyList())
+        }
         loading = false
     }
 
@@ -134,6 +140,17 @@ fun PersonalInfoScreen(
                     InfoRow("专业", current.major.ifBlank { "—" })
                     InfoRow("班级", current.className.ifBlank { "—" })
                     InfoRow("年级", current.grade.ifBlank { "—" }, last = true)
+                }
+                Spacer(Modifier.height(12.dp))
+                InfoCard("标签") {
+                    ActionRow(
+                        label = "我的标签",
+                        action = tagNames(current.personTagIds, tagDict)
+                            .joinToString(" ")
+                            .ifBlank { "未设置" },
+                        onClick = { onOpenTags(current.personTagIds) },
+                        last = true,
+                    )
                 }
                 Spacer(Modifier.height(12.dp))
                 InfoCard("账号安全") {
