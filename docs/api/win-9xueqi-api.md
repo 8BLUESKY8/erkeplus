@@ -360,6 +360,29 @@ adb shell am start -n gitee.leolin_me.erkepp.debug/gitee.leolin_me.erkepp.MainAc
 
 `politics` 取值：`0` 群众、`1` 共青团员、`2` 中共党员、`3` 其他党派、`4` 中共预备党员。
 
+## 成绩单与排行榜（2026-10-24 实测）
+
+| 端点 | 参数 | 返回 |
+| --- | --- | --- |
+| `GET student/achievement/rank` | `pageNum`、`pageSize`、`level` | `{total, list[{rownum, hours, score, name, code, className, majorName, collegeName, grade, campusName, avatar, gender}]}` |
+| `GET student/achievement/self/rank` | `level` | 同名次的单条记录（本人） |
+
+**排行榜里的「成绩」就是学分**，不是学时也不是诚信值：
+
+```
+score = hours × 0.025        // 我校 40 学时 = 1 学分
+169h → 4.225   148h → 3.7   143h → 3.575   93h → 2.325   69h → 1.725
+7h → 0.175     3h → 0.075   2h → 0.05      1h → 0.025     0h → 0
+```
+
+全校 39 条与班级 39 条都严格满足这个比例，且与 `my-info.score`、成绩单页一致
+（我的页「学分」显示的也是它）。规则来自学校的学时折算学分配置（`ways-convert` 返回
+`waysConvert=1`，即启用折算），客户端只展示服务端算好的 `score`，不要自己乘。
+
+- `rownum` 是名次，并列同名次（例如 2、2、3、3、3、4）。
+- `level` 实测：`10` 是本班（全班同学）；`1`~`4` 都返回同一批 100 条、首名相同，
+  看来要配合院系 / 专业 / 班级 id 才能收窄，映射尚未核实。
+
 ## 作业（2026-10-21 实测）
 
 | 场景 | 路由 | 接口 |
