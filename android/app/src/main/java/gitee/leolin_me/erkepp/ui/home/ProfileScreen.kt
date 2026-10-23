@@ -19,7 +19,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,10 +39,10 @@ import gitee.leolin_me.erkepp.ui.profile.AvatarImage
 fun ProfileScreen(
     session: Session,
     credit: CreditDetail?,
+    onOpenPersonalInfo: () -> Unit,
     onOpenCredit: () -> Unit,
     onOpenAttachments: () -> Unit,
     onOpenWeb: () -> Unit,
-    onRefreshProfile: () -> Unit,
 ) {
     val profile = session.profile
     Column(
@@ -54,8 +53,13 @@ fun ProfileScreen(
     ) {
         Spacer(Modifier.height(24.dp))
 
-        // 头像来自官方 my-info 的 avatar，缓存在会话里；没有就退回姓名首字
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // 资料卡整块可点：进「详细资料」，里面能看全信息、改密码手机号
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenPersonalInfo),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Avatar(profile.avatar, profile.name)
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -75,7 +79,11 @@ fun ProfileScreen(
                     )
                 }
             }
-            TextButton(onClick = onRefreshProfile) { Text("刷新资料") }
+            Text(
+                text = "详细资料 ›",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         Spacer(Modifier.height(14.dp))

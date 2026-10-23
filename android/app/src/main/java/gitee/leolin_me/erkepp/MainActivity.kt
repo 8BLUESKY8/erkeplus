@@ -50,6 +50,7 @@ import gitee.leolin_me.erkepp.data.ActivityDetail
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.CreditDetail
 import gitee.leolin_me.erkepp.data.CreditRepository
+import gitee.leolin_me.erkepp.data.ProfileRepository
 import gitee.leolin_me.erkepp.data.SignSandboxStore
 import gitee.leolin_me.erkepp.data.sandboxSubmit
 import gitee.leolin_me.erkepp.data.AttachmentStorage
@@ -79,6 +80,7 @@ import gitee.leolin_me.erkepp.ui.home.ProfileScreen
 import gitee.leolin_me.erkepp.ui.login.ForgotPasswordScreen
 import gitee.leolin_me.erkepp.ui.login.LoginScreen
 import gitee.leolin_me.erkepp.ui.profile.CreditScreen
+import gitee.leolin_me.erkepp.ui.profile.PersonalInfoScreen
 import gitee.leolin_me.erkepp.ui.school.SchoolPickerScreen
 import gitee.leolin_me.erkepp.ui.settings.BlockRulesScreen
 import gitee.leolin_me.erkepp.ui.settings.SignLogScreen
@@ -146,6 +148,7 @@ class MainActivity : ComponentActivity() {
         val activityRepository = ActivityRepository(apiClient)
         val activityActions = ActivityActions(apiClient)
         val creditRepository = CreditRepository(apiClient)
+        val profileRepository = ProfileRepository(apiClient)
         Startup.mark("repositories")
 
         setContent {
@@ -179,6 +182,7 @@ class MainActivity : ComponentActivity() {
 
                 var settingsSection by remember { mutableStateOf(SettingsSection.ROOT) }
                 var showCredit by remember { mutableStateOf(false) }
+                var showPersonalInfo by remember { mutableStateOf(false) }
                 // 「我的」上的诚信值摘要：进这一页时拉一次，失败就显示「—」，不挡别的入口
                 var creditDetail by remember { mutableStateOf<CreditDetail?>(null) }
                 // 支持 `am start ... --el detail_id 566506` 直接开详情，方便调试和截图
@@ -557,10 +561,14 @@ class MainActivity : ComponentActivity() {
                                         MainTab.PROFILE -> ProfileScreen(
                                             session = current,
                                             credit = creditDetail,
+                                            onOpenPersonalInfo = {
+                                                showPersonalInfo = true
+                                                // 顺便刷新会话里的头像与学分，回来时「我的」也是新的
+                                                reloadProfile()
+                                            },
                                             onOpenCredit = { showCredit = true },
                                             onOpenAttachments = { attachmentsVisible = true },
                                             onOpenWeb = { webUrl = AppConfig.HOME_URL },
-                                            onRefreshProfile = { reloadProfile() },
                                         )
 
                                         MainTab.SETTINGS -> SettingsScreen(
@@ -946,6 +954,17 @@ class MainActivity : ComponentActivity() {
                                         resolve = { name -> attachmentFiles.firstOrNull { it.name == name } },
                                         onBack = { previewNames = emptyList() },
                                         onShare = { file -> shareFile(file) },
+                                    )
+                                }
+                            }
+
+                            // 详细资料：只读展示，后续阶段接上改密码 / 换手机号 / 改资料
+                            if (showPersonalInfo) {
+                                SecondaryPage(onBack = { showPersonalInfo = false }) {
+                                    PersonalInfoScreen(
+                                        token = current.token,
+                                        repository = profileRepository,
+                                        onBack = { showPersonalInfo = false },
                                     )
                                 }
                             }
