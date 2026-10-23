@@ -78,13 +78,16 @@ fun CreditScreen(
     var page by remember { mutableIntStateOf(1) }
     var listLoading by remember { mutableStateOf(false) }
 
+    // 分数与分数段分两个协程并行拉：页面先出分数，等级晚一点补上，不用等两个 RTT 串行
     LaunchedEffect(Unit) {
         loading = true
         runCatching { repository.detail(token) }
             .onSuccess { detail = it; error = null }
             .onFailure { error = it.toUserMessage() }
-        grades = runCatching { repository.grades(token) }.getOrDefault(emptyList())
         loading = false
+    }
+    LaunchedEffect(Unit) {
+        grades = runCatching { repository.grades(token) }.getOrDefault(emptyList())
     }
 
     suspend fun loadRecords(targetPage: Int) {

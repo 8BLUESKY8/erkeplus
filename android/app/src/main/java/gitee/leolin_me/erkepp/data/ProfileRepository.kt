@@ -1,5 +1,6 @@
 package gitee.leolin_me.erkepp.data
 
+import gitee.leolin_me.erkepp.AppLog
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -87,6 +88,8 @@ class ProfileRepository(private val api: ApiClient) {
             },
             token = token,
         )
+        // 口令一律不写日志，只记结果
+        AppLog.d("action", "update-pwd -> ${response.describe()}")
         response.requireSuccess()
     }
 
@@ -119,6 +122,8 @@ class ProfileRepository(private val api: ApiClient) {
             },
             token = token,
         )
+        // 手机号只记脱敏值，验证码不写
+        AppLog.d("action", "update-mobile ${maskMobile(oldMobile)} -> ${maskMobile(newMobile)} ${response.describe()}")
         response.requireSuccess()
     }
 
@@ -153,6 +158,7 @@ class ProfileRepository(private val api: ApiClient) {
             params = buildJsonObject { put(key, value) },
             token = token,
         )
+        AppLog.d("action", "update-info $key=${value.content} -> ${response.describe()}")
         response.requireSuccess()
     }
 
@@ -171,15 +177,28 @@ class ProfileRepository(private val api: ApiClient) {
 
     /** 保存标签：`personTag` 是逗号分隔的 id 串。 */
     suspend fun updateTags(token: String, ids: List<Int>) {
+        val value = personTagValue(ids)
         val response = api.post(
             path = "student/user/update-person-tag",
             params = buildJsonObject {
-                put("personTag", kotlinx.serialization.json.JsonPrimitive(personTagValue(ids)))
+                put("personTag", kotlinx.serialization.json.JsonPrimitive(value))
             },
             token = token,
         )
+        AppLog.d("action", "update-person-tag personTag=$value ${response.describe()}")
         response.requireSuccess()
     }
+
+    /** 日志用：只取业务码与消息，正文可能很长。 */
+    private fun kotlinx.serialization.json.JsonElement.describe(): String {
+        val obj = runCatching { jsonObject }.getOrNull() ?: return "?"
+        val code = (obj["code"] as? JsonPrimitive)?.intOrNull ?: -1
+        val msg = (obj["msg"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+        return "code=$code msg=$msg"
+    }
+
+    private fun maskMobile(mobile: String): String =
+        if (mobile.length < 7) mobile else mobile.substring(0, 3) + "****" + mobile.takeLast(4)
 
     private fun parse(data: JsonObject): ProfileDetails {
         fun text(key: String): String = (data[key] as? JsonPrimitive)?.contentOrNull.orEmpty()
