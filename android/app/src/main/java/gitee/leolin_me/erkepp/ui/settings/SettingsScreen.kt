@@ -124,6 +124,13 @@ fun SettingsScreen(
                 current = preferences.reenterBehavior,
                 onChange = { preferences.reenterBehavior = it },
             )
+            LoadStatusChips(
+                selected = preferences.loadStatuses,
+                onChange = { picked ->
+                    // 至少留一个，否则「全部」会退化成空筛选
+                    if (picked.isNotEmpty()) preferences.loadStatuses = picked
+                },
+            )
         }
 
         SettingGroup(title = "活动卡片") {
@@ -533,10 +540,53 @@ private fun CategoryChipList(
     }
 }
 
+/**
+ * 「全部」要加载哪些状态。
+ *
+ * 常驻四项是学生端能看到的 5~8；1（审核中）、3（被驳回）、4（待报名）单独放在「实验」区，
+ * 默认不勾——官方对这几类不给报名入口，勾上只会让列表多出报不了的活动。
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ReenterChips(current: String, onChange: (String) -> Unit) {
+private fun LoadStatusChips(selected: Set<Int>, onChange: (Set<Int>) -> Unit) {
     Text(
+        text = "「全部」加载哪些状态",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 12.dp),
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(5 to "报名中", 6 to "待开始", 7 to "进行中", 8 to "已结束").forEach { (value, label) ->
+            FilterChip(
+                selected = value in selected,
+                onClick = { onChange(selected.toggleStatus(value)) },
+                label = { Text(label) },
+            )
+        }
+    }
+    Text(
+        text = "实验：这些活动官方也不给报名入口，勾上只会多出条目",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(1 to "审核中", 3 to "被驳回", 4 to "待报名").forEach { (value, label) ->
+            FilterChip(
+                selected = value in selected,
+                onClick = { onChange(selected.toggleStatus(value)) },
+                label = { Text(label) },
+            )
+        }
+    }
+}
+
+private fun Set<Int>.toggleStatus(value: Int): Set<Int> =
+    if (value in this) this - value else this + value
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ReenterChips(current: String, onChange: (String) -> Unit) {    Text(
         text = "重新进入发现页",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,

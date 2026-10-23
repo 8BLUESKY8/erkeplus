@@ -88,23 +88,33 @@ private val StatusOptions = listOf(
     "5" to "报名中",
     "6" to "待开始",
     "7" to "进行中",
-    // 4（待报名）服务端在列表接口里恒为 0 条，留着保证编号连续；8 是已结束
-    "4,5,6,7,8" to "全部",
+    ALL_STATUS to "全部",
 )
 
+/** 「全部」不是固定集合：取设置里勾选的状态。 */
+private const val ALL_STATUS = "all"
+
 /**
- * 旧版本存下来的筛选值换成新集合。
+ * 把勾选的状态拼成服务端要的逗号串。
  *
- * - `5`、`4,5,6,7` 是 0.8.1 及更早的值，全部里少了「已结束」（8）
- * - `1,3,5`、`1,3,4,5,6,7,8` 是 0.8.2 第一版的值，会把未审核的 1、3 也放进来
+ * 空集合（用户把四个都取消了）时退回默认值，避免发出 `status=""` 这种服务端会报
+ * 「未知数据错误」的请求。
+ */
+private fun allStatusValue(selected: Set<Int>): String =
+    (if (selected.isEmpty()) setOf(5, 6, 7, 8) else selected)
+        .sorted()
+        .joinToString(",")
+
+/**
+ * 旧版本存在 SharedPreferences 里的筛选值。
  *
- * 扫描类筛选存在 SharedPreferences 里，升级后如果原样读出来，用户会看到和标签对不上的结果。
+ * 旧版存的是具体状态串，其中 `4,5,6,7` 是 0.8.1 的「全部」、`1,3,5` 是 0.8.2 早期错写成
+ * 「报名中」的值。现在「全部」改成了勾选集合，这些旧值一律算作「全部」。
  */
 private fun normalizeStatusFilter(value: String): String = when (value) {
-    "5" -> "5"
+    "5", "6", "7" -> value
     "1,3,5" -> "5"
-    "4,5,6,7" -> "4,5,6,7,8"
-    "1,3,4,5,6,7,8" -> "4,5,6,7,8"
+    "4,5,6,7", "4,5,6,7,8", "1,3,4,5,6,7,8" -> ALL_STATUS
     else -> value
 }
 
@@ -173,7 +183,7 @@ fun DiscoverScreen(
     var hoursMax by remember { mutableStateOf(preferences.filterHoursMax.toDoubleOrNull()) }
     var showFilterSheet by remember { mutableStateOf(false) }
 
-    LaunchedEffect(statusFilter, classifyId, sortType, enrolledOnly, hoursMin, hoursMax) {
+    LaunchedEffect(statusFilter, classifyId, sortType, enrolledOnly, hoursMin, hoursMax, preferences.loadStatuses) {
         preferences.filterStatus = statusFilter
         preferences.filterClassify = classifyId
         preferences.filterSort = sortType
@@ -205,7 +215,8 @@ fun DiscoverScreen(
     fun query(targetPage: Int) = ActivityQuery(
         page = targetPage,
         pageSize = PAGE_SIZE,
-        status = statusFilter,
+        // 「全部」用设置里勾选的状态，其余标签是固定值
+        status = if (statusFilter == ALL_STATUS) allStatusValue(preferences.loadStatuses) else statusFilter,
         classifyId = classifyId,
         sortType = sortType,
     )
@@ -361,7 +372,7 @@ fun DiscoverScreen(
     }
 
     // 筛选变化才重新拉列表；搜索词不参与请求，只作用于本地过滤
-    LaunchedEffect(statusFilter, classifyId, sortType, enrolledOnly) {
+    LaunchedEffect(statusFilter, classifyId, sortType, enrolledOnly, preferences.loadStatuses) {
         reload()
     }
 

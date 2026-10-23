@@ -17,6 +17,10 @@ data class UserProfile(
     val credit: Double,
     val hours: Double,
     val userId: Long = 0L,
+    /** 年级，例如「2026级」；服务端没给就是空串。 */
+    val grade: String = "",
+    /** 班级名，例如「信息与计算科学26-1」。 */
+    val className: String = "",
 )
 
 data class Session(
@@ -63,6 +67,8 @@ class AuthRepository(private val api: ApiClient) {
             credit = number("credit"),
             hours = number("hours"),
             userId = data["id"]?.jsonPrimitive?.intOrNull?.toLong() ?: 0L,
+            grade = text("grade"),
+            className = text("className"),
         )
         return profile to data.toString()
     }

@@ -108,6 +108,9 @@ class AppPreferences(context: Context) {
         reenterBehavior = ReenterBehavior.KEEP
     }
 
+    /** 发现页「全部」要加载哪些状态。默认只含已发布的 5~8；1、3 未审核、4 待报名要用户自己勾。 */
+    var loadStatuses: Set<Int> by prefCategories(KEY_LOAD_STATUSES, DEFAULT_LOAD_STATUSES)
+
     private fun prefBoolean(key: String, default: Boolean) = object : ReadWriteProperty<Any?, Boolean> {
         private var state by mutableStateOf(store.getBoolean(key, default))
 
@@ -187,8 +190,12 @@ class AppPreferences(context: Context) {
         const val KEY_DELETE_TO_TRASH = "delete_to_trash"
         const val KEY_CARD_TEXT = "card_custom_text"
         const val KEY_DEVELOPER = "developer_mode"
+        const val KEY_LOAD_STATUSES = "load_statuses"
 
         val DEFAULT_CATEGORIES = setOf(1440, 1441, 1444)
+
+        /** 默认加载：报名中 5、待开始 6、进行中 7、已结束 8。 */
+        val DEFAULT_LOAD_STATUSES = setOf(5, 6, 7, 8)
     }
 }
 

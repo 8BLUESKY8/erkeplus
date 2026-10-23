@@ -281,6 +281,39 @@ adb shell am start -n gitee.leolin_me.erkepp.debug/gitee.leolin_me.erkepp.MainAc
 
 结果看 `adb shell run-as gitee.leolin_me.erkepp.debug cat files/logs/erkepp.log` 里的 `[action]` 行。
 
+## 诚信值（2026-10-23 实测）
+
+官方页面 `#/honestValue`，三个只读接口：
+
+| 端点 | 参数 | 返回 |
+| --- | --- | --- |
+| `GET credit/user/detail` | `{}` | `{"faithUpdateTime":1792227641000,"blacklist":null,"credit":98.33}` |
+| `GET dict/school/system-para/credit/list` | `{}` | 分数段数组，见下 |
+| `GET credit/user/list` | `searchName`、`type`、`pageNum`、`pageSize` | `{total, list}` |
+
+分数段（我校）：
+
+```json
+[
+  {"minScore": 100.0, "maxScore": 100.0, "grade": "完美"},
+  {"minScore": 90.0,  "maxScore": 99.0,  "grade": "优异"},
+  {"minScore": 80.0,  "maxScore": 89.0,  "grade": "良好"},
+  {"minScore": 70.0,  "maxScore": 79.0,  "grade": "中等"},
+  {"minScore": 60.0,  "maxScore": 69.0,  "grade": "一般"},
+  {"minScore": 0.0,   "maxScore": 59.0,  "grade": "较差"}
+]
+```
+
+要点：
+
+- **分数段给的是小数**（`100.0`），`intOrNull` 读出来是 null，直接用会把 100 读成 0。
+  客户端统一按 double 读再截断。
+- `type`：`1` 待守约、`2` 已守约、`3` 已失约、`4` 申诉记录。
+- 待守约的条目只有活动的字段（`relationName`、`logo`、`startTime`、`endTime`、`status`）；
+  已守约 / 已失约多出 `amount`、`operator`（`+`/`-`）、`attendanceType`、`ctime`、`comment`。
+  实测已守约的 `amount` 是 0，失约是扣分（1.67）。
+- 页面上的「信用优异」= `credit` 落在哪个分数段，不是单独字段。
+
 ## 作业（2026-10-21 实测）
 
 | 场景 | 路由 | 接口 |

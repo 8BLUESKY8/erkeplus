@@ -48,6 +48,8 @@ import gitee.leolin_me.erkepp.data.ActivityActions
 import gitee.leolin_me.erkepp.data.ActivityAttachment
 import gitee.leolin_me.erkepp.data.ActivityDetail
 import gitee.leolin_me.erkepp.data.ActivityRepository
+import gitee.leolin_me.erkepp.data.CreditDetail
+import gitee.leolin_me.erkepp.data.CreditRepository
 import gitee.leolin_me.erkepp.data.SignSandboxStore
 import gitee.leolin_me.erkepp.data.sandboxSubmit
 import gitee.leolin_me.erkepp.data.AttachmentStorage
@@ -76,6 +78,7 @@ import gitee.leolin_me.erkepp.ui.home.DiscoverScreen
 import gitee.leolin_me.erkepp.ui.home.ProfileScreen
 import gitee.leolin_me.erkepp.ui.login.ForgotPasswordScreen
 import gitee.leolin_me.erkepp.ui.login.LoginScreen
+import gitee.leolin_me.erkepp.ui.profile.CreditScreen
 import gitee.leolin_me.erkepp.ui.school.SchoolPickerScreen
 import gitee.leolin_me.erkepp.ui.settings.BlockRulesScreen
 import gitee.leolin_me.erkepp.ui.settings.SignLogScreen
@@ -134,6 +137,7 @@ class MainActivity : ComponentActivity() {
         val schoolRepository = SchoolRepository(apiClient)
         val activityRepository = ActivityRepository(apiClient)
         val activityActions = ActivityActions(apiClient)
+        val creditRepository = CreditRepository(apiClient)
         Startup.mark("repositories")
 
         setContent {
@@ -166,6 +170,9 @@ class MainActivity : ComponentActivity() {
                 var showDisclaimer by remember { mutableStateOf(!preferences.disclaimerAccepted) }
 
                 var settingsSection by remember { mutableStateOf(SettingsSection.ROOT) }
+                var showCredit by remember { mutableStateOf(false) }
+                // 「我的」上的诚信值摘要：进这一页时拉一次，失败就显示「—」，不挡别的入口
+                var creditDetail by remember { mutableStateOf<CreditDetail?>(null) }
                 // 支持 `am start ... --el detail_id 566506` 直接开详情，方便调试和截图
                 var detailActivityId by remember {
                     mutableStateOf(intent.getLongExtra("detail_id", 0L).takeIf { it > 0L })
@@ -459,6 +466,14 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
+                            // 进「我的」时顺带拉一次诚信值，用来在统计卡上显示分数
+                            LaunchedEffect(tab) {
+                                if (tab == MainTab.PROFILE && creditDetail == null) {
+                                    creditDetail = runCatching { creditRepository.detail(current.token) }
+                                        .getOrNull()
+                                }
+                            }
+
                             // 落定后再算「重新进入发现页」，避免拖动中途就触发
                             LaunchedEffect(pagerState) {
                                 var previous = pagerState.settledPage
@@ -503,8 +518,10 @@ class MainActivity : ComponentActivity() {
 
                                         MainTab.PROFILE -> ProfileScreen(
                                             session = current,
-                                            onOpenWeb = { webUrl = AppConfig.HOME_URL },
+                                            credit = creditDetail,
+                                            onOpenCredit = { showCredit = true },
                                             onOpenAttachments = { attachmentsVisible = true },
+                                            onOpenWeb = { webUrl = AppConfig.HOME_URL },
                                         )
 
                                         MainTab.SETTINGS -> SettingsScreen(
@@ -890,6 +907,17 @@ class MainActivity : ComponentActivity() {
                                         resolve = { name -> attachmentFiles.firstOrNull { it.name == name } },
                                         onBack = { previewNames = emptyList() },
                                         onShare = { file -> shareFile(file) },
+                                    )
+                                }
+                            }
+
+                            // 诚信值：对应官方 #/honestValue，只读
+                            if (showCredit) {
+                                SecondaryPage(onBack = { showCredit = false }) {
+                                    CreditScreen(
+                                        token = current.token,
+                                        repository = creditRepository,
+                                        onBack = { showCredit = false },
                                     )
                                 }
                             }
