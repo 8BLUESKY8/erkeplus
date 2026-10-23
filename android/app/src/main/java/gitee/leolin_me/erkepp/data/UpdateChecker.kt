@@ -1,5 +1,6 @@
 package gitee.leolin_me.erkepp.data
 
+import gitee.leolin_me.erkepp.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -56,6 +57,7 @@ class UpdateChecker(
         runCatching { fetchLatest() }
             .fold(
                 onSuccess = { latest ->
+                    AppLog.d("update", "latest=${latest?.version} current=$current")
                     if (latest == null) {
                         UpdateResult.NoRelease
                     } else if (latest.version > currentVersion) {
@@ -68,7 +70,7 @@ class UpdateChecker(
             )
     }
 
-    private data class Latest(
+    internal data class Latest(
         val version: Version,
         val url: String,
         val notes: String,
@@ -76,31 +78,54 @@ class UpdateChecker(
     )
 
     private fun fetchLatest(): Latest? {
-        val releases = getArray("https://gitee.com/api/v5/repos/$owner/$repo/releases?per_page=5", allowMissing = true)
+        // per_page 给大一点：Gitee 的发行版列表是「旧的在前面」，只取前几条会漏掉最新版本
+        val releases = getArray("https://gitee.com/api/v5/repos/$owner/$repo/releases?per_page=100", allowMissing = true)
+        pickLatestRelease(releases)?.let { return it }
+
+        val tags = getArray("https://gitee.com/api/v5/repos/$owner/$repo/tags?per_page=100", allowMissing = true)
+        return pickLatestTag(tags)
+    }
+
+    /**
+     * 在发行版列表里取**版本号最大**的那个。
+     *
+     * 不能取第一个：Gitee 按创建时间正序返回，第一个往往是最老的版本，
+     * 取第一个会让「检查更新」永远显示已是最新（0.8.8 就踩过这个坑）。
+     */
+    internal fun pickLatestRelease(releases: JsonArray): Latest? {
+        var best: Latest? = null
         for (item in releases) {
-            val release = item.jsonObject
+            val release = runCatching { item.jsonObject }.getOrNull() ?: continue
             val tag = release.string("tag_name") ?: continue
             val version = Version.parse(tag) ?: continue
-            return Latest(
-                version = version,
-                url = "https://gitee.com/$owner/$repo/releases/tag/$tag",
-                notes = release.string("body").orEmpty(),
-                apkUrl = apkAsset(release),
-            )
+            if (best == null || version > best.version) {
+                best = Latest(
+                    version = version,
+                    url = "https://gitee.com/$owner/$repo/releases/tag/$tag",
+                    notes = release.string("body").orEmpty(),
+                    apkUrl = apkAsset(release),
+                )
+            }
         }
+        return best
+    }
 
-        val tags = getArray("https://gitee.com/api/v5/repos/$owner/$repo/tags?per_page=10", allowMissing = true)
+    /** tag 兜底同样取最大版本号。 */
+    internal fun pickLatestTag(tags: JsonArray): Latest? {
+        var best: Latest? = null
         for (item in tags) {
-            val tag = item.jsonObject.string("name") ?: continue
+            val tag = runCatching { item.jsonObject }.getOrNull()?.string("name") ?: continue
             val version = Version.parse(tag) ?: continue
-            return Latest(
-                version = version,
-                url = "https://gitee.com/$owner/$repo/releases",
-                notes = "",
-                apkUrl = null,
-            )
+            if (best == null || version > best.version) {
+                best = Latest(
+                    version = version,
+                    url = "https://gitee.com/$owner/$repo/releases",
+                    notes = "",
+                    apkUrl = null,
+                )
+            }
         }
-        return null
+        return best
     }
 
     /** 发布里附带的第一个 .apk（Gitee 的附件字段是 `browser_download_url`）。 */
