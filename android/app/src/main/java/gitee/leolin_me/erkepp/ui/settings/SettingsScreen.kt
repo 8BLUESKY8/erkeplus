@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import gitee.leolin_me.erkepp.AppConfig
+import gitee.leolin_me.erkepp.BuildConfig
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.ApkUpdater
 import gitee.leolin_me.erkepp.data.AppPreferences
@@ -218,43 +219,47 @@ fun SettingsScreen(
         }
 
         SettingGroup(title = "关于") {
-            SettingSwitchRow(
-                title = "开发者模式",
-                subtitle = "显示已加载 / 总数 / 过滤后数量等调试信息",
-                checked = preferences.developerMode,
-                onCheckedChange = { preferences.developerMode = it },
-            )
-            if (preferences.developerMode) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSectionChange(SettingsSection.SIGN_SANDBOX) }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("签到沙盒", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            text = "离线假活动：配置状态、扫码、提交全流程，不联网",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+            // 开发者模式只在 debug 包里存在：用 BuildConfig.DEBUG 常量判断，
+            // R8 会把整段常量条件删掉，正式包里连入口和文案都不会剩下
+            if (BuildConfig.DEBUG) {
+                SettingSwitchRow(
+                    title = "开发者模式",
+                    subtitle = "显示已加载 / 总数 / 过滤后数量等调试信息",
+                    checked = preferences.developerMode,
+                    onCheckedChange = { preferences.developerMode = it },
+                )
+                if (preferences.developerMode) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSectionChange(SettingsSection.SIGN_SANDBOX) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("签到沙盒", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = "离线假活动：配置状态、扫码、提交全流程，不联网",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSectionChange(SettingsSection.SIGN_LOG) }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("签到日志", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            text = "扫码 / 提交的关键日志，可一键复制",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSectionChange(SettingsSection.SIGN_LOG) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("签到日志", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = "扫码 / 提交的关键日志，可一键复制",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

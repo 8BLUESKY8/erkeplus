@@ -62,8 +62,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import gitee.leolin_me.erkepp.AppLog
+import gitee.leolin_me.erkepp.BuildConfig
 import gitee.leolin_me.erkepp.R
 import gitee.leolin_me.erkepp.data.ActivityItem
+import gitee.leolin_me.erkepp.data.ActivityPhase
 import gitee.leolin_me.erkepp.data.ActivityQuery
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.ActivitySearch
@@ -111,6 +113,18 @@ private const val PAGE_SIZE = 20
 
 /** 搜索时最多往后扫多少页，防止服务端 total 异常时无限翻页。 */
 private const val MAX_SCAN_PAGES = 40
+
+/**
+ * 未审核（1）与被驳回（3）的文案。
+ *
+ * 这两个编号没有阶段，但「已报名」列表里可能还留着（活动在报名后被驳回）。
+ * 与其画一个空角标，不如直说。
+ */
+private fun unapprovedLabel(status: Int): String = when (status) {
+    1 -> "审核中"
+    3 -> "被驳回"
+    else -> ""
+}
 
 /**
  * 发现页（概念版）：双列封面卡片流。
@@ -477,7 +491,8 @@ fun DiscoverScreen(
             }
         }
 
-        if (preferences.developerMode) {
+        // 调试计数只在 debug 包出现；release 里 BuildConfig.DEBUG 是常量 false，整段会被裁掉
+        if (BuildConfig.DEBUG && preferences.developerMode) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -723,14 +738,14 @@ private fun ActivityCard(
             if (item.recommended) {
                 Badge(text = "推荐", modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
             }
-            // 阶段优先看时间；数字认不出来时不画空角标
+            // 阶段优先看时间；算不出来时才用编号兜底（「已报名」列表里会出现已加入但活动被驳回的情况）
             val phase = item.phase()
-            val phaseText = phaseLabel(phase)
+            val phaseText = phaseLabel(phase).ifEmpty { unapprovedLabel(item.status) }
             if (phaseText.isNotEmpty()) {
                 Badge(
                     text = phaseText,
                     modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
-                    color = phaseColor(phase),
+                    color = if (phase == ActivityPhase.UNKNOWN) Color(0xCC6B7280) else phaseColor(phase),
                 )
             }
         }

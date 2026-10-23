@@ -23,7 +23,6 @@ import gitee.leolin_me.erkepp.data.Session
 fun ProfileScreen(
     session: Session,
     onOpenWeb: () -> Unit,
-    onOpenMyActivities: () -> Unit,
     onOpenAttachments: () -> Unit,
 ) {
     val profile = session.profile
@@ -62,15 +61,6 @@ fun ProfileScreen(
         }
 
         Spacer(Modifier.height(32.dp))
-
-        OutlinedButton(
-            onClick = onOpenMyActivities,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("我的活动")
-        }
-
-        Spacer(Modifier.height(8.dp))
 
         OutlinedButton(
             onClick = onOpenAttachments,

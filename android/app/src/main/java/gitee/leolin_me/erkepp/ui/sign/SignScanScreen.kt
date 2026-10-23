@@ -357,8 +357,9 @@ fun SignScanScreen(
                 }
             }
 
-            // 开发者模式才给的兜底入口：手工粘贴 / 从相册识别
-            if (developerMode && ticket == null && outcome == null) {
+            // 从相册识别是正常需求：别人发来的活动分享码、签到码截图都要能读。
+            // 手工粘贴只给开发者模式，普通人用不上。
+            if (ticket == null && outcome == null) {
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -366,11 +367,17 @@ fun SignScanScreen(
                         .padding(bottom = 24.dp),
                     horizontalArrangement = Arrangement.Center,
                 ) {
-                    TextButton(onClick = { showPaste = true }) {
-                        Text("粘贴二维码文本", color = Color(0x99FFFFFF), style = MaterialTheme.typography.bodySmall)
-                    }
                     TextButton(onClick = { galleryLauncher.launch("image/*") }) {
-                        Text("从图片识别", color = Color(0x99FFFFFF), style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            text = "从图片识别",
+                            color = Color(0xCCFFFFFF),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    if (developerMode) {
+                        TextButton(onClick = { showPaste = true }) {
+                            Text("粘贴二维码文本", color = Color(0x99FFFFFF), style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }

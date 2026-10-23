@@ -73,7 +73,6 @@ import gitee.leolin_me.erkepp.ui.detail.ActivityDetailScreen
 import gitee.leolin_me.erkepp.ui.detail.HomeworkEditScreen
 import gitee.leolin_me.erkepp.ui.detail.HomeworkScreen
 import gitee.leolin_me.erkepp.ui.home.DiscoverScreen
-import gitee.leolin_me.erkepp.ui.home.MyActivitiesScreen
 import gitee.leolin_me.erkepp.ui.home.ProfileScreen
 import gitee.leolin_me.erkepp.ui.login.ForgotPasswordScreen
 import gitee.leolin_me.erkepp.ui.login.LoginScreen
@@ -167,7 +166,6 @@ class MainActivity : ComponentActivity() {
                 var showDisclaimer by remember { mutableStateOf(!preferences.disclaimerAccepted) }
 
                 var settingsSection by remember { mutableStateOf(SettingsSection.ROOT) }
-                var showMyActivities by remember { mutableStateOf(false) }
                 // 支持 `am start ... --el detail_id 566506` 直接开详情，方便调试和截图
                 var detailActivityId by remember {
                     mutableStateOf(intent.getLongExtra("detail_id", 0L).takeIf { it > 0L })
@@ -307,7 +305,6 @@ class MainActivity : ComponentActivity() {
                             )
                             attachmentsVisible = true
                         }
-                        "my_activities" -> showMyActivities = true
                         "sandbox" -> sandboxDetail = sandboxConfig.toDetail()
                         // 沙盒 + 真相机：扫屏幕上的二维码（不带预设文本）
                         "sandbox_camera" -> {
@@ -365,8 +362,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         "stack_detail" -> {
-                            // 复现「我的活动里点进详情」的层级：两层同时打开
-                            showMyActivities = true
+                            // 复现「从列表点进详情」的层级：详情压在主页之上
                             if (detailId > 0) detailActivityId = detailId
                         }
                         "block_rules" -> settingsSection = SettingsSection.BLOCK_RULES
@@ -430,18 +426,6 @@ class MainActivity : ComponentActivity() {
                             onForgotPassword = { showForgot = true },
                             onShowDisclaimer = { showDisclaimer = true },
                             onOpenSchoolPicker = { showSchoolPicker = true },
-                        )
-
-                        webUrl != null -> WebShell(
-                            modifier = Modifier.fillMaxSize(),
-                            url = webUrl.orEmpty(),
-                            prefill = WebPrefill.build(current),
-                            onPickFiles = { callback ->
-                                pendingFileCallback?.onReceiveValue(null)
-                                pendingFileCallback = callback
-                                filePicker.launch("*/*")
-                            },
-                            onClose = { webUrl = null },
                         )
 
                         else -> {
@@ -520,7 +504,6 @@ class MainActivity : ComponentActivity() {
                                         MainTab.PROFILE -> ProfileScreen(
                                             session = current,
                                             onOpenWeb = { webUrl = AppConfig.HOME_URL },
-                                            onOpenMyActivities = { showMyActivities = true },
                                             onOpenAttachments = { attachmentsVisible = true },
                                         )
 
@@ -588,7 +571,7 @@ class MainActivity : ComponentActivity() {
                                     SignScanScreen(
                                         target = SignTarget(0L, "", 0),
                                         title = "扫一扫",
-                                        developerMode = preferences.developerMode,
+                                        developerMode = BuildConfig.DEBUG && preferences.developerMode,
                                         submit = { ticket -> activityActions.sign(current.token, ticket) },
                                         resolveName = { id ->
                                             runCatching {
@@ -620,17 +603,6 @@ class MainActivity : ComponentActivity() {
                                         onSigned = {
                                             Toast.makeText(activity, "签到已提交", Toast.LENGTH_SHORT).show()
                                         },
-                                    )
-                                }
-                            }
-
-                            if (showMyActivities) {
-                                SecondaryPage(onBack = { showMyActivities = false }) {
-                                    MyActivitiesScreen(
-                                        token = current.token,
-                                        repository = activityRepository,
-                                        onBack = { showMyActivities = false },
-                                        onOpenActivity = { id -> detailActivityId = id },
                                     )
                                 }
                             }
@@ -751,7 +723,7 @@ class MainActivity : ComponentActivity() {
                                         activityId = detailId,
                                         onBack = { detailActivityId = null },
                                         onOpenWeb = { id ->
-                                            detailActivityId = null
+                                            // 只压一层网页：详情留在下面，返回时回到详情
                                             webUrl = "https://${AppConfig.ALLOWED_HOST}/#/ActivityShow/$id"
                                         },
                                         onOpenUrl = { url ->
@@ -764,7 +736,6 @@ class MainActivity : ComponentActivity() {
                                                 // 查看作业用原生页：接口 `activity/query/work_3_0_1` 已实测
                                                 homeworkActivityId = id
                                             } else {
-                                                detailActivityId = null
                                                 webUrl = "https://${AppConfig.ALLOWED_HOST}/#/assignment/$id"
                                             }
                                         },
@@ -825,7 +796,7 @@ class MainActivity : ComponentActivity() {
                                 }) {
                                     SignScanScreen(
                                         target = scan,
-                                        developerMode = preferences.developerMode,
+                                        developerMode = BuildConfig.DEBUG && preferences.developerMode,
                                         submit = { ticket ->
                                             if (signScanSandbox) {
                                                 sandboxSubmit(sandboxConfig, ticket)
@@ -918,6 +889,24 @@ class MainActivity : ComponentActivity() {
                                         resolve = { name -> attachmentFiles.firstOrNull { it.name == name } },
                                         onBack = { previewNames = emptyList() },
                                         onShare = { file -> shareFile(file) },
+                                    )
+                                }
+                            }
+
+                            // 官方网页压在整摞页面最上面：从详情进网页，返回就回详情，
+                            // 而不是把详情一起关掉（以前 back 会一路退回列表甚至退出应用）
+                            if (webUrl != null) {
+                                SecondaryPage(onBack = { webUrl = null }) {
+                                    WebShell(
+                                        modifier = Modifier.fillMaxSize(),
+                                        url = webUrl.orEmpty(),
+                                        prefill = WebPrefill.build(current),
+                                        onPickFiles = { callback ->
+                                            pendingFileCallback?.onReceiveValue(null)
+                                            pendingFileCallback = callback
+                                            filePicker.launch("*/*")
+                                        },
+                                        onClose = { webUrl = null },
                                     )
                                 }
                             }

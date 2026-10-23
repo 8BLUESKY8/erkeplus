@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Environment
-import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.PermissionRequest
 import android.webkit.URLUtil
@@ -47,7 +46,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import gitee.leolin_me.erkepp.AppConfig
@@ -79,7 +77,6 @@ fun WebShell(
     var loading by remember { mutableStateOf(true) }
     var errorUrl by remember { mutableStateOf<String?>(null) }
     var canGoBack by remember { mutableStateOf(false) }
-    val refreshLayout = remember { mutableStateOf<SwipeRefreshLayout?>(null) }
     // 网页详情依赖官方站点的 localStorage.Token；注入一次后重载，让页面启动时就能读到
     val seeded = remember { mutableStateOf(false) }
     // 注入期间先遮住 WebView，避免用户看到首页闪一下再跳详情
@@ -140,7 +137,6 @@ fun WebShell(
                     loading = false
                     progress = 100
                     canGoBack = view.canGoBack()
-                    refreshLayout.value?.isRefreshing = false
                     if (awaitingTarget && url.contains(targetFragment)) {
                         awaitingTarget = false
                         ready = true
@@ -174,7 +170,6 @@ fun WebShell(
                     if (request.isForMainFrame) {
                         errorUrl = request.url.toString()
                         loading = false
-                        refreshLayout.value?.isRefreshing = false
                     }
                 }
 
@@ -186,7 +181,6 @@ fun WebShell(
                     if (request.isForMainFrame && errorResponse.statusCode >= 500) {
                         errorUrl = request.url.toString()
                         loading = false
-                        refreshLayout.value?.isRefreshing = false
                     }
                 }
             }
@@ -235,22 +229,11 @@ fun WebShell(
     }
 
     Box(modifier = modifier) {
+        // 不再套 SwipeRefreshLayout：官方页面自带内部滚动，下拉手势会被外层吃掉，
+        // 表现就是「往下滑不滚动、反而刷新」。刷新改成右上角按钮，滚动全部交还给网页。
         AndroidView(
             modifier = Modifier.fillMaxSize(),
-            factory = { ctx ->
-                SwipeRefreshLayout(ctx).apply {
-                    refreshLayout.value = this
-                    setOnChildScrollUpCallback { _, _ -> webView.scrollY > 0 }
-                    setOnRefreshListener { webView.reload() }
-                    addView(
-                        webView,
-                        ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                        ),
-                    )
-                }
-            },
+            factory = { webView },
         )
 
         if (loading && progress in 1..99) {
@@ -290,6 +273,13 @@ fun WebShell(
             ) {
                 Text("返回")
             }
+        }
+
+        TextButton(
+            onClick = { webView.reload() },
+            modifier = Modifier.align(Alignment.TopEnd),
+        ) {
+            Text("刷新")
         }
     }
 }

@@ -34,7 +34,9 @@ object AppLog {
     }
 
     fun d(tag: String, message: String) {
-        Log.d(tag, message)
+        // release 包不往 logcat 写：正式用户的手机不该被 adb 一插就能看到内部参数。
+        // 文件日志保留，方便出问题时用「签到日志」导出。
+        if (BuildConfig.DEBUG) Log.d(tag, message)
         if (baseDir == null) return
         executor.execute { runCatching { write(tag, message) } }
     }
