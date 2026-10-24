@@ -906,43 +906,43 @@ class MainActivity : ComponentActivity() {
                             // 我的活动、屏蔽规则、附件 → 详情 → 作业 → 图片预览
 
                             // 首页扫一扫：签到码直接走签到流程，活动分享码打开详情
+                            // SignScanScreen 自己带一层 SecondaryPage，外面不要再套：
+                            // 两层叠着手势返回时系统会以为没人接，先播一遍「应用退出」的预览（露黑）
                             if (showHomeScan) {
-                                SecondaryPage(onBack = { showHomeScan = false }) {
-                                    SignScanScreen(
-                                        target = SignTarget(0L, "", 0),
-                                        title = "扫一扫",
-                                        developerMode = BuildConfig.DEBUG && preferences.developerMode,
-                                        submit = { ticket -> activityActions.sign(current.token, ticket) },
-                                        resolveName = { id ->
-                                            runCatching {
-                                                activityRepository.detail(current.token, id).name
-                                            }.getOrNull()
-                                        },
-                                        onOtherText = { text ->
-                                            val id = ScanRouter.activityIdFromShareLink(text)
-                                            val orgId = ScanRouter.organizationId(text)
-                                            when {
-                                                id != null -> {
-                                                    showHomeScan = false
-                                                    detailActivityId = id
-                                                    true
-                                                }
-
-                                                orgId != null -> {
-                                                    showHomeScan = false
-                                                    orgDetailTarget = orgId to ""
-                                                    true
-                                                }
-
-                                                else -> false
+                                SignScanScreen(
+                                    target = SignTarget(0L, "", 0),
+                                    title = "扫一扫",
+                                    developerMode = BuildConfig.DEBUG && preferences.developerMode,
+                                    submit = { ticket -> activityActions.sign(current.token, ticket) },
+                                    resolveName = { id ->
+                                        runCatching {
+                                            activityRepository.detail(current.token, id).name
+                                        }.getOrNull()
+                                    },
+                                    onOtherText = { text ->
+                                        val id = ScanRouter.activityIdFromShareLink(text)
+                                        val orgId = ScanRouter.organizationId(text)
+                                        when {
+                                            id != null -> {
+                                                showHomeScan = false
+                                                detailActivityId = id
+                                                true
                                             }
-                                        },
-                                        onBack = { showHomeScan = false },
-                                        onSigned = {
-                                            Toast.makeText(activity, "签到已提交", Toast.LENGTH_SHORT).show()
-                                        },
-                                    )
-                                }
+
+                                            orgId != null -> {
+                                                showHomeScan = false
+                                                orgDetailTarget = orgId to ""
+                                                true
+                                            }
+
+                                            else -> false
+                                        }
+                                    },
+                                    onBack = { showHomeScan = false },
+                                    onSigned = {
+                                        Toast.makeText(activity, "签到已提交", Toast.LENGTH_SHORT).show()
+                                    },
+                                )
                             }
 
                             if (settingsSection == SettingsSection.BLOCK_RULES) {
@@ -1153,55 +1153,51 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
-                            // 扫码签到压在详情之上：相机页必须独占，不能有下层内容透出来
+                            // 扫码签到压在详情之上：相机页必须独占，不能有下层内容透出来。
+                            // 同样不要再套 SecondaryPage：SignScanScreen 自带，套两层会出假退出预览。
                             val scan = signScan
                             if (scan != null) {
-                                SecondaryPage(onBack = {
-                                    signScan = null
-                                    signScanSandbox = false
-                                }) {
-                                    SignScanScreen(
-                                        target = scan,
-                                        developerMode = BuildConfig.DEBUG && preferences.developerMode,
-                                        submit = { ticket ->
-                                            if (signScanSandbox) {
-                                                sandboxSubmit(sandboxConfig, ticket)
-                                            } else {
-                                                activityActions.sign(current.token, ticket)
-                                            }
-                                        },
-                                        resolveName = { id ->
-                                            // 沙盒不联网：对不上号就显示「活动 #id」
-                                            if (signScanSandbox) {
-                                                null
-                                            } else {
-                                                runCatching {
-                                                    activityRepository.detail(current.token, id).name
-                                                }.getOrNull()
-                                            }
-                                        },
-                                        onBack = {
-                                            signScan = null
-                                            signScanSandbox = false
-                                            presetSignText = null
-                                        },
-                                        onSigned = {
-                                            AppLog.d("sign", "signed id=${scan.activityId} sandbox=$signScanSandbox")
-                                            if (signScanSandbox) {
-                                                // 沙盒里让详情立刻变成「已签到」，链路才算闭环
-                                                sandboxConfig = sandboxConfig.copy(
-                                                    isSigner = 1,
-                                                    signInCount = sandboxConfig.signInCount + 1,
-                                                )
-                                                sandboxDetail = sandboxConfig.toDetail()
-                                            } else {
-                                                detailRefreshTick++
-                                            }
-                                        },
-                                        initialQrText = presetSignText,
-                                        sandbox = signScanSandbox,
-                                    )
-                                }
+                                SignScanScreen(
+                                    target = scan,
+                                    developerMode = BuildConfig.DEBUG && preferences.developerMode,
+                                    submit = { ticket ->
+                                        if (signScanSandbox) {
+                                            sandboxSubmit(sandboxConfig, ticket)
+                                        } else {
+                                            activityActions.sign(current.token, ticket)
+                                        }
+                                    },
+                                    resolveName = { id ->
+                                        // 沙盒不联网：对不上号就显示「活动 #id」
+                                        if (signScanSandbox) {
+                                            null
+                                        } else {
+                                            runCatching {
+                                                activityRepository.detail(current.token, id).name
+                                            }.getOrNull()
+                                        }
+                                    },
+                                    onBack = {
+                                        signScan = null
+                                        signScanSandbox = false
+                                        presetSignText = null
+                                    },
+                                    onSigned = {
+                                        AppLog.d("sign", "signed id=${scan.activityId} sandbox=$signScanSandbox")
+                                        if (signScanSandbox) {
+                                            // 沙盒里让详情立刻变成「已签到」，链路才算闭环
+                                            sandboxConfig = sandboxConfig.copy(
+                                                isSigner = 1,
+                                                signInCount = sandboxConfig.signInCount + 1,
+                                            )
+                                            sandboxDetail = sandboxConfig.toDetail()
+                                        } else {
+                                            detailRefreshTick++
+                                        }
+                                    },
+                                    initialQrText = presetSignText,
+                                    sandbox = signScanSandbox,
+                                )
                             }
 
                             // 附件操作面板：下载 / 预览 / 其他应用打开 / 分享 / 删除
@@ -1285,29 +1281,27 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
-                            // 加入组织：只认组织码，签到码在这个入口不生效
+                            // 加入组织：只认组织码，签到码在这个入口不生效。同样不套 SecondaryPage
                             if (showJoinScan) {
-                                SecondaryPage(onBack = { showJoinScan = false }) {
-                                    SignScanScreen(
-                                        target = SignTarget(0L, "", 0),
-                                        title = "加入组织",
-                                        orgOnly = true,
-                                        developerMode = BuildConfig.DEBUG && preferences.developerMode,
-                                        submit = { SignOutcome(false, -1, "这个入口不签到") },
-                                        onBack = { showJoinScan = false },
-                                        onSigned = {},
-                                        onOtherText = { text ->
-                                            val orgId = ScanRouter.organizationId(text)
-                                            if (orgId != null) {
-                                                showJoinScan = false
-                                                orgDetailTarget = orgId to ""
-                                                true
-                                            } else {
-                                                false
-                                            }
-                                        },
-                                    )
-                                }
+                                SignScanScreen(
+                                    target = SignTarget(0L, "", 0),
+                                    title = "加入组织",
+                                    orgOnly = true,
+                                    developerMode = BuildConfig.DEBUG && preferences.developerMode,
+                                    submit = { SignOutcome(false, -1, "这个入口不签到") },
+                                    onBack = { showJoinScan = false },
+                                    onSigned = {},
+                                    onOtherText = { text ->
+                                        val orgId = ScanRouter.organizationId(text)
+                                        if (orgId != null) {
+                                            showJoinScan = false
+                                            orgDetailTarget = orgId to ""
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    },
+                                )
                             }
 
                             // 组织详情：扫组织码进来的、从「我的组织」点进来的都在这里

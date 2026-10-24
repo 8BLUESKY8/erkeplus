@@ -46,6 +46,10 @@
   改成 `PredictiveBackHandler`，拖动期间画面不再动，松手才滑回发现页
 - 打开「修改个人资料」时卡一下：会话落盘（SharedPreferences + KeyStore 加密）挪到 IO 线程，
   不再占主线程
+- **扫一扫的返回效果和其他页不一样**（上一个版本就有）：扫码页被套了两层 `SecondaryPage`
+  ——`SignScanScreen` 自己带一层，调用处又包了一层，两层 `PredictiveBackHandler` 叠着，
+  手势返回时系统先播它自己「应用退出」的预览（画面缩小、四周露黑）。
+  三处调用（首页扫一扫、签到扫码、加入组织）都去掉外层，只留页面自带那层
 
 ### 说明
 
