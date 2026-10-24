@@ -84,7 +84,6 @@ import gitee.leolin_me.erkepp.data.ActivityShare
 import gitee.leolin_me.erkepp.data.SignRecord
 import gitee.leolin_me.erkepp.data.phase
 import gitee.leolin_me.erkepp.data.toUserMessage
-import gitee.leolin_me.erkepp.ui.LocalPageSettled
 import gitee.leolin_me.erkepp.ui.formatHours
 import gitee.leolin_me.erkepp.ui.phaseColor
 import gitee.leolin_me.erkepp.ui.phaseLabel
@@ -166,17 +165,13 @@ fun ActivityDetailScreen(
     }
 
 
-    val pageSettled = LocalPageSettled.current
-
-    LaunchedEffect(activityId, reloadKey, refreshKey, detailOverride, pageSettled) {
+    LaunchedEffect(activityId, reloadKey, refreshKey, detailOverride) {
         if (detailOverride != null) {
             detail = detailOverride
             loading = false
             error = null
             return@LaunchedEffect
         }
-        // 入场动画还没走完就别发请求：响应解析 + 首屏重组会和动画抢同一帧，看起来就是卡一下
-        if (!pageSettled) return@LaunchedEffect
         loading = true
         error = null
         runCatching { repository.detail(token, activityId) }

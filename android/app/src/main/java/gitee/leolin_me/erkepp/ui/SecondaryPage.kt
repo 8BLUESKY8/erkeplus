@@ -8,17 +8,18 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
@@ -27,19 +28,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * 页面是否已经「就位」（入场动画走完）。
- *
- * 页面一挂载就发请求的话，网络回来的解析 + 首屏重组会和 180ms 的入场动画抢同一帧，
- * 表现就是「点进去卡一下」。要联网、要解析大 JSON 的页面先读这个值，等它是 true 再干活。
- */
-val LocalPageSettled = compositionLocalOf { true }
-
-/**
  * 二级页面外壳：不透明背景 + 入场位移淡入 + 预测性返回退场。
  *
  * 返回手势由 [PredictiveBackHandler] 接管：系统给出手势进度（0..1），
  * 这里直接把它映射成位移和透明度，所以手指拖到一半就能看到页面退到一半，
  * 中途松手会弹回且不导航。三键导航或旧系统拿不到进度时，退化成一次收尾动画。
+ *
+ * 正文要**等入场动画走完再组合**：页面一上来就发请求、解析 JSON、铺列表，会和动画抢同一帧，
+ * 表现就是「点进去卡一下」。放在外壳里统一处理，新加的二级页不用再各自记一遍这件事。
  *
  * 用法：页面自己不再注册 BackHandler，返回一律交给这一层。
  */
@@ -91,12 +87,20 @@ fun SecondaryPage(onBack: () -> Unit, content: @Composable () -> Unit) {
                 scaleY = 1f - progress * 0.04f
             },
     ) {
-        CompositionLocalProvider(LocalPageSettled provides settled) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background,
-            ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background,
+        ) {
+            if (settled) {
                 content()
+            } else {
+                // 动画期间只放一个转圈，别让正文的请求和布局跟动画抢帧
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        strokeWidth = 2.dp,
+                    )
+                }
             }
         }
     }
