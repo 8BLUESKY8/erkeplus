@@ -474,7 +474,7 @@ private fun OrgCard(cell: OrgCell, coverWidthDp: Int, onClick: () -> Unit) {
     Column(modifier = Modifier.clickable(onClick = onClick)) {
         Box(modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(4f / 3f)) {
+            .aspectRatio(1f)) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -483,29 +483,26 @@ private fun OrgCard(cell: OrgCell, coverWidthDp: Int, onClick: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 if (cell.avatar != null) {
-                    // 组织头像是方形 logo，用 Fit 而不是 Crop，别把字切掉
+                    // 组织 logo 大多是方的：1:1 铺满（Crop），既不留白边也不会把圆形徽记裁掉
                     AsyncImage(
                         model = coverRequest,
                         contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(20.dp),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
                     )
                 } else {
-                    // 没有头像时用实心色块 + 首字：和底部导航一样是「填充」的观感，
-                    // 不要留一块灰底配灰字，看起来像没加载出来
+                    // 没有 logo 时整块铺满：用主题容器色（不是灰），首字用对应的对比色。
+                    // 用 primary 太扎眼——没 logo 的组织不少，一屏会变成一片亮蓝
                     Box(
                         modifier = Modifier
-                            .size(72.dp)
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(MaterialTheme.colorScheme.primary),
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             text = cell.name.take(1),
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.onPrimary,
+                            style = MaterialTheme.typography.displaySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
                         )
                     }
                 }

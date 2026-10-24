@@ -45,7 +45,8 @@ status = 待审核(1) / 已通过(2) / 已驳回(3)
 ## 所有组织
 
 对应官方 `#/service/organize`，版式照发现页：药丸搜索框 + 一行分类 chip + 一行排序 chip +
-双列卡片（4:3 图位放方形 logo，用 Fit 不裁字），卡片右上角挂「申请加入 / 已加入」。
+双列卡片（**1:1 图位，logo 铺满**：`ContentScale.Crop`；没有 logo 的组织用主题容器色铺满 + 首字），
+卡片右上角挂「申请加入 / 已加入」。
 
 数据走 `organization/page/organization/list`，不是「我的组织」那族接口。
 
