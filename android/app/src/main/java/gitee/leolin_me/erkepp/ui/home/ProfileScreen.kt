@@ -43,6 +43,7 @@ fun ProfileScreen(
     onOpenCredit: () -> Unit,
     onOpenRank: () -> Unit,
     onOpenAttachments: () -> Unit,
+    onOpenStorage: () -> Unit,
     onOpenWeb: () -> Unit,
 ) {
     val profile = session.profile
@@ -130,6 +131,11 @@ fun ProfileScreen(
                     title = "我的附件",
                     subtitle = "已下载的活动附件与回收站",
                     onClick = onOpenAttachments,
+                )
+                EntryRow(
+                    title = "数据管理",
+                    subtitle = "缓存、日志、回收站的占用，可逐项清理",
+                    onClick = onOpenStorage,
                 )
                 EntryRow(
                     title = "打开官方页面",

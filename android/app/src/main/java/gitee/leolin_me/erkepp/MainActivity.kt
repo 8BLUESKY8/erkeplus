@@ -66,6 +66,7 @@ import gitee.leolin_me.erkepp.data.SchoolRepository
 import gitee.leolin_me.erkepp.data.SchoolStore
 import gitee.leolin_me.erkepp.data.ScanRouter
 import gitee.leolin_me.erkepp.data.SessionStore
+import gitee.leolin_me.erkepp.data.StorageRepository
 import gitee.leolin_me.erkepp.data.WebPrefill
 import gitee.leolin_me.erkepp.ui.DisclaimerDialog
 import gitee.leolin_me.erkepp.ui.ErkeppTheme
@@ -92,6 +93,7 @@ import gitee.leolin_me.erkepp.ui.settings.BlockRulesScreen
 import gitee.leolin_me.erkepp.ui.settings.SignLogScreen
 import gitee.leolin_me.erkepp.ui.settings.SignSandboxScreen
 import gitee.leolin_me.erkepp.ui.settings.SettingsScreen
+import gitee.leolin_me.erkepp.ui.settings.StorageScreen
 import gitee.leolin_me.erkepp.ui.settings.SettingsSection
 import gitee.leolin_me.erkepp.ui.sign.SignScanScreen
 import gitee.leolin_me.erkepp.ui.sign.SignTarget
@@ -156,6 +158,7 @@ class MainActivity : ComponentActivity() {
         val creditRepository = CreditRepository(apiClient)
         val rankRepository = RankRepository(apiClient)
         val profileRepository = ProfileRepository(apiClient)
+        val storageRepository = StorageRepository()
         Startup.mark("repositories")
 
         setContent {
@@ -196,6 +199,7 @@ class MainActivity : ComponentActivity() {
                 var showChangePassword by remember { mutableStateOf(false) }
                 var showChangeMobile by remember { mutableStateOf(false) }
                 var showTags by remember { mutableStateOf(false) }
+                var showStorage by remember { mutableStateOf(false) }
                 var pendingTagIds by remember { mutableStateOf<List<Int>>(emptyList()) }
                 var pendingMobile by remember { mutableStateOf("") }
                 var personalInfoTick by remember { mutableIntStateOf(0) }
@@ -401,6 +405,7 @@ class MainActivity : ComponentActivity() {
                             if (detailId > 0) detailActivityId = detailId
                         }
                         "block_rules" -> settingsSection = SettingsSection.BLOCK_RULES
+                        "storage" -> showStorage = true
                         "rank_page" -> {
                             rankLevel = intent.getStringExtra("level")?.toIntOrNull() ?: 10
                             showRank = true
@@ -600,6 +605,7 @@ class MainActivity : ComponentActivity() {
                                             onOpenCredit = { showCredit = true },
                                             onOpenRank = { showRank = true },
                                             onOpenAttachments = { attachmentsVisible = true },
+                                            onOpenStorage = { showStorage = true },
                                             onOpenWeb = { webUrl = AppConfig.HOME_URL },
                                         )
 
@@ -1094,6 +1100,17 @@ class MainActivity : ComponentActivity() {
                                         preloadEnabled = preferences.preloadEnabled,
                                         initialScope = RankScope.of(rankLevel),
                                         onBack = { showRank = false },
+                                    )
+                                }
+                            }
+
+                            // 数据管理：扫描缓存 / 日志 / 回收站占用，逐项清理
+                            if (showStorage) {
+                                SecondaryPage(onBack = { showStorage = false }) {
+                                    StorageScreen(
+                                        repository = storageRepository,
+                                        preferences = preferences,
+                                        onBack = { showStorage = false },
                                     )
                                 }
                             }

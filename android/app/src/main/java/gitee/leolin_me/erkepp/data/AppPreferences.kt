@@ -82,6 +82,25 @@ class AppPreferences(context: Context) {
     /** 开发者模式：显示加载计数等调试信息。 */
     var developerMode: Boolean by prefBoolean(KEY_DEVELOPER, false)
 
+    /**
+     * 「数据管理」上次清理时勾选的项。
+     *
+     * `null` 表示还没清理过，界面用默认值（只勾影响不大的）；空集合表示用户主动全不勾，
+     * 两者要能区分，所以这里不用空串当「没有」。
+     */
+    private var storageSelectionRaw: String? by mutableStateOf(store.getString(KEY_STORAGE_SELECTION, null))
+
+    var storageSelection: Set<String>?
+        get() = storageSelectionRaw?.split(',')?.filter { it.isNotBlank() }?.toSet()
+        set(value) {
+            val raw = value?.joinToString(",")
+            if (storageSelectionRaw == raw) return
+            storageSelectionRaw = raw
+            store.edit().apply {
+                if (raw == null) remove(KEY_STORAGE_SELECTION) else putString(KEY_STORAGE_SELECTION, raw)
+            }.apply()
+        }
+
     /** 恢复默认的显示与筛选设置。不动登录态，也不动免责声明确认。 */
     fun resetDisplay() {
         categoriesEnabled = true
@@ -200,6 +219,7 @@ class AppPreferences(context: Context) {
         const val KEY_DEVELOPER = "developer_mode"
         const val KEY_LOAD_STATUSES = "load_statuses"
         const val KEY_PROFILE_SCHEMA = "profile_schema"
+        const val KEY_STORAGE_SELECTION = "storage_selection"
 
         val DEFAULT_CATEGORIES = setOf(1440, 1441, 1444)
 
