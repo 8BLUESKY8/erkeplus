@@ -1052,6 +1052,78 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
+                            // 所有组织 / 我的组织 / 加入组织扫码 → 组织详情 → 活动详情，
+                            // 严格按「谁压谁」排：组织列表留在最底下，返回时滚动位置和数据都还在
+
+                            // 所有组织：官方 #/service/organize 的只读目录
+                            if (showAllOrgs) {
+                                SecondaryPage(onBack = { showAllOrgs = false }) {
+                                    AllOrganizationsScreen(
+                                        token = current.token,
+                                        repository = organizationRepository,
+                                        preloadEnabled = preferences.preloadEnabled,
+                                        onOpenOrg = { id, name -> orgDetailTarget = id to name },
+                                        onBack = { showAllOrgs = false },
+                                    )
+                                }
+                            }
+
+                            // 我的组织：三个列表 × 三种审核状态
+                            if (showOrganizations) {
+                                SecondaryPage(onBack = { showOrganizations = false }) {
+                                    OrganizationScreen(
+                                        token = current.token,
+                                        repository = organizationRepository,
+                                        refreshKey = orgListTick,
+                                        onOpenOrg = { id, name -> orgDetailTarget = id to name },
+                                        onJoinScan = { showJoinScan = true },
+                                        onBack = { showOrganizations = false },
+                                    )
+                                }
+                            }
+
+                            // 加入组织：只认组织码，签到码在这个入口不生效。同样不套 SecondaryPage
+                            if (showJoinScan) {
+                                SignScanScreen(
+                                    target = SignTarget(0L, "", 0),
+                                    title = "加入组织",
+                                    orgOnly = true,
+                                    developerMode = BuildConfig.DEBUG && preferences.developerMode,
+                                    submit = { SignOutcome(false, -1, "这个入口不签到") },
+                                    onBack = { showJoinScan = false },
+                                    onSigned = {},
+                                    onOtherText = { text ->
+                                        val orgId = ScanRouter.organizationId(text)
+                                        if (orgId != null) {
+                                            showJoinScan = false
+                                            orgDetailTarget = orgId to ""
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    },
+                                )
+                            }
+
+                            // 组织详情：扫组织码进来的、从「我的组织」点进来的都在这里。
+                            // 点主办活动时**不清 orgDetailTarget**，详情压在组织页上面，
+                            // 返回时组织页原样还在，不会退回首页
+                            val orgTarget = orgDetailTarget
+                            if (orgTarget != null) {
+                                SecondaryPage(onBack = { orgDetailTarget = null }) {
+                                    OrgDetailScreen(
+                                        token = current.token,
+                                        repository = organizationRepository,
+                                        organizationId = orgTarget.first,
+                                        initialName = orgTarget.second,
+                                        onOpenActivity = { id -> detailActivityId = id },
+                                        // 申请交上去后让「我的组织」重新拉，才能看到新的待审核
+                                        onApplied = { orgListTick++ },
+                                        onBack = { orgDetailTarget = null },
+                                    )
+                                }
+                            }
+
                             // 详情压在附件/我的活动之上，从「我的活动」点进来才不会被遮住
                             val detailId = detailActivityId
                             if (detailId != null) {
@@ -1251,76 +1323,6 @@ class MainActivity : ComponentActivity() {
                                         resolve = { name -> attachmentFiles.firstOrNull { it.name == name } },
                                         onBack = { previewNames = emptyList() },
                                         onShare = { file -> shareFile(file) },
-                                    )
-                                }
-                            }
-
-                            // 所有组织：官方 #/service/organize 的只读目录
-                            if (showAllOrgs) {
-                                SecondaryPage(onBack = { showAllOrgs = false }) {
-                                    AllOrganizationsScreen(
-                                        token = current.token,
-                                        repository = organizationRepository,
-                                        preloadEnabled = preferences.preloadEnabled,
-                                        onOpenOrg = { id, name -> orgDetailTarget = id to name },
-                                        onBack = { showAllOrgs = false },
-                                    )
-                                }
-                            }
-
-                            // 我的组织：三个列表 × 三种审核状态
-                            if (showOrganizations) {
-                                SecondaryPage(onBack = { showOrganizations = false }) {
-                                    OrganizationScreen(
-                                        token = current.token,
-                                        repository = organizationRepository,
-                                        refreshKey = orgListTick,
-                                        onOpenOrg = { id, name -> orgDetailTarget = id to name },
-                                        onJoinScan = { showJoinScan = true },
-                                        onBack = { showOrganizations = false },
-                                    )
-                                }
-                            }
-
-                            // 加入组织：只认组织码，签到码在这个入口不生效。同样不套 SecondaryPage
-                            if (showJoinScan) {
-                                SignScanScreen(
-                                    target = SignTarget(0L, "", 0),
-                                    title = "加入组织",
-                                    orgOnly = true,
-                                    developerMode = BuildConfig.DEBUG && preferences.developerMode,
-                                    submit = { SignOutcome(false, -1, "这个入口不签到") },
-                                    onBack = { showJoinScan = false },
-                                    onSigned = {},
-                                    onOtherText = { text ->
-                                        val orgId = ScanRouter.organizationId(text)
-                                        if (orgId != null) {
-                                            showJoinScan = false
-                                            orgDetailTarget = orgId to ""
-                                            true
-                                        } else {
-                                            false
-                                        }
-                                    },
-                                )
-                            }
-
-                            // 组织详情：扫组织码进来的、从「我的组织」点进来的都在这里
-                            val orgTarget = orgDetailTarget
-                            if (orgTarget != null) {
-                                SecondaryPage(onBack = { orgDetailTarget = null }) {
-                                    OrgDetailScreen(
-                                        token = current.token,
-                                        repository = organizationRepository,
-                                        organizationId = orgTarget.first,
-                                        initialName = orgTarget.second,
-                                        onOpenActivity = { id ->
-                                            orgDetailTarget = null
-                                            detailActivityId = id
-                                        },
-                                        // 申请交上去后让「我的组织」重新拉，才能看到新的待审核
-                                        onApplied = { orgListTick++ },
-                                        onBack = { orgDetailTarget = null },
                                     )
                                 }
                             }
