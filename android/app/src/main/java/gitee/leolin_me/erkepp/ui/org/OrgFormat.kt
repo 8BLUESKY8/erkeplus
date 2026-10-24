@@ -13,6 +13,10 @@ internal fun orgNumberText(value: Double): String =
 
 internal fun orgProcessText(code: String): String = orgProcessLabel(code)
 
+/** 成立时间这类「只要日期」的字段；0 或非法值返回空串，界面据此隐藏整行。 */
+internal fun orgDate(millis: Long): String =
+    if (millis <= 0) "" else SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).format(Date(millis))
+
 internal fun orgIdentityText(identity: Int): String = orgIdentityLabel(identity)
 
 /** 活动时间范围：跨天写全，同一天只写一次日期。 */

@@ -455,7 +455,54 @@ score = hours × 0.025        // 我校 40 学时 = 1 学分
 `affiliationName`、`chairmanName`、`guiderName`、`campusName`、`level`、`rule`、
 `isJoin`、`isAdd`、`applyStatus`、`identity`、`isChairman`、`electApplyStatus`、
 `announcementList`、`flowExampleAuditRecordList`，以及**整个成员列表** `memberList`
-（几百条，实测 793 条，详情一次全给，别在 UI 里当列表用）。
+（几百条，实测 793 条、1052 条，详情一次全给，别在 UI 里当列表用）。
+
+详情页真正用得上的字段（2026-10-24 实测，机器人协会 17085 / 人工智能协会 39261）：
+
+| 字段 | 实测 | 说明 |
+| --- | --- | --- |
+| `activityCount` | 13 / 8 | 官方「活动数」；**和 `activity-list` 的 `total` 对不上**（13 vs 9、8 vs 5），同一页只能挑一个用 |
+| `foundTime` | 1659379982000 | 成立时间，毫秒时间戳 |
+| `campusName` | 淮南校区 | |
+| `parentName` | 空串 | 官方「组织归属」用它，空就显示「暂无」 |
+| `affiliationName` | 安徽理工大学 | 挂靠单位 |
+| `announcementList` | `[]` | 公告；实测这两个组织都没有，非空时的元素结构未验证 |
+| `memberList` | 1052 条 | 精简成员：`{"userLastElectId":685,"name":"郑爽","id":1321746,"avatar":null}`，没有职务 |
+| `joinRuleType` | 1 / 2 | 含义未验证，客户端不展示 |
+| `identity` | 1 | 我在这个组织里的身份，口径与列表一致 |
+
+`memberCount` 在三处接口里数值不一样（17085：detail 1052、`all-list` 3354、`my-apply-list1` 874），
+哪个页面就用哪个接口给的值，客户端不做「校正」。
+
+### 组织成员（`member-list`，2026-10-24 实测）
+
+参数 `organizationId`、`searchKey`（搜索框，空串取全部）、`userLastElectId`（「届」的 id，
+官方从详情里取；实测传空串也能拿到当前这一届）。响应：
+
+```json
+{"code":0,"data":{
+  "managerList":[{"organizationName":"人工智能协会","nature":2,"avatar":"https://...",
+    "recordId":1794697,"collegeName":"人工智能学院","electId":553,"identity":1,
+    "name":"李梦臣","duty":"会长","applyPosition":1,"id":1376788,"majorName":"机器人工程",
+    "department":""}],
+  "waitAuditMembers":113,"chairman":null,
+  "commonList":[{"name":"马志强","recordId":1794705,"collegeName":"人工智能学院",
+    "electId":553,"identity":1,"duty":"","applyPosition":null,"id":1682122,"majorName":"人工智能"}]}}
+```
+
+- `managerList` 是干部，带 `duty`（会长 / 副会长 / 部长）；**顺序不是按职务排的**——机器人协会
+  的会长排在三个副会长后面，客户端要自己排，否则页面上像「没有会长」。
+- `commonList` 是普通成员（实测 869 / 437 条），官方成员页在里面搜索、翻页。
+- `chairman` 实测为 `null`；`waitAuditMembers` 是待审核入团申请数。
+- 官方进成员页前会拦「您不是该组织成员」（看详情的 `identity`），**服务端不拦**：
+  非成员同样拿得到完整名单，拦不拦是产品决定。
+
+### 组织相册 / 撤销申请状态
+
+| 用途 | 接口 | 参数 | 实测返回 |
+| --- | --- | --- | --- |
+| 相册 | `GET organization/photo/list` | `id` | 两个组织都是 `data: []`；H5 按分组渲染，每组 `photos:[{url,id}]` |
+| 能否撤销申请 | `GET organization/query/count` | 无 | `{"revoke":0}`，1 表示可以撤销 |
 
 **申请加入的显示条件**（照官方 `orgDetail` 页，再按实测补一条）：
 

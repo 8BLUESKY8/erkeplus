@@ -1,11 +1,13 @@
 package gitee.leolin_me.erkepp.ui.org
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,11 +17,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -42,17 +45,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import gitee.leolin_me.erkepp.data.ActivityItem
 import gitee.leolin_me.erkepp.data.OrgDetail
+import gitee.leolin_me.erkepp.data.OrgMember
+import gitee.leolin_me.erkepp.data.OrgMembers
 import gitee.leolin_me.erkepp.data.OrganizationRepository
 import gitee.leolin_me.erkepp.data.toUserMessage
+import gitee.leolin_me.erkepp.ui.CollapsibleItems
+import gitee.leolin_me.erkepp.ui.ExpandableText
 import gitee.leolin_me.erkepp.ui.profile.AvatarImage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
- * 组织详情。扫码扫到组织码、或在「我的组织」里点一条，都进这里。
+ * 组织详情。扫码扫到组织码、或在「我的组织」「所有组织」里点一条，都进这里。
  *
- * 官方的 `#/orgDetail/:id` 信息很多（公告、相册、成员、荣誉…），这一版先给最该看的：
- * 这是谁、有多少人、简介、办过哪些活动，以及在不够了解之前不让点的那颗「申请加入」。
+ * 版式照官方 `#/orgDetail/:id`，但官方拆成「简介 / 公告 / 相册 / 活动」四个 tab，
+ * 切过去经常是空的；这里改成单页自上而下铺开，空的分区直接不出现，
+ * 长内容（简介、负责人、主办活动）先收着，想看再展开。
  *
  * 申请加入后**不能自己退出**（官方在点之前也是这么提示的），所以确认框里把这句话说清楚。
  */
@@ -69,18 +77,28 @@ fun OrgDetailScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var detail by remember { mutableStateOf<OrgDetail?>(null) }
-    var activities by remember { mutableStateOf<List<ActivityItem>>(emptyList()) }
+    var detail by remember(organizationId) { mutableStateOf<OrgDetail?>(null) }
+    var members by remember(organizationId) { mutableStateOf(OrgMembers.EMPTY) }
+    var activities by remember(organizationId) { mutableStateOf<List<ActivityItem>>(emptyList()) }
     // 主办活动只拉第一页，标题里的「共 N 个」用服务端的 total，不能拿已加载条数冒充
-    var activityTotal by remember { mutableIntStateOf(0) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var activityTotal by remember(organizationId) { mutableIntStateOf(0) }
+    var loading by remember(organizationId) { mutableStateOf(true) }
+    var error by remember(organizationId) { mutableStateOf<String?>(null) }
     var tick by remember { mutableIntStateOf(0) }
 
     var showApply by remember { mutableStateOf(false) }
     var applyInfo by remember { mutableStateOf("") }
     var submitting by remember { mutableStateOf(false) }
     var submitError by remember { mutableStateOf<String?>(null) }
+
+    // 附加信息（成员、活动）拉失败不影响详情本身，所以吞掉异常但保留取消
+    suspend fun <T> quietly(block: suspend () -> T): T? = try {
+        block()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Throwable) {
+        null
+    }
 
     LaunchedEffect(organizationId, tick) {
         loading = true
@@ -92,16 +110,12 @@ fun OrgDetailScreen(
         } catch (failure: Throwable) {
             error = failure.toUserMessage()
         }
-        // 活动列表是附加信息，拉失败不影响详情
-        val activityPage = try {
-            repository.activities(token, organizationId, 1)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Throwable) {
-            null
+        if (detail != null) {
+            val page = quietly { repository.activities(token, organizationId, 1) }
+            activities = page?.items.orEmpty()
+            activityTotal = page?.total?.takeIf { it > 0 } ?: activities.size
+            members = quietly { repository.members(token, organizationId) } ?: OrgMembers.EMPTY
         }
-        activities = activityPage?.items.orEmpty()
-        activityTotal = activityPage?.total?.takeIf { it > 0 } ?: activities.size
         loading = false
     }
 
@@ -147,37 +161,54 @@ fun OrgDetailScreen(
 
             else -> {
                 val current = detail!!
+                val leaders = members.leaders
                 LazyColumn(modifier = Modifier.weight(1f)) {
-                    item { OrgHeader(current) }
+                    // `activityCount` 和活动列表的 total 会打架（实测 13 vs 9），
+                    // 同页出现两个「活动数」只会让人以为哪里坏了，统一以列表 total 为准
+                    val activityCount = activityTotal.takeIf { it > 0 } ?: current.activityCount
+                    item { OrgHeader(current, activityCount) }
+
                     if (current.intro.isNotBlank()) {
-                        item { OrgIntro(current.intro) }
-                    }
-                    item {
-                        Text(
-                            text = if (activityTotal > activities.size) {
-                                "主办的活动（共 $activityTotal 个，这里显示最近 ${activities.size} 个）"
-                            } else {
-                                "主办的活动（${activities.size}）"
-                            },
-                            style = MaterialTheme.typography.titleSmall,
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 6.dp),
-                        )
-                    }
-                    if (activities.isEmpty()) {
                         item {
-                            Text(
-                                text = "这个组织暂时没有可看的活动",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                            )
-                        }
-                    } else {
-                        items(activities, key = { it.id }) { activity ->
-                            OrgActivityRow(activity) { onOpenActivity(activity.id) }
+                            SectionCard("简介") {
+                                ExpandableText(text = current.intro, collapsedMaxLines = 6)
+                            }
                         }
                     }
-                    item { Spacer(Modifier.height(16.dp)) }
+
+                    item { OrgInfoCard(current) }
+
+                    if (leaders.isNotEmpty()) {
+                        item {
+                            SectionCard("负责人", trailing = "共 ${leaders.size} 位") {
+                                CollapsibleItems(count = leaders.size, collapsedCount = 4) { index ->
+                                    LeaderRow(leaders[index])
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        SectionCard(
+                            title = "主办活动",
+                            trailing = if (activityTotal > 0) "共 $activityTotal 个" else null,
+                        ) {
+                            if (activities.isEmpty()) {
+                                Text(
+                                    text = if (loading) "正在加载…" else "这个组织暂时没有可看的活动",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                CollapsibleItems(count = activities.size, collapsedCount = 3) { index ->
+                                    val activity = activities[index]
+                                    ActivityRow(activity) { onOpenActivity(activity.id) }
+                                }
+                            }
+                        }
+                    }
+
+                    item { Spacer(Modifier.height(20.dp)) }
                 }
 
                 OrgActionBar(
@@ -256,8 +287,10 @@ fun OrgDetailScreen(
     }
 }
 
+// ---- 头部 ----
+
 @Composable
-private fun OrgHeader(detail: OrgDetail) {
+private fun OrgHeader(detail: OrgDetail, activityCount: Int) {
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             AvatarImage(
@@ -265,21 +298,40 @@ private fun OrgHeader(detail: OrgDetail) {
                 name = detail.name,
                 contentDescription = "组织头像",
                 modifier = Modifier
-                    .size(60.dp)
-                    .clip(RoundedCornerShape(14.dp)),
+                    .size(66.dp)
+                    .clip(RoundedCornerShape(18.dp)),
             )
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = detail.name, style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = detail.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 val second = listOf(detail.natureName, detail.categoryName)
                     .filter { it.isNotBlank() }
                     .joinToString(" · ")
                 if (second.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         text = second,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                val tags = buildList {
+                    orgIdentityText(detail.identity).takeIf { it.isNotBlank() }?.let { add(it to false) }
+                    // 只有异常状态才值得占一行；「已注册」是常态，说出来等于噪音
+                    orgProcessText(detail.processStatus)
+                        .takeIf { it.isNotBlank() && it != "已注册" }
+                        ?.let { add(it to true) }
+                }
+                if (tags.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        tags.forEach { (text, alert) -> Tag(text, alert) }
+                    }
                 }
             }
         }
@@ -288,30 +340,39 @@ private fun OrgHeader(detail: OrgDetail) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                 .padding(vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             Stat("成员", "${detail.memberCount}")
-            Stat("活跃", orgNumberText(detail.energy))
-            Stat("状态", orgProcessText(detail.processStatus).ifBlank { "—" })
-        }
-
-        Spacer(Modifier.height(10.dp))
-        val lines = buildList {
-            if (detail.affiliationName.isNotBlank()) add("挂靠：${detail.affiliationName}")
-            if (detail.chairmanName.isNotBlank()) add("会长：${detail.chairmanName}")
-            if (detail.guiderName.isNotBlank()) add("指导老师：${detail.guiderName}")
-        }
-        lines.forEach { line ->
-            Text(
-                text = line,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Stat("活动", "$activityCount")
+            Stat("活力值", orgNumberText(detail.energy))
         }
     }
+}
+
+@Composable
+private fun Tag(text: String, alert: Boolean) {
+    val container = if (alert) {
+        MaterialTheme.colorScheme.tertiaryContainer
+    } else {
+        MaterialTheme.colorScheme.primaryContainer
+    }
+    val onContainer = if (alert) {
+        MaterialTheme.colorScheme.onTertiaryContainer
+    } else {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = onContainer,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(container)
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    )
 }
 
 @Composable
@@ -326,66 +387,176 @@ private fun Stat(label: String, value: String) {
     }
 }
 
+// ---- 分区卡片 ----
+
 @Composable
-private fun OrgIntro(intro: String) {
+private fun SectionCard(
+    title: String,
+    trailing: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            Text(text = "简介", style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = intro,
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                if (trailing != null) {
+                    Text(
+                        text = trailing,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            content()
         }
     }
 }
 
+/** 组织档案：官方「简介」tab 里那一组「组织归属 / 组织性质 / 指导老师 / 成立时间」。 */
 @Composable
-private fun OrgActivityRow(item: ActivityItem, onClick: () -> Unit) {
-    Card(
+private fun OrgInfoCard(detail: OrgDetail) {
+    val rows = buildList {
+        if (detail.parentName.isNotBlank()) add("上级组织" to detail.parentName)
+        if (detail.affiliationName.isNotBlank()) add("挂靠单位" to detail.affiliationName)
+        if (detail.natureName.isNotBlank()) add("组织性质" to detail.natureName)
+        if (detail.categoryName.isNotBlank()) add("类别" to detail.categoryName)
+        if (detail.guiderName.isNotBlank()) add("指导老师" to detail.guiderName)
+        orgDate(detail.foundTime).takeIf { it.isNotBlank() }?.let { add("成立时间" to it) }
+        if (detail.campusName.isNotBlank()) add("校区" to detail.campusName)
+    }
+    if (rows.isEmpty()) return
+
+    SectionCard("组织信息") {
+        rows.forEach { (label, value) -> InfoRow(label, value) }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clickable(onClick = onClick),
+            .padding(vertical = 3.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AvatarImage(
-                url = item.cover,
-                name = item.name,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(46.dp)
-                    .clip(RoundedCornerShape(10.dp)),
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(76.dp),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun LeaderRow(member: OrgMember) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AvatarImage(
+            url = member.avatar,
+            name = member.name,
+            contentDescription = null,
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = member.name, style = MaterialTheme.typography.bodyMedium)
+                if (member.duty.isNotBlank()) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = member.duty,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            val sub = listOf(member.collegeName, member.majorName)
+                .filter { it.isNotBlank() }
+                .joinToString(" · ")
+            if (sub.isNotEmpty()) {
                 Text(
-                    text = item.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                val whenText = orgActivityTime(item.startTime, item.endTime)
-                Text(
-                    text = buildList {
-                        if (whenText.isNotBlank()) add(whenText)
-                        if (item.hours > 0) add("${orgNumberText(item.hours)} 学时")
-                        if (item.classifyName.isNotBlank()) add(item.classifyName)
-                    }.joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
+                    text = sub,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
     }
 }
+
+// ---- 主办活动 ----
+
+@Composable
+private fun ActivityRow(item: ActivityItem, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp, horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AvatarImage(
+            url = item.cover,
+            name = item.name,
+            contentDescription = null,
+            modifier = Modifier
+                .size(46.dp)
+                .clip(RoundedCornerShape(10.dp)),
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val whenText = orgActivityTime(item.startTime, item.endTime)
+            val sub = buildList {
+                if (whenText.isNotBlank()) add(whenText)
+                if (item.hours > 0) add("${orgNumberText(item.hours)} 学时")
+                if (item.classifyName.isNotBlank()) add(item.classifyName)
+            }.joinToString(" · ")
+            if (sub.isNotEmpty()) {
+                Text(
+                    text = sub,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+// ---- 底部操作条 ----
 
 @Composable
 private fun OrgActionBar(detail: OrgDetail, onApply: () -> Unit) {

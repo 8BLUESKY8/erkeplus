@@ -1,5 +1,6 @@
 package gitee.leolin_me.erkepp.data
 
+import gitee.leolin_me.erkepp.ui.org.orgDate
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -223,5 +224,100 @@ class OrganizationParseTest {
         val rejected = page.list.last()
         assertEquals(3, rejected.applyStatus)
         assertEquals("材料不全", rejected.refuseReason)
+    }
+
+    // ---- 详情页新版的档案字段与负责人 ----
+
+    @Test
+    fun `detail keeps the fields the new layout shows`() {
+        val detail = parseOrgDetail(
+            Json.parseToJsonElement(
+                """
+                {"id":17085,"name":"机器人协会","memberCount":1051,"activityCount":13,
+                 "foundTime":1659379982000,"campusName":"淮南校区","parentName":"",
+                 "affiliationName":"安徽理工大学","natureName":"社团协会",
+                 "categoryName":"文化体育类","guiderName":"郑江","identity":1,
+                 "orgProcessStatus":"re3","applyStatus":2,"isJoin":1,"isAdd":1,"rule":2}
+                """.trimIndent(),
+            ),
+        )
+        assertEquals(13, detail.activityCount)
+        assertEquals(1659379982000L, detail.foundTime)
+        assertEquals("淮南校区", detail.campusName)
+        // 实测这两个组织的 parentName 都是空串，界面要据此隐藏「上级组织」
+        assertEquals("", detail.parentName)
+        assertEquals(1, detail.identity)
+        // 已加入：底部不该再出现「申请加入」
+        assertFalse(detail.canApply)
+    }
+
+    @Test
+    fun `org date ignores empty values and formats millis`() {
+        assertEquals("", orgDate(0))
+        assertEquals("2022-08-01", orgDate(1659340800000))
+    }
+
+    private val memberJson = """
+        {"managerList":[
+           {"organizationName":"机器人协会","avatar":"","recordId":1,"collegeName":"人工智能学院",
+            "electId":553,"identity":1,"name":"孟露","duty":"副会长","id":1376658,
+            "majorName":"人工智能","avatar":"https://x/y.jpg"},
+           {"organizationName":"机器人协会","avatar":"","recordId":2,"collegeName":"人工智能学院",
+            "electId":553,"identity":1,"name":"李梦臣","duty":"会长","id":1376788,
+            "majorName":"机器人工程"}],
+         "waitAuditMembers":113,
+         "chairman":null,
+         "commonList":[{"name":"马志强","id":1682122,"avatar":"","duty":"",
+                        "collegeName":"人工智能学院","majorName":""}]}
+    """.trimIndent()
+
+    @Test
+    fun `members split leaders from common members`() {
+        val members = parseOrgMembers(Json.parseToJsonElement(memberJson))
+        // 实测 chairman 是 null，负责人只能从 managerList 里取
+        assertNull(members.chairman)
+        assertEquals(2, members.managers.size)
+        assertEquals(113, members.waitAudit)
+        // 服务端把副会长排前面；会长必须排第一，否则看起来像「没有会长」
+        assertEquals(listOf("会长", "副会长"), members.leaders.map { it.duty })
+        assertEquals("李梦臣", members.leaders.first().name)
+        // 头像空串不当作图片地址，交给占位图
+        assertNull(members.leaders.first().avatar)
+        assertEquals("https://x/y.jpg", members.leaders.last().avatar)
+        assertEquals(1, members.common.size)
+        assertEquals("", members.common.single().duty)
+    }
+
+    @Test
+    fun `chairman leads even when the duty is blank`() {
+        val members = parseOrgMembers(
+            Json.parseToJsonElement(
+                """{"chairman":{"id":9,"name":"主席"},"managerList":[{"id":1,"name":"甲","duty":"会长"}],
+                   "commonList":[]}""",
+            ),
+        )
+        assertEquals(listOf("主席", "甲"), members.leaders.map { it.name })
+    }
+
+    @Test
+    fun `duty ranking puts the president first`() {
+        assertEquals(0, dutyRank("会长"))
+        // 「副会长」包含「会长」两个字，不能因此排到会长前面
+        assertEquals(1, dutyRank("副会长"))
+        assertEquals(2, dutyRank("部长"))
+        assertEquals(3, dutyRank("副部长"))
+        assertEquals(4, dutyRank("干事"))
+        assertEquals(5, dutyRank(""))
+    }
+
+    @Test
+    fun `member without a name is dropped`() {
+        val members = parseOrgMembers(
+            Json.parseToJsonElement("""{"managerList":[{"id":1,"duty":"部长"}],"commonList":[]}"""),
+        )
+        assertTrue(members.managers.isEmpty())
+        assertTrue(members.common.isEmpty())
+        assertNull(members.chairman)
+        assertEquals(0, members.waitAudit)
     }
 }

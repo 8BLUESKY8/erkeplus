@@ -171,10 +171,19 @@ data class OrgAppliedItem(
 
 data class OrgAppliedPage(val total: Int, val list: List<OrgAppliedItem>, val lastPage: Boolean)
 
-data class OrgDetail(    val id: Long,
+data class OrgDetail(
+    val id: Long,
     val name: String,
     val avatar: String?,
     val memberCount: Int,
+    /** 主办活动总数，服务端直接给（`activityCount`）。 */
+    val activityCount: Int,
+    /** 成立时间，毫秒时间戳；0 表示没填。 */
+    val foundTime: Long,
+    /** 校区，例如「淮南校区」。 */
+    val campusName: String,
+    /** 上级组织；实测多数是空串。 */
+    val parentName: String,
     /** 组织性质，例如「社团」「学院」。官方拿它去查评优字典。 */
     val nature: String,
     /** 性质的名字，直接显示。 */
@@ -193,6 +202,8 @@ data class OrgDetail(    val id: Long,
     val applyStatus: Int,
     /** 是否已经有记录（申请中或已加入）。 */
     val isJoin: Int,
+    /** 我在这个组织里的身份：3 管理员、2 负责人、1 普通成员、0 非成员。 */
+    val identity: Int,
     /** 组织是否开放加入。 */
     val isAdd: Int,
     /** 加入规则，官方用 `rule == 3` 表示不接受申请。 */
@@ -205,6 +216,50 @@ data class OrgDetail(    val id: Long,
      */
     val canApply: Boolean
         get() = (applyStatus == 0 || applyStatus == 3) && rule != 3 && isAdd == 1
+}
+
+/**
+ * 组织成员。数据来自 `organization/member-list`，官方详情页用它渲染「负责人」和成员页。
+ *
+ * 干部（`managerList`）带 `duty`（会长 / 副会长 / 部长），普通成员（`commonList`）没有职务。
+ * `chairman` 可能为 `null`，实测两个组织都是这样。
+ */
+data class OrgMember(
+    val id: Long,
+    val name: String,
+    val avatar: String?,
+    val duty: String,
+    val collegeName: String,
+    val majorName: String,
+)
+
+data class OrgMembers(
+    val chairman: OrgMember?,
+    val managers: List<OrgMember>,
+    val common: List<OrgMember>,
+    /** 待审核入团申请数；详情页不显示，留给成员页。 */
+    val waitAudit: Int,
+) {
+    /**
+     * 负责人：会长排最前，其余按职务高低。服务端给的是创建顺序，实测「会长」会排在
+     * 三个「副会长」后面，原样渲染会让用户以为这个组织没有会长。
+     */
+    val leaders: List<OrgMember>
+        get() = listOfNotNull(chairman) + managers.sortedBy { dutyRank(it.duty) }
+
+    companion object {
+        val EMPTY = OrgMembers(chairman = null, managers = emptyList(), common = emptyList(), waitAudit = 0)
+    }
+}
+
+/** 职务的排序权重；认不出来的排在「其他」一档，不丢人也不冒充干部。 */
+internal fun dutyRank(duty: String): Int = when {
+    duty.contains("副会长") -> 1
+    duty.contains("会长") -> 0
+    duty.contains("副部长") -> 3
+    duty.contains("部长") -> 2
+    duty.isBlank() -> 5
+    else -> 4
 }
 
 class OrganizationRepository(private val api: ApiClient) {
@@ -383,6 +438,37 @@ class OrganizationRepository(private val api: ApiClient) {
     }
 
     /**
+     * 成员名单。官方在点进成员页时拦「您不是该组织成员」，服务端其实不拦；
+     * 这里按数据说话，把名单原样交给界面。
+     *
+     * `userLastElectId` 是「届」的 id，官方从详情里取；实测传空串也能拿到当前这一届。
+     */
+    suspend fun members(
+        token: String,
+        organizationId: Long,
+        searchKey: String = "",
+    ): OrgMembers {
+        val response = api.get(
+            path = "organization/member-list",
+            params = buildJsonObject {
+                put("organizationId", JsonPrimitive(organizationId))
+                put("searchKey", JsonPrimitive(searchKey))
+                put("userLastElectId", JsonPrimitive(""))
+            },
+            token = token,
+        )
+        response.requireSuccess()
+        val data = response.jsonObject["data"] ?: return OrgMembers.EMPTY
+        val members = parseOrgMembers(data)
+        AppLog.d(
+            "org",
+            "members org=$organizationId leaders=${members.leaders.size} " +
+                "common=${members.common.size} wait=${members.waitAudit}",
+        )
+        return members
+    }
+
+    /**
      * 申请加入。`applyInfo` 是申请理由，官方必填（空着会弹「请输入申请信息」）。
      *
      * 官方在点之前还会提示一句「申请加入组织后无法退出」，这里由界面负责说这句话。
@@ -535,6 +621,33 @@ class OrganizationRepository(private val api: ApiClient) {
                 )
             }
         }
+        // 官方详情页还会调这两个：相册、申请撤销状态。顺手把详情里没用到的字段也打出来
+        for (id in listOf(orgId, 17085L)) {
+            val raw = runCatching {
+                api.get("organization/detail", buildJsonObject { put("id", JsonPrimitive(id)) }, token)
+            }
+            val data = (raw.getOrNull() as? JsonObject)?.get("data") as? JsonObject
+            AppLog.d("org", "fields $id ann=${data?.get("announcementList")?.toString()?.take(1200)}")
+            AppLog.d("org", "fields $id memberList=${data?.get("memberList")?.toString()?.take(700)}")
+            AppLog.d(
+                "org",
+                "fields $id activityCount=${data?.get("activityCount")} " +
+                    "foundTime=${data?.get("foundTime")} level=${data?.get("level")} " +
+                    "parentName=${data?.get("parentName")} affiliationName=${data?.get("affiliationName")} " +
+                    "natureName=${data?.get("natureName")} categoryName=${data?.get("categoryName")} " +
+                    "guiderName=${data?.get("guiderName")} joinRuleType=${data?.get("joinRuleType")} " +
+                    "campusName=${data?.get("campusName")} collegeName=${data?.get("collegeName")} " +
+                    "className=${data?.get("className")} majorName=${data?.get("majorName")} " +
+                    "status=${data?.get("status")} ctime=${data?.get("ctime")} ltime=${data?.get("ltime")}",
+            )
+            dump(
+                "photos $id",
+                "organization/photo/list",
+                buildJsonObject { put("id", JsonPrimitive(id)) },
+                3000,
+            )
+            dump("count $id", "organization/query/count", buildJsonObject {}, 800)
+        }
         dump(
             "acts",
             "organization/activity-list",
@@ -656,6 +769,10 @@ internal fun parseOrgDetail(data: JsonElement): OrgDetail {
         name = item.orgStr("name"),
         avatar = item.orgStr("avatar").takeIf { it.isNotBlank() },
         memberCount = item.orgInt("memberCount"),
+        activityCount = item.orgInt("activityCount"),
+        foundTime = item.orgLong("foundTime"),
+        campusName = item.orgStr("campusName"),
+        parentName = item.orgStr("parentName"),
         nature = item.orgStr("nature"),
         natureName = item.orgStr("natureName"),
         categoryName = item.orgStr("categoryName"),
@@ -672,8 +789,35 @@ internal fun parseOrgDetail(data: JsonElement): OrgDetail {
         processStatus = item.orgStr("orgProcessStatus"),
         applyStatus = item.orgInt("applyStatus"),
         isJoin = item.orgInt("isJoin"),
+        identity = item.orgInt("identity"),
         isAdd = item.orgInt("isAdd"),
         rule = item.orgInt("rule"),
+    )
+}
+
+internal fun parseOrgMembers(data: JsonElement): OrgMembers {
+    val obj = data as? JsonObject ?: return OrgMembers.EMPTY
+    fun read(key: String): List<OrgMember> =
+        (obj[key] as? JsonArray)?.mapNotNull { parseOrgMember(it) }.orEmpty()
+    return OrgMembers(
+        chairman = (obj["chairman"] as? JsonObject)?.let { parseOrgMember(it) },
+        managers = read("managerList"),
+        common = read("commonList"),
+        waitAudit = obj.orgInt("waitAuditMembers"),
+    )
+}
+
+internal fun parseOrgMember(element: JsonElement?): OrgMember? {
+    val item = element as? JsonObject ?: return null
+    val name = item.orgStr("name")
+    if (name.isBlank()) return null
+    return OrgMember(
+        id = item.orgLong("id"),
+        name = name,
+        avatar = item.orgStr("avatar").takeIf { it.isNotBlank() },
+        duty = item.orgStr("duty"),
+        collegeName = item.orgStr("collegeName"),
+        majorName = item.orgStr("majorName"),
     )
 }
 

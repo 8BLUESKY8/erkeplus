@@ -27,6 +27,8 @@
 | 申请加入 | `POST organization/user-apply/add {id, applyInfo}` | `applyInfo` 必填；官方提示「申请加入组织后无法退出」 |
 | 组织状态 | 组织自身的生命周期，字段 `orgProcessStatus`，是**字符串码** | `re1` 待注册、`re2` 注册中、`re3` 已注册、`ap2` 评优中、`ya1~3` 年审、`ct1` 换届中、`cw1~3` 注销 |
 | 加入审核状态 | 申请加入的审核结果，字段 `status`，数字 | 1 待审核、2 已通过、3 已驳回（H5 里是 `status: activeStatus + 1`） |
+| 负责人 | 组织干部，接口 `organization/member-list` 的 `managerList`，带 `duty` 职务 | 与普通成员 `commonList` 相对；服务端顺序不按职务排，客户端要自己把会长排最前 |
+| 组织活动数 | 详情里的 `activityCount` 与 `organization/activity-list` 的 `total` | 两者实测对不上（13 vs 9、8 vs 5），同一页面只能取一个；客户端统一用列表 total |
 | 学院 / 年级 / 班级 | 参与限制的维度，字段 `collegeList` / `gradeList` / 班级体现在 `organizationName` | 限制由服务端判定 |
 | 报名 | 学生申请参加活动，官方接口 `activity/enroll/person` | 见「报名与考勤」 |
 | 报名限制 | 只有符合院系/年级/性别/诚信值条件的学生可报名 | 客户端不预判，交给服务端 |
