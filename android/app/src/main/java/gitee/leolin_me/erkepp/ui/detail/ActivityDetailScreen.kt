@@ -109,7 +109,7 @@ fun ActivityDetailScreen(
     onBack: () -> Unit,
     onOpenWeb: (Long) -> Unit,
     onOpenUrl: (String) -> Unit,
-    onOpenHomework: (Long, Boolean) -> Unit,
+    onOpenHomework: (Long, Boolean, String) -> Unit,
     onOpenAttachment: (ActivityAttachment) -> Unit,
     onOpenSignScan: (SignTarget) -> Unit = {},
     /** 报名：只在用户确认后才会调用。 */
@@ -236,7 +236,7 @@ fun ActivityDetailScreen(
                 },
                 onOpenWeb = { onOpenWeb(activityId) },
                 onOpenUrl = onOpenUrl,
-                onOpenHomework = { onOpenHomework(activityId, detail!!.isPostHomework == 1) },
+                onOpenHomework = { onOpenHomework(activityId, detail!!.isPostHomework == 1, detail!!.name) },
                 onOpenAttachment = onOpenAttachment,
                 onEnroll = { showEnrollConfirm = true },
                 onCancelEnroll = {

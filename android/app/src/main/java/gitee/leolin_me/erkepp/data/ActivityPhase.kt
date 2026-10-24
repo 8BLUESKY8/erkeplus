@@ -7,6 +7,7 @@ package gitee.leolin_me.erkepp.data
  *
  * | status | 学生端看到的样子 | 样本 |
  * | --- | --- | --- |
+ * | 0 | 草稿 / 未发布（没有报名入口，学时未结算） | 576539 21天单词打卡 |
  * | 1 | 未审核（底部按钮就是「未审核」，0 学时） | 572514 武术与民族传统武术展演 |
  * | 3 | 未审核 | 576140 21天单词打卡 |
  * | 4 | 待报名 | 576596 2026级外国语新生迎新破冰活动 |
@@ -15,9 +16,10 @@ package gitee.leolin_me.erkepp.data
  * | 7 | 进行中 | 574792 |
  * | 8 | 已结束 | 569941 |
  *
- * 1 和 3 是没通过审核的活动：官方页面底部按钮写「未审核」，学时也还没结算（详情里 `hours`
- * 为 0，只有 `definedHours`）。它们只在按状态过滤列表时才会冒出来，学生端不展示，所以
- * 本类一律给 [ActivityPhase.UNKNOWN]，既不画角标也不给报名入口。
+ * 0、1、3 是没发布或没通过审核的活动：官方页面底部按钮写「未审核」，学时也还没结算
+ * （详情里 `hours` 为 0，只有 `definedHours`）。它们只在按状态过滤列表时才会冒出来
+ * （`status=0` 实测能拉到 27 条），学生端不展示，所以本类一律给 [ActivityPhase.UNKNOWN]，
+ * 既不画阶段角标也不给报名入口。
  *
  * 其余活动阶段按四个时间点算，时间缺失时才退回数字。这样官方再调整编号也不会
  * 把「报名中」标成空白。
@@ -42,8 +44,13 @@ enum class ActivityPhase {
     UNKNOWN,
 }
 
-/** 未审核（1）与被驳回（3）：学生端不可报名，也没有阶段。 */
-private val UNAPPROVED_STATUS = setOf(1, 3)
+/**
+ * 未审核（1）、被驳回（3）与草稿（0）：学生端不可报名，也没有阶段。
+ *
+ * 0 是本次实测出来的：`status=0` 能拉到 27 条还没进审核的活动（21天单词打卡之类），
+ * 有名字有时间，但没有报名入口、学时为 0。官方页面不会主动展示它们。
+ */
+private val NO_ENROLL_STATUS = setOf(0, 1, 3)
 
 /**
  * 按时间算阶段。任一时间传 0 表示未知，未知的边界不参与判断。
@@ -55,10 +62,11 @@ fun phaseOf(
     enrollEndTime: Long,
     startTime: Long,
     endTime: Long,
-    status: Int = 0,
+    /** -1 表示调用方不关心编号、只按时间算；0/1/3 是草稿与未审核。 */
+    status: Int = -1,
     now: Long = System.currentTimeMillis(),
 ): ActivityPhase {
-    if (status in UNAPPROVED_STATUS) return ActivityPhase.UNKNOWN
+    if (status in NO_ENROLL_STATUS) return ActivityPhase.UNKNOWN
     if (startTime > 0 && now >= startTime) {
         return if (endTime > 0 && now > endTime) ActivityPhase.FINISHED else ActivityPhase.RUNNING
     }
@@ -68,7 +76,7 @@ fun phaseOf(
     return ActivityPhase.ENROLLING
 }
 
-/** 时间全缺时的兜底。1、3 不给阶段，理由见类注释。 */
+/** 时间全缺时的兜底。0、1、3 不给阶段，理由见类注释。 */
 fun phaseFromStatus(status: Int): ActivityPhase = when (status) {
     4 -> ActivityPhase.PENDING_ENROLL
     5 -> ActivityPhase.ENROLLING

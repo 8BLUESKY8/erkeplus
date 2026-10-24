@@ -13,13 +13,13 @@ class ActivityPhaseTest {
     private val day = 24 * hour
     private val now = 1_700_000_000_000L
 
-    /** 全部参数都是绝对毫秒；0 表示未知。 */
+    /** 全部参数都是绝对毫秒；0 表示未知。-1 表示不关心编号、只按时间算。 */
     private fun at(
         enrollStart: Long = 0,
         enrollEnd: Long = 0,
         start: Long = 0,
         end: Long = 0,
-        status: Int = 0,
+        status: Int = -1,
     ) = phaseOf(enrollStart, enrollEnd, start, end, status, now)
 
     @Test
@@ -86,17 +86,23 @@ class ActivityPhaseTest {
     @Test
     fun `unknown status stays unknown instead of guessing`() {
         assertEquals(ActivityPhase.UNKNOWN, at(status = 0))
+        assertEquals(ActivityPhase.UNKNOWN, at(status = 99))
     }
 
     @Test
-    fun `unapproved activities never report a phase`() {
-        // 1 和 3 是未审核：官方页面底部就写「未审核」，学时也没结算
+    fun `draft and unapproved activities never report a phase`() {
+        // 0 是草稿，1 和 3 是未审核：官方页面都不给报名入口，学时也没结算
+        assertEquals(ActivityPhase.UNKNOWN, at(status = 0))
         assertEquals(ActivityPhase.UNKNOWN, at(status = 1))
         assertEquals(ActivityPhase.UNKNOWN, at(status = 3))
         // 哪怕报名时间已经开了也不给阶段
         assertEquals(
             ActivityPhase.UNKNOWN,
             at(enrollStart = now - hour, enrollEnd = now + day, start = now + 2 * day, status = 3),
+        )
+        assertEquals(
+            ActivityPhase.UNKNOWN,
+            at(enrollStart = now - hour, enrollEnd = now + day, start = now + 2 * day, status = 0),
         )
     }
 

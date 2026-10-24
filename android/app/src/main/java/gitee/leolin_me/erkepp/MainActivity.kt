@@ -32,6 +32,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -45,8 +46,10 @@ import coil.Coil
 import coil.ImageLoader
 import coil.util.DebugLogger
 import gitee.leolin_me.erkepp.data.ActivityActions
+import gitee.leolin_me.erkepp.data.attachmentTypeOf
 import gitee.leolin_me.erkepp.data.ActivityAttachment
 import gitee.leolin_me.erkepp.data.ActivityDetail
+import gitee.leolin_me.erkepp.data.ActivityQuery
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.CreditDetail
 import gitee.leolin_me.erkepp.data.CreditRepository
@@ -61,6 +64,7 @@ import gitee.leolin_me.erkepp.data.ApiClient
 import gitee.leolin_me.erkepp.data.AppPreferences
 import gitee.leolin_me.erkepp.data.AuthRepository
 import gitee.leolin_me.erkepp.data.DeviceId
+import gitee.leolin_me.erkepp.data.OssUploader
 import gitee.leolin_me.erkepp.data.PasswordResetRepository
 import gitee.leolin_me.erkepp.data.SchoolRepository
 import gitee.leolin_me.erkepp.data.SchoolStore
@@ -78,6 +82,7 @@ import gitee.leolin_me.erkepp.ui.attachments.ImagePreviewScreen
 import gitee.leolin_me.erkepp.ui.detail.ActivityDetailScreen
 import gitee.leolin_me.erkepp.ui.detail.HomeworkEditScreen
 import gitee.leolin_me.erkepp.ui.detail.HomeworkScreen
+import gitee.leolin_me.erkepp.ui.detail.compressForUpload
 import gitee.leolin_me.erkepp.ui.home.DiscoverScreen
 import gitee.leolin_me.erkepp.ui.home.ProfileScreen
 import gitee.leolin_me.erkepp.ui.login.ForgotPasswordScreen
@@ -121,11 +126,54 @@ class MainActivity : ComponentActivity() {
 
     private var pendingFileCallback: ValueCallback<Array<Uri>>? = null
 
+    /** 提交作业时拍照写到的临时文件；拍完读出来上传。 */
+    private var pendingPhotoFile: java.io.File? = null
+
+    /** 待上传的作业附件：启动器只管把 uri 丢进来，真正的上传在界面里做（要 token）。 */
+    private val pendingUpload = androidx.compose.runtime.mutableStateOf<Pair<Uri, String>?>(null)
+
     private val filePicker = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         val callback = pendingFileCallback
         pendingFileCallback = null
         callback?.onReceiveValue(if (uris.isEmpty()) null else uris.toTypedArray())
     }
+
+    /** 相册/文件选了东西：交给界面压缩后上传。 */
+    private val photoPicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            pendingUpload.value = uri to (displayNameOf(uri) ?: "file-${System.currentTimeMillis()}")
+        }
+    }
+
+    /** 从内容提供者拿文件名，拿不到就用兜底名。 */
+    private fun displayNameOf(uri: Uri): String? = runCatching {
+        contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (index >= 0) cursor.getString(index) else null
+                } else {
+                    null
+                }
+            }
+    }.getOrNull()
+
+    /** 拍照：相机把照片写进 FileProvider 给的临时文件，回来再读。 */
+    private val cameraCapture = registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        // 相机在前台时本进程可能被回收，回来重建后字段是空的：退回到「最近一张」兜底
+        val file = pendingPhotoFile ?: newestCameraPhoto()
+        pendingPhotoFile = null
+        AppLog.d("hw", "camera result ok=$ok file=${file?.name}")
+        if (ok && file != null && file.isFile) pendingUpload.value = Uri.fromFile(file) to file.name
+    }
+
+    /** cache/camera 里 10 分钟内最新的一张，用来兜底进程被回收的情况。 */
+    private fun newestCameraPhoto(): java.io.File? = runCatching {
+        java.io.File(cacheDir, "camera").listFiles()
+            ?.filter { it.isFile }
+            ?.maxByOrNull { it.lastModified() }
+            ?.takeIf { System.currentTimeMillis() - it.lastModified() < 10 * 60_000L }
+    }.getOrNull()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Startup.mark("onCreate")
@@ -159,6 +207,7 @@ class MainActivity : ComponentActivity() {
         val rankRepository = RankRepository(apiClient)
         val profileRepository = ProfileRepository(apiClient)
         val storageRepository = StorageRepository()
+        val ossUploader = OssUploader(apiClient)
         Startup.mark("repositories")
 
         setContent {
@@ -220,6 +269,7 @@ class MainActivity : ComponentActivity() {
                 var pendingDownload by remember { mutableStateOf<ActivityAttachment?>(null) }
                 var attachmentSheet by remember { mutableStateOf<ActivityAttachment?>(null) }
                 var homeworkEditId by remember { mutableStateOf<Long?>(null) }
+                var homeworkTitle by remember { mutableStateOf("") }
                 var signScan by remember { mutableStateOf<SignTarget?>(null) }
                 var showHomeScan by remember { mutableStateOf(false) }
                 var presetSignText by remember { mutableStateOf<String?>(null) }
@@ -405,6 +455,61 @@ class MainActivity : ComponentActivity() {
                             if (detailId > 0) detailActivityId = detailId
                         }
                         "block_rules" -> settingsSection = SettingsSection.BLOCK_RULES
+                        // 调试用：验证 STS + OSS 上传链路（传一张 1x1 的图再删掉）
+                        "oss_test" -> {
+                            val bytes = android.util.Base64.decode(
+                                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+                                android.util.Base64.DEFAULT,
+                            )
+                            val url = ossUploader.upload(current.token, bytes, "probe.png", "image/png")
+                            AppLog.d("probe", "oss_test url=$url")
+                            val deleted = ossUploader.delete(current.token, url)
+                            AppLog.d("probe", "oss_test delete=$deleted")
+                        }
+                        // 调试用：把「已报名」列表打出来，核对某活动在报名列表里的状态
+                        "mylist_dump" -> {
+                            val pages = intent.getStringExtra("pages")?.toIntOrNull() ?: 6
+                            for (p in 1..pages) {
+                                val result = runCatching {
+                                    activityRepository.myList(current.token, p)
+                                }.getOrNull() ?: break
+                                AppLog.d(
+                                    "probe",
+                                    "mylist_dump page=$p total=${result.total} got=${result.items.size}",
+                                )
+                                result.items.forEach { item ->
+                                    AppLog.d(
+                                        "probe",
+                                        "mylist_item id=${item.id} st=${item.status} " +
+                                            "start=${item.startTime} end=${item.endTime} name=${item.name}",
+                                    )
+                                }
+                                if (result.items.isEmpty()) break
+                            }
+                        }
+                        // 调试用：把某个 status 的前几页原样打出来，核对「某活动为什么不在列表里」
+                        "list_dump" -> {
+                            val status = intent.getStringExtra("status") ?: "5,6,7,8"
+                            val pages = intent.getStringExtra("pages")?.toIntOrNull() ?: 5
+                            for (p in 1..pages) {
+                                val result = runCatching {
+                                    activityRepository.list(current.token, ActivityQuery(page = p, status = status))
+                                }.getOrNull() ?: break
+                                AppLog.d(
+                                    "probe",
+                                    "list_dump status=$status page=$p total=${result.total} got=${result.items.size}",
+                                )
+                                result.items.forEach { item ->
+                                    AppLog.d(
+                                        "probe",
+                                        "list_item id=${item.id} st=${item.status} " +
+                                            "start=${item.startTime} end=${item.endTime} " +
+                                            "enrollEnd=${item.enrollEndTime} name=${item.name}",
+                                    )
+                                }
+                                if (result.items.isEmpty()) break
+                            }
+                        }
                         "storage" -> showStorage = true
                         "rank_page" -> {
                             rankLevel = intent.getStringExtra("level")?.toIntOrNull() ?: 10
@@ -490,6 +595,54 @@ class MainActivity : ComponentActivity() {
                             var discoverReenterTick by remember { mutableIntStateOf(0) }
                             var lastDiscoverTap by remember { mutableLongStateOf(0L) }
                             var switchJob by remember { mutableStateOf<Job?>(null) }
+
+                            // 作业附件：本次新上传的（提交时会和已有的一起发出去）
+                            val homeworkAdded = remember { mutableStateListOf<ActivityAttachment>() }
+                            var homeworkUploading by remember { mutableStateOf(false) }
+                            LaunchedEffect(homeworkEditId) {
+                                homeworkAdded.clear()
+                                homeworkUploading = false
+                            }
+
+                            // 拍照/选图之后在这里统一压缩 + 上传，失败用 Toast 说一声
+                            val uploadRequest = pendingUpload.value
+                            LaunchedEffect(uploadRequest) {
+                                val request = uploadRequest ?: return@LaunchedEffect
+                                homeworkUploading = true
+                                AppLog.d("hw", "upload start uri=${request.first} name=${request.second}")
+                                val result = runCatching {
+                                    val (uri, name) = request
+                                    val raw = activity.contentResolver.openInputStream(uri)
+                                        ?.use { it.readBytes() } ?: error("读不到这个文件")
+                                    val guessed = activity.contentResolver.getType(uri)
+                                    val mime = guessed ?: if (name.endsWith(".png", true)) "image/png" else "image/jpeg"
+                                    val bytes = if (mime.startsWith("image/")) compressForUpload(raw) else raw
+                                    if (bytes.size > 5 * 1024 * 1024) error("单个附件不能超过 5MB")
+                                    val url = ossUploader.upload(current.token, bytes, name, mime)
+                                    ActivityAttachment(
+                                        name = name,
+                                        url = url,
+                                        type = attachmentTypeOf(mime),
+                                        size = bytes.size.toLong(),
+                                    )
+                                }
+                                homeworkUploading = false
+                                // 传完再清：一开头就清会把 key 改掉，等于自己取消自己
+                                pendingUpload.value = null
+                                // 拍完的原图留在 cache 里没用，传完就删
+                                if (request.first.scheme == "file") {
+                                    runCatching { java.io.File(request.first.path.orEmpty()).delete() }
+                                }
+                                result.onSuccess { homeworkAdded.add(it) }
+                                    .onFailure {
+                                        AppLog.d("hw", "upload failed: ${it.message}")
+                                        Toast.makeText(
+                                            activity,
+                                            "上传失败：${it.message ?: "请重试"}",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    }
+                            }
 
                             // 切页只由一个来源驱动：
                             // 手指滑动 → 只更新 tab；点导航 → 只动 pager。
@@ -752,7 +905,7 @@ class MainActivity : ComponentActivity() {
                                         onBack = { sandboxDetail = null },
                                         onOpenWeb = {},
                                         onOpenUrl = {},
-                                        onOpenHomework = { _, _ -> },
+                                        onOpenHomework = { _, _, _ -> },
                                         onOpenAttachment = {},
                                         onOpenSignScan = { target ->
                                             signScanSandbox = true
@@ -834,12 +987,14 @@ class MainActivity : ComponentActivity() {
                                                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                                             }
                                         },
-                                        onOpenHomework = { id, viewing ->
+                                        onOpenHomework = { id, viewing, name ->
                                             if (viewing) {
                                                 // 查看作业用原生页：接口 `activity/query/work_3_0_1` 已实测
                                                 homeworkActivityId = id
                                             } else {
-                                                webUrl = "https://${AppConfig.ALLOWED_HOST}/#/assignment/$id"
+                                                // 交作业也走原生页：附件先传官方 OSS，再调 submit
+                                                homeworkTitle = name
+                                                homeworkEditId = id
                                             }
                                         },
                                         onOpenAttachment = { attachment -> handleAttachmentTap(attachment) },
@@ -878,7 +1033,7 @@ class MainActivity : ComponentActivity() {
                                 SecondaryPage(onBack = { homeworkEditId = null }) {
                                     HomeworkEditScreen(
                                         activityId = editId,
-                                        activityName = "",
+                                        activityName = homeworkTitle,
                                         loader = { activityActions.work(current.token, editId) },
                                         onSubmit = { text, files ->
                                             activityActions.submitWork(current.token, editId, text, files)
@@ -886,6 +1041,31 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onAttachment = { attachment -> attachmentSheet = attachment },
                                         onBack = { homeworkEditId = null },
+                                        addedAttachments = homeworkAdded,
+                                        uploading = homeworkUploading,
+                                        onTakePhoto = {
+                                            runCatching {
+                                                val dir = java.io.File(activity.cacheDir, "camera")
+                                                    .apply { mkdirs() }
+                                                val file = java.io.File(
+                                                    dir,
+                                                    "photo-${System.currentTimeMillis()}.jpg",
+                                                )
+                                                pendingPhotoFile = file
+                                                val uri = androidx.core.content.FileProvider.getUriForFile(
+                                                    activity,
+                                                    "${activity.packageName}.files",
+                                                    file,
+                                                )
+                                                cameraCapture.launch(uri)
+                                            }.onFailure {
+                                                Toast.makeText(activity, "打不开相机", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        onPickFile = { photoPicker.launch("*/*") },
+                                        onRemoveAdded = { attachment ->
+                                            homeworkAdded.removeAll { it.url == attachment.url }
+                                        },
                                     )
                                 }
                             }

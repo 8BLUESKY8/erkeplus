@@ -78,10 +78,11 @@ POST /activity/enroll/cancel/person { id, applyInfo }               // 取消报
 ## 状态编号与列表可见性（2026-10-23 实测）
 
 `activityStatus` 是一个数字，学生端能看到的只有一部分。判断「能不能报名」不能只看时间，
-还要看这个数字：**1 和 3 是未审核**。
+还要看这个数字：**0 是草稿、1 和 3 是未审核**。
 
 | status | 学生端看到的样子 | 样本 |
 | --- | --- | --- |
+| 0 | 草稿 / 未发布，没有报名入口，学时未结算 | 576539 21天单词打卡 |
 | 1 | 未审核，0 学时，报不了 | 572514 武术与民族传统武术展演 |
 | 3 | 未审核，0 学时，报不了 | 576140 21天单词打卡 |
 | 4 | 待报名 | 576596 2026级外国语新生迎新破冰活动 |
@@ -89,6 +90,11 @@ POST /activity/enroll/cancel/person { id, applyInfo }               // 取消报
 | 6 | 报名已截止、活动未开始 | 575705 |
 | 7 | 进行中 | 574792 |
 | 8 | 已结束 | 569941 |
+
+`status=0` 是 2026-10-24 补测的：`page/activity/list` 传 `status=0` 返回 **27 条**、条目
+`activityStatus` 全是 0（21天单词打卡、单词21天打卡、七天单词打卡……），都有名字和时间，
+但没有报名入口。注意它**不是**「全部」——H5 里的 `status:0` 只是「全部」这个 tab 的下标，
+真正发出去的请求写死 `status:"4,5,6,7"`（连已结束的 8 都不带）。
 
 「未审核」不是我猜的：打开 `#/activityshow/572514` 与 `#/activityshow/576140`，页面底部
 按钮文案就是「未审核」（`.EventDetailshow-bottom-all`），顶部学时写「（0学时）」。
@@ -443,7 +449,20 @@ score = hours × 0.025        // 我校 40 学时 = 1 学分
 ```
 
 - 正文不能为空（官方前端会提示「请填写作业」）。
-- 附件最多 9 个，单个不超过 5 MB；新增附件走阿里云 OSS（H5 的 `uploadOSS`），**客户端尚未接入**。
+- 附件最多 9 个，单个不超过 5 MB。新增附件的上传链路（2026-10-24 打通）：
+
+  ```
+  GET  common/aliyun/sts/assume-role
+       → data{accessKeyId, accessKeySecret, accessSecurityToken}
+  PUT  https://gytx-2ketang.oss-cn-hangzhou.aliyuncs.com/activity/<毫秒时间戳>/<文件名>
+       Authorization: OSS <accessKeyId>:<Base64(HMAC-SHA1(secret, StringToSign))>
+       x-oss-security-token: <accessSecurityToken>
+  ```
+
+  图片走 `gytx-2ketang`，其它文件走 `gytx-temp`；对象路径照 H5 的 `activity/<毫秒>/<文件名>`。
+  签名是 OSS **V1**（H5 的 ali-oss 默认也是 V1），字符串为
+  `PUT\n<Content-MD5>\n<Content-Type>\n<Date>\nx-oss-security-token:<token>\n/<bucket>/<key>`。
+  `attachment` 里 `url` 可有多个（H5 传原图 + 压缩图，逗号分隔），取第一个即可。
 - 客户端提交前有二次确认，请求与响应写 `[action]` 日志。
 
 ## 尚未验证

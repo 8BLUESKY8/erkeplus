@@ -7,4 +7,8 @@
     <cache-path
         name="erkepp_update"
         path="update/" />
+    <!-- 拍照提交作业时的临时照片 -->
+    <cache-path
+        name="erkepp_camera"
+        path="camera/" />
 </paths>

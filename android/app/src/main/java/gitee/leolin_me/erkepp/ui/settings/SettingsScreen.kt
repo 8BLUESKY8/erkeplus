@@ -543,8 +543,8 @@ private fun CategoryChipList(
 /**
  * 「全部」要加载哪些状态。
  *
- * 常驻四项是学生端能看到的 5~8；1（审核中）、3（被驳回）、4（待报名）单独放在「实验」区，
- * 默认不勾——官方对这几类不给报名入口，勾上只会让列表多出报不了的活动。
+ * 常驻四项是学生端能看到的 5~8；0（未发布）、1（审核中）、3（被驳回）、4（待报名）单独放在
+ * 「实验」区，默认不勾——官方对这几类不给报名入口，勾上只会让列表多出报不了的活动。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -571,7 +571,7 @@ private fun LoadStatusChips(selected: Set<Int>, onChange: (Set<Int>) -> Unit) {
         modifier = Modifier.padding(top = 8.dp),
     )
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf(1 to "审核中", 3 to "被驳回", 4 to "待报名").forEach { (value, label) ->
+        listOf(0 to "未发布", 1 to "审核中", 3 to "被驳回", 4 to "待报名").forEach { (value, label) ->
             FilterChip(
                 selected = value in selected,
                 onClick = { onChange(selected.toggleStatus(value)) },

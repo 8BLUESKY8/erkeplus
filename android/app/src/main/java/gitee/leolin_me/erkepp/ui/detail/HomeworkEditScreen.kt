@@ -1,7 +1,9 @@
 package gitee.leolin_me.erkepp.ui.detail
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -19,6 +21,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,7 +49,8 @@ import kotlinx.coroutines.launch
  * 提交 / 修改作业（原生）。
  *
  * 正文和已有附件来自 `activity/query/work_3_0_1`；提交走 `activity/submit/work_3_0_1`。
- * 这一版只回传已有附件，不支持新增上传（上传走阿里云 OSS，尚未验证）。
+ * 新附件先传到官方 OSS（[gitee.leolin_me.erkepp.data.OssUploader]），上传成功后把
+ * `url/name/size/type` 一起提交。单张图片不超过 5MB，最多 9 个附件。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -57,11 +61,17 @@ fun HomeworkEditScreen(
     onSubmit: suspend (String, List<ActivityAttachment>) -> Unit,
     onAttachment: (ActivityAttachment) -> Unit,
     onBack: () -> Unit,
+    /** 本次新加的附件（已上传完成，还在等提交）。 */
+    addedAttachments: List<ActivityAttachment> = emptyList(),
+    uploading: Boolean = false,
+    onTakePhoto: () -> Unit = {},
+    onPickFile: () -> Unit = {},
+    onRemoveAdded: (ActivityAttachment) -> Unit = {},
 ) {
     var loading by remember(activityId) { mutableStateOf(true) }
     var submitting by remember(activityId) { mutableStateOf(false) }
     var content by remember(activityId) { mutableStateOf("") }
-    var attachments by remember(activityId) { mutableStateOf<List<ActivityAttachment>>(emptyList()) }
+    var loadedAttachments by remember(activityId) { mutableStateOf<List<ActivityAttachment>>(emptyList()) }
     var error by remember(activityId) { mutableStateOf<String?>(null) }
     var confirm by remember(activityId) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -70,10 +80,14 @@ fun HomeworkEditScreen(
         runCatching { loader() }
             .onSuccess { work ->
                 content = work?.content.orEmpty()
-                attachments = work?.attachments.orEmpty()
+                loadedAttachments = work?.attachments.orEmpty()
             }
             .onFailure { error = it.toUserMessage() }
         loading = false
+    }
+
+    val attachments = loadedAttachments + addedAttachments.filter { added ->
+        loadedAttachments.none { it.url == added.url }
     }
 
     Column(
@@ -130,47 +144,89 @@ fun HomeworkEditScreen(
                 },
             )
 
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "附件（${attachments.size}/9）",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(8.dp))
             if (attachments.isNotEmpty()) {
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = "已附文件（${attachments.size}）",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.height(8.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     attachments.forEach { attachment ->
-                        if (attachment.type == 1) {
-                            AsyncImage(
-                                model = rememberCoverRequest(attachment.url, 84, maxWidthPx = 336),
-                                contentDescription = attachment.name,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(84.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable { onAttachment(attachment) },
-                            )
-                        } else {
-                            Text(
-                                text = attachment.name,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(vertical = 4.dp),
-                            )
+                        val added = addedAttachments.any { it.url == attachment.url }
+                        Box {
+                            if (attachment.type == 1) {
+                                AsyncImage(
+                                    model = rememberCoverRequest(attachment.url, 84, maxWidthPx = 336),
+                                    contentDescription = attachment.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(84.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable { onAttachment(attachment) },
+                                )
+                            } else {
+                                Text(
+                                    text = attachment.name,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .padding(vertical = 4.dp)
+                                        .clickable { onAttachment(attachment) },
+                                )
+                            }
+                            if (added) {
+                                Text(
+                                    text = "×",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(2.dp)
+                                        .background(
+                                            color = MaterialTheme.colorScheme.errorContainer,
+                                            shape = RoundedCornerShape(50),
+                                        )
+                                        .clickable { onRemoveAdded(attachment) }
+                                        .padding(horizontal = 5.dp),
+                                )
+                            }
                         }
                     }
                 }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "这一版只回传已有附件，新增上传还没接入",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Spacer(Modifier.height(8.dp))
             }
+            if (attachments.size < 9) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = onTakePhoto,
+                        enabled = !uploading && !submitting,
+                    ) { Text("拍照") }
+                    OutlinedButton(
+                        onClick = onPickFile,
+                        enabled = !uploading && !submitting,
+                    ) { Text("选文件") }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = if (uploading) {
+                    "正在上传…"
+                } else {
+                    "图片单张不超过 5MB，最多 9 个；上传完再点提交"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (uploading) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
 
             error?.let {
                 Spacer(Modifier.height(12.dp))

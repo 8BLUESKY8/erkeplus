@@ -131,6 +131,7 @@ private const val MAX_SCAN_PAGES = 40
  * 与其画一个空角标，不如直说。
  */
 private fun unapprovedLabel(status: Int): String = when (status) {
+    0 -> "未发布"
     1 -> "审核中"
     3 -> "被驳回"
     else -> ""
