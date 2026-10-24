@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import gitee.leolin_me.erkepp.data.ActivityAttachment
 import gitee.leolin_me.erkepp.data.ActivityWork
+import gitee.leolin_me.erkepp.data.hasTooWideChar
 import gitee.leolin_me.erkepp.data.toUserMessage
 import gitee.leolin_me.erkepp.ui.rememberCoverRequest
 import kotlinx.coroutines.launch
@@ -232,12 +233,21 @@ fun HomeworkEditScreen(
                 Spacer(Modifier.height(12.dp))
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
+            if (hasTooWideChar(content)) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "正文里有服务端存不下的表情（🥰 这类），删掉再用文字描述；" +
+                        "提交会报「未知数据错误」",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             Spacer(Modifier.height(24.dp))
         }
 
         Button(
             onClick = { confirm = true },
-            enabled = content.isNotBlank() && !submitting,
+            enabled = content.isNotBlank() && !hasTooWideChar(content) && !submitting,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 12.dp),
