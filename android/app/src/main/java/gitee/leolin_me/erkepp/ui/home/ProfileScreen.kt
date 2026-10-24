@@ -17,7 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -27,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import gitee.leolin_me.erkepp.data.CreditDetail
 import gitee.leolin_me.erkepp.data.Session
+import gitee.leolin_me.erkepp.ui.EntryRow
 import gitee.leolin_me.erkepp.ui.profile.AvatarImage
 
 /**
@@ -42,6 +42,7 @@ fun ProfileScreen(
     onOpenPersonalInfo: () -> Unit,
     onOpenCredit: () -> Unit,
     onOpenRank: () -> Unit,
+    onOpenOrganizations: () -> Unit,
     onOpenAttachments: () -> Unit,
     onOpenStorage: () -> Unit,
     onOpenWeb: () -> Unit,
@@ -123,6 +124,11 @@ fun ProfileScreen(
         Card(modifier = Modifier.fillMaxWidth()) {
             Column {
                 EntryRow(
+                    title = "我的组织",
+                    subtitle = "我加入的、我创建的、我退出的，以及待审核的申请",
+                    onClick = onOpenOrganizations,
+                )
+                EntryRow(
                     title = "诚信值",
                     subtitle = "守约记录、失约记录与申诉",
                     onClick = onOpenCredit,
@@ -202,46 +208,6 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
             )
-        }
-    }
-}
-
-@Composable
-private fun EntryRow(
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
-    showDivider: Boolean = true,
-) {
-    Column(modifier = Modifier.clickable(onClick = onClick)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                text = "›",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (showDivider) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp)
-                    .height(1.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-            ) {}
         }
     }
 }

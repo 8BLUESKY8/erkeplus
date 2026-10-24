@@ -59,11 +59,11 @@ POST `activity/sign/in-out {id, userId, type, sp, signSwitch?}`，`userId` 与 `
 官方主页右上角那个扫码是**通用入口**，扫到什么都往 `window.BackScan` 里丢，再按内容分流。
 这里照做，入口在发现页顶部右侧：
 
-| 扫到的东西 | 后续 |
+| 扫码 | 后续 |
 | --- | --- |
 | `qutuo://sign?…` / `qutuo://waitSign?…` | 进确认框，走与详情页同一套签到逻辑 |
 | `…?sourceName=schActivityCode@Xj&activityid=<id>` | 解析出活动 id，直接打开详情 |
-| 含 `joinOrganization` 的组织码 | 提示「组织码暂不支持，请到官方页面加入」 |
+| 含 `joinOrganization` 的组织码 | 解析出组织 id，直接打开组织详情（v0.9.0 起支持，见 [组织](organization.md)） |
 | 其它 | 「这不是活动签到码」 |
 
 分流规则在 `data/ScanRouter.kt`，有单元测试兜着（签到码里也有 `activityId=`，

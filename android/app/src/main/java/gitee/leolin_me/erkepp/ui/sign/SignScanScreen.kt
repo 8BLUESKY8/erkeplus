@@ -112,6 +112,13 @@ fun SignScanScreen(
     title: String = "",
     /** 不是签到码的文本交给它处理；返回 true 表示已处理（本页会被关掉）。 */
     onOtherText: ((String) -> Boolean)? = null,
+    /**
+     * 只认组织码（「加入组织」用）。
+     *
+     * 同一个扫码页要能扫组织码，但**不能**把签到码签了：两个入口长得一样，
+     * 站错地方签错到，比多扫一次麻烦得多。所以这个模式下签到解析整段跳过。
+     */
+    orgOnly: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -145,6 +152,12 @@ fun SignScanScreen(
     }
 
     fun accept(text: String, source: String) {
+        if (orgOnly) {
+            if (onOtherText?.invoke(text) == true) return
+            hint = "这不是组织码"
+            AppLog.d("sign", "reject org-only source=$source text=${text.take(80)}")
+            return
+        }
         val parsed = parseSignCode(text)
         if (parsed == null) {
             // 首页扫一扫还要兼管活动分享码、组织码；交给外面分流
@@ -270,7 +283,7 @@ fun SignScanScreen(
                     ScanFrame(modifier = Modifier.size(side).padding(bottom = 40.dp))
                 }
                 Text(
-                    text = hint ?: "把活动现场的二维码放进框内",
+                    text = hint ?: if (orgOnly) "把组织码放进框内" else "把活动现场的二维码放进框内",
                     color = if (hint == null) Color(0xE6FFFFFF) else Color(0xFFFFC46B),
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,

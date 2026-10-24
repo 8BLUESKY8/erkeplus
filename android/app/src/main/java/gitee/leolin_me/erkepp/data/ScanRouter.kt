@@ -29,6 +29,25 @@ object ScanRouter {
 
     fun isOrganizationCode(raw: String): Boolean = raw.contains("joinOrganization")
 
+    /**
+     * 组织码里的组织 id。
+     *
+     * 官方码是 `qutuo://joinOrganization?id=39261`，后面还会补 `?yiban=yiban_scan_result`
+     * （注意是第二个问号，所以先按 `?yiban=` 截断，再取第一段 query）。
+     * 包里的 `Encrypt` 是恒等函数，所以码就是明文，不需要解密。
+     */
+    fun organizationId(raw: String): Long? {
+        val text = raw.trim().substringBefore("?yiban=")
+        if (!isOrganizationCode(text)) return null
+        val value = text.substringAfter('?', "")
+            .split('&')
+            .firstOrNull { it.substringBefore('=').trim().equals("id", ignoreCase = true) }
+            ?.substringAfter('=', "")
+            ?.trim()
+            ?: return null
+        return value.toLongOrNull()?.takeIf { it > 0 }
+    }
+
     /** 识别不了时给用户的提示。 */
     fun unknownHint(): String = "无法识别的二维码"
 }

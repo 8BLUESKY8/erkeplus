@@ -413,12 +413,71 @@ score = hours × 0.025        // 我校 40 学时 = 1 学分
 ]},"msg":"ok"}
 ```
 
+## 组织（2026-10-24 实测）
+
+官方有三处入口都指向同一套接口：`#/myOrganization`（我的组织）、`#/service/organize`
+（校园组织目录）、`#/orgDetail/<id>`（组织详情）。第三个是扫组织码的落点。
+
+| 场景 | 接口 | 参数 |
+| --- | --- | --- |
+| 我加入的 | `GET organization/my-list` | `pageNum`、`pageSize`、`status` |
+| 我创建的 | `GET organization/my-create-list` | 同上 |
+| 我退出的 | `GET organization/my-quit-list` | 同上 |
+| 组织目录 | `GET organization/all-list` | `pageNum`、`pageSize`、`type` |
+| 组织详情 | `GET organization/detail` | `id` |
+| 组织活动 | `GET organization/activity-list` | `organizationId`、`pageNum`、`pageSize` |
+| 组织成员 | `GET organization/member-list` | `organizationId`、`searchKey`、`userLastElectId` |
+| 申请加入 | `POST organization/user-apply/add` | `id`、`applyInfo` |
+
+- **`status` 是加入申请的审核状态**：1 待审核、2 已通过、3 已驳回（H5 里发的是
+  `status: activeStatus + 1`）。服务端按它过滤，三个接口都要带。
+- **`type` 传 1 和 2 返回同一批数据**（都是 131 个，逐项比对过），所以固定传 1。
+- 分页响应 `data` 里有 `total / pageSize / pageNum / list`，**没有 `lastPage`**。
+- 列表项里 `orgProcessStatus` 是**字符串码**，不是数字：`re1` 待注册、`re2` 注册中、
+  `re3` 已注册、`ap2` 评优中、`ya1` 待年审、`ya2` 年审中、`ya3` 整改中、`ct1` 换届中、
+  `cw1` 待注销、`cw2` 注销中、`cw3` 已注销。未知码不要自己编文案。
+- `identity` 是「我在这个组织里的身份」：3 管理员、2 负责人、其它按成员。目录里 0 表示没加入。
+- `joinTime` / `ctime` 是毫秒时间戳；列表上官方写成「YYYY.MM.DD HH:mm 申请」。
+- `introduce` 在列表里是一句话简介，很多组织直接填了和名称一样的字。
+
+样本（`my-list?pageNum=1&pageSize=3&status=1`，2026-10-24）：
+
+```json
+{"code":0,"data":{"total":2,"pageSize":3,"pageNum":1,"list":[
+  {"joinTime":1792804049000,"introduce":"化学与火药纹画协会","chairmaId":1555524,
+   "memberCount":119,"orgProcessStatus":"re3","auditRemark":"","avatar":"",
+   "chatGroupId":"O10361_17054","name":"化学与火药纹画社","id":17054,
+   "currentFlowCategory":"organ-3","energy":663.0,"status":1}
+]},"msg":"ok"}
+```
+
+详情（`detail?id=39261`）多给这些字段：`nature`（数字）、`natureName`、`categoryName`、
+`affiliationName`、`chairmanName`、`guiderName`、`campusName`、`level`、`rule`、
+`isJoin`、`isAdd`、`applyStatus`、`identity`、`isChairman`、`electApplyStatus`、
+`announcementList`、`flowExampleAuditRecordList`，以及**整个成员列表** `memberList`
+（几百条，实测 793 条，详情一次全给，别在 UI 里当列表用）。
+
+**申请加入的显示条件**（照官方 `orgDetail` 页，再按实测补一条）：
+
+- 官方：`(isJoin == 0 && isElect == 0 || applyStatus == 3) && rule != 3 && isAdd == 1`
+- `isElect` 只在扫码进来的那条路径上有值（`query.isElect=0`），直接进详情时是 `null`，
+  按官方写法按钮反而出不来。本项目改成按 `applyStatus` 判断：
+  `applyStatus ∈ {0, 3} && rule != 3 && isAdd == 1` —— 没申请过、或曾被驳回时才给按钮。
+- `applyStatus`：0 没申请、1 待审核、2 通过、3 驳回。实测申请后 `isJoin` 也变 1，
+  所以不能只看 `isJoin`，否则会对同一组织重复提交。
+
+**组织码**：官方生成 `qutuo://joinOrganization?id=<组织id>`，经 `Encrypt` 处理再补
+`?yiban=yiban_scan_result`。包里的 `Encrypt` / `Decrypt`（模块 `aNLv`）都是
+`function(t){return t}`，恒等函数——所以二维码里就是明文，客户端不需要解密。
+
+真机样本：`qutuo://joinOrganization?id=39261?yiban=yiban_scan_result`（注意第二个问号）。
+
 ## 作业（2026-10-21 实测）
 
 | 场景 | 路由 | 接口 |
 | --- | --- | --- |
 | 查看作业 | `#/assignmentinfor/:id` | `GET activity/query/work_3_0_1?activityId=` |
-| 交作业 / 修改作业 | `#/assignment/:id` | 写操作，未接入 |
+| 交作业 / 修改作业 | `#/assignment/:id` | `POST activity/submit/work_3_0_1`，参数见下节 |
 
 注意路由名和路径不是一回事：路由 name 叫 `partyAssignment` / `partyAssignmentinfor`，
 但路径是 `/assignment/:id` 与 `/assignmentinfor/:id`；组内还有另一套 `/partyAssignment*` 是党团活动用的。

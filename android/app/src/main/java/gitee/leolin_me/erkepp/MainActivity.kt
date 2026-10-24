@@ -56,6 +56,7 @@ import gitee.leolin_me.erkepp.data.CreditRepository
 import gitee.leolin_me.erkepp.data.ProfileRepository
 import gitee.leolin_me.erkepp.data.RankRepository
 import gitee.leolin_me.erkepp.data.RankScope
+import gitee.leolin_me.erkepp.data.OrganizationRepository
 import gitee.leolin_me.erkepp.data.SignSandboxStore
 import gitee.leolin_me.erkepp.data.sandboxSubmit
 import gitee.leolin_me.erkepp.data.AttachmentStorage
@@ -87,6 +88,10 @@ import gitee.leolin_me.erkepp.ui.home.DiscoverScreen
 import gitee.leolin_me.erkepp.ui.home.ProfileScreen
 import gitee.leolin_me.erkepp.ui.login.ForgotPasswordScreen
 import gitee.leolin_me.erkepp.ui.login.LoginScreen
+import gitee.leolin_me.erkepp.ui.more.MoreScreen
+import gitee.leolin_me.erkepp.ui.org.AllOrganizationsScreen
+import gitee.leolin_me.erkepp.ui.org.OrgDetailScreen
+import gitee.leolin_me.erkepp.ui.org.OrganizationScreen
 import gitee.leolin_me.erkepp.ui.profile.ChangeMobileScreen
 import gitee.leolin_me.erkepp.ui.profile.ChangePasswordScreen
 import gitee.leolin_me.erkepp.ui.profile.CreditScreen
@@ -104,6 +109,7 @@ import gitee.leolin_me.erkepp.ui.sign.SignScanScreen
 import gitee.leolin_me.erkepp.ui.sign.SignTarget
 import gitee.leolin_me.erkepp.ui.sign.decodeQrFromBitmap
 import gitee.leolin_me.erkepp.data.parseSignCode
+import gitee.leolin_me.erkepp.data.SignOutcome
 import gitee.leolin_me.erkepp.data.SignTicket
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -111,6 +117,7 @@ import kotlinx.coroutines.launch
 enum class MainTab(val label: String, val iconRes: Int) {
     DISCOVER("发现", R.drawable.ic_explore),
     PROFILE("我的", R.drawable.ic_person),
+    MORE("更多", R.drawable.ic_more),
     SETTINGS("设置", R.drawable.ic_settings),
 }
 
@@ -205,6 +212,7 @@ class MainActivity : ComponentActivity() {
         val activityActions = ActivityActions(apiClient)
         val creditRepository = CreditRepository(apiClient)
         val rankRepository = RankRepository(apiClient)
+        val organizationRepository = OrganizationRepository(apiClient)
         val profileRepository = ProfileRepository(apiClient)
         val storageRepository = StorageRepository()
         val ossUploader = OssUploader(apiClient)
@@ -249,6 +257,14 @@ class MainActivity : ComponentActivity() {
                 var showChangeMobile by remember { mutableStateOf(false) }
                 var showTags by remember { mutableStateOf(false) }
                 var showStorage by remember { mutableStateOf(false) }
+                // 「更多」里的组织：所有组织目录、只认组织码的扫码页
+                var showAllOrgs by remember { mutableStateOf(false) }
+                var showJoinScan by remember { mutableStateOf(false) }
+                // 「我的」里的我的组织，和它点开的详情
+                var showOrganizations by remember { mutableStateOf(false) }
+                var orgDetailTarget by remember { mutableStateOf<Pair<Long, String>?>(null) }
+                // 申请提交后让「我的组织」重新拉，才能看到新的待审核
+                var orgListTick by remember { mutableIntStateOf(0) }
                 var pendingTagIds by remember { mutableStateOf<List<Int>>(emptyList()) }
                 var pendingMobile by remember { mutableStateOf("") }
                 var personalInfoTick by remember { mutableIntStateOf(0) }
@@ -455,6 +471,36 @@ class MainActivity : ComponentActivity() {
                             if (detailId > 0) detailActivityId = detailId
                         }
                         "block_rules" -> settingsSection = SettingsSection.BLOCK_RULES
+                        // 调试用：按给定参数提交一次作业，定位服务端 10000 的来源
+                        "submit_test" -> {
+                            val activityId = intent.getLongExtra("activity_id", 573570L)
+                            val contentFile = intent.getStringExtra("content_file")
+                            val content = if (contentFile != null) {
+                                java.io.File(contentFile).readText()
+                            } else {
+                                intent.getStringExtra("content").orEmpty()
+                            }
+                            val urlsFile = intent.getStringExtra("urls_file")
+                            val urls = urlsFile
+                                ?.let { file ->
+                                    java.io.File(file).readLines()
+                                        .map { it.trim() }
+                                        .filter { it.isNotEmpty() }
+                                }
+                                .orEmpty()
+                            AppLog.d("probe", "submit_test id=$activityId chars=${content.length} files=${urls.size}")
+                            val result = runCatching {
+                                activityActions.submitWork(
+                                    current.token,
+                                    activityId,
+                                    content,
+                                    urls.map { url ->
+                                        ActivityAttachment(name = url.substringAfterLast('/'), url = url, type = 1, size = 0)
+                                    },
+                                )
+                            }
+                            AppLog.d("probe", "submit_test result=${result.exceptionOrNull()?.message ?: "ok"}")
+                        }
                         // 调试用：验证 STS + OSS 上传链路（传一张 1x1 的图再删掉）
                         "oss_test" -> {
                             val bytes = android.util.Base64.decode(
@@ -526,6 +572,17 @@ class MainActivity : ComponentActivity() {
                             page = intent.getStringExtra("page")?.toIntOrNull() ?: 1,
                             pageSize = intent.getStringExtra("size")?.toIntOrNull() ?: 20,
                         )
+                        // 组织这一族接口的原始响应：只看字段，方便核对解析
+                        "org_probe" -> organizationRepository.rawDump(
+                            token = current.token,
+                            orgId = intent.getLongExtra("org_id", 39261L),
+                        )
+                        "orgs" -> showOrganizations = true
+                        "all_orgs" -> showAllOrgs = true
+                        "org_detail" -> orgDetailTarget =
+                            intent.getLongExtra("org_id", 39261L) to
+                                intent.getStringExtra("org_name").orEmpty()
+                        "join_scan" -> showJoinScan = true
                         "preview_image" -> {
                             attachmentFiles = AttachmentStorage.list(activity)
                             val name = intent.getStringExtra("name")
@@ -757,8 +814,19 @@ class MainActivity : ComponentActivity() {
                                             },
                                             onOpenCredit = { showCredit = true },
                                             onOpenRank = { showRank = true },
+                                            onOpenOrganizations = { showOrganizations = true },
                                             onOpenAttachments = { attachmentsVisible = true },
                                             onOpenStorage = { showStorage = true },
+                                            onOpenWeb = { webUrl = AppConfig.HOME_URL },
+                                        )
+
+                                        MainTab.MORE -> MoreScreen(
+                                            onOpenAllOrganizations = { showAllOrgs = true },
+                                            onJoinOrganization = { showJoinScan = true },
+                                            onOpenPersonalInfo = {
+                                                showPersonalInfo = true
+                                                reloadProfile()
+                                            },
                                             onOpenWeb = { webUrl = AppConfig.HOME_URL },
                                         )
 
@@ -799,7 +867,7 @@ class MainActivity : ComponentActivity() {
                                                         }
 
                                                         MainTab.SETTINGS -> settingsSection = SettingsSection.ROOT
-                                                        MainTab.PROFILE -> Unit
+                                                        MainTab.PROFILE, MainTab.MORE -> Unit
                                                     }
                                                 } else {
                                                     goTab(item)
@@ -835,6 +903,7 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onOtherText = { text ->
                                             val id = ScanRouter.activityIdFromShareLink(text)
+                                            val orgId = ScanRouter.organizationId(text)
                                             when {
                                                 id != null -> {
                                                     showHomeScan = false
@@ -842,13 +911,10 @@ class MainActivity : ComponentActivity() {
                                                     true
                                                 }
 
-                                                ScanRouter.isOrganizationCode(text) -> {
-                                                    Toast.makeText(
-                                                        activity,
-                                                        "组织码暂不支持，请到官方页面加入",
-                                                        Toast.LENGTH_SHORT,
-                                                    ).show()
-                                                    false
+                                                orgId != null -> {
+                                                    showHomeScan = false
+                                                    orgDetailTarget = orgId to ""
+                                                    true
                                                 }
 
                                                 else -> false
@@ -1172,6 +1238,77 @@ class MainActivity : ComponentActivity() {
                                         resolve = { name -> attachmentFiles.firstOrNull { it.name == name } },
                                         onBack = { previewNames = emptyList() },
                                         onShare = { file -> shareFile(file) },
+                                    )
+                                }
+                            }
+
+                            // 所有组织：官方 #/service/organize 的只读目录
+                            if (showAllOrgs) {
+                                SecondaryPage(onBack = { showAllOrgs = false }) {
+                                    AllOrganizationsScreen(
+                                        token = current.token,
+                                        repository = organizationRepository,
+                                        onOpenOrg = { id, name -> orgDetailTarget = id to name },
+                                        onBack = { showAllOrgs = false },
+                                    )
+                                }
+                            }
+
+                            // 我的组织：三个列表 × 三种审核状态
+                            if (showOrganizations) {
+                                SecondaryPage(onBack = { showOrganizations = false }) {
+                                    OrganizationScreen(
+                                        token = current.token,
+                                        repository = organizationRepository,
+                                        refreshKey = orgListTick,
+                                        onOpenOrg = { id, name -> orgDetailTarget = id to name },
+                                        onJoinScan = { showJoinScan = true },
+                                        onBack = { showOrganizations = false },
+                                    )
+                                }
+                            }
+
+                            // 加入组织：只认组织码，签到码在这个入口不生效
+                            if (showJoinScan) {
+                                SecondaryPage(onBack = { showJoinScan = false }) {
+                                    SignScanScreen(
+                                        target = SignTarget(0L, "", 0),
+                                        title = "加入组织",
+                                        orgOnly = true,
+                                        developerMode = BuildConfig.DEBUG && preferences.developerMode,
+                                        submit = { SignOutcome(false, -1, "这个入口不签到") },
+                                        onBack = { showJoinScan = false },
+                                        onSigned = {},
+                                        onOtherText = { text ->
+                                            val orgId = ScanRouter.organizationId(text)
+                                            if (orgId != null) {
+                                                showJoinScan = false
+                                                orgDetailTarget = orgId to ""
+                                                true
+                                            } else {
+                                                false
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+
+                            // 组织详情：扫组织码进来的、从「我的组织」点进来的都在这里
+                            val orgTarget = orgDetailTarget
+                            if (orgTarget != null) {
+                                SecondaryPage(onBack = { orgDetailTarget = null }) {
+                                    OrgDetailScreen(
+                                        token = current.token,
+                                        repository = organizationRepository,
+                                        organizationId = orgTarget.first,
+                                        initialName = orgTarget.second,
+                                        onOpenActivity = { id ->
+                                            orgDetailTarget = null
+                                            detailActivityId = id
+                                        },
+                                        // 申请交上去后让「我的组织」重新拉，才能看到新的待审核
+                                        onApplied = { orgListTick++ },
+                                        onBack = { orgDetailTarget = null },
                                     )
                                 }
                             }

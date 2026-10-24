@@ -36,6 +36,26 @@ class ScanRouterTest {
     }
 
     @Test
+    fun `organization code yields organization id`() {
+        // 样本来自用户真机扫到的组织码，官方会在后面补一段 ?yiban=
+        val scanned = "qutuo://joinOrganization?id=39261?yiban=yiban_scan_result"
+        assertEquals(39261L, ScanRouter.organizationId(scanned))
+        assertEquals(39261L, ScanRouter.organizationId("qutuo://joinOrganization?id=39261"))
+    }
+
+    @Test
+    fun `organization id ignores other codes`() {
+        assertNull(
+            ScanRouter.organizationId(
+                "qutuo://sign?activityId=566462&userId=1912797&sp=1790672679000&isSignIn=action",
+            ),
+        )
+        assertNull(ScanRouter.organizationId("qutuo://joinOrganization?id=abc"))
+        assertNull(ScanRouter.organizationId("qutuo://joinOrganization"))
+        assertNull(ScanRouter.organizationId(""))
+    }
+
+    @Test
     fun `unrelated text yields nothing`() {
         assertNull(ScanRouter.activityIdFromShareLink("https://example.com/not-a-sign-code"))
         assertNull(ScanRouter.activityIdFromShareLink("https://win.9xueqi.com/?sourceName=x"))
