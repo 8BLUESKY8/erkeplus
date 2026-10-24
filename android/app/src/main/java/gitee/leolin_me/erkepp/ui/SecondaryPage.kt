@@ -11,15 +11,28 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
+
+/**
+ * 页面是否已经「就位」（入场动画走完）。
+ *
+ * 页面一挂载就发请求的话，网络回来的解析 + 首屏重组会和 180ms 的入场动画抢同一帧，
+ * 表现就是「点进去卡一下」。要联网、要解析大 JSON 的页面先读这个值，等它是 true 再干活。
+ */
+val LocalPageSettled = compositionLocalOf { true }
 
 /**
  * 二级页面外壳：不透明背景 + 入场位移淡入 + 预测性返回退场。
@@ -39,6 +52,13 @@ fun SecondaryPage(onBack: () -> Unit, content: @Composable () -> Unit) {
         label = "secondaryPageAppear",
     )
     LaunchedEffect(Unit) { appeared = true }
+
+    // 动画走完再放行「就位」；万一动画没跑（异常兜底），800ms 后也放行，不能让页面一直空着
+    var settled by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        withTimeoutOrNull(800) { snapshotFlow { appearProgress }.first { it >= 1f } }
+        settled = true
+    }
 
     // 0f = 停在当前页；1f = 已完全退出
     val backProgress = remember { Animatable(0f) }
@@ -71,11 +91,13 @@ fun SecondaryPage(onBack: () -> Unit, content: @Composable () -> Unit) {
                 scaleY = 1f - progress * 0.04f
             },
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background,
-        ) {
-            content()
+        CompositionLocalProvider(LocalPageSettled provides settled) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background,
+            ) {
+                content()
+            }
         }
     }
 }

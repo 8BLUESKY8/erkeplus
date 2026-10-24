@@ -116,6 +116,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 
 enum class MainTab(val label: String, val iconRes: Int) {
     DISCOVER("发现", R.drawable.ic_explore),
@@ -580,6 +582,32 @@ class MainActivity : ComponentActivity() {
                             token = current.token,
                             orgId = intent.getLongExtra("org_id", 39261L),
                         )
+                        // 通知这一族的原始响应：为「消息做成真通知」做接口核对（只读）
+                        "notify_probe" -> {
+                            val unread = runCatching {
+                                apiClient.get("message/notice/un-read-count", buildJsonObject {}, current.token)
+                            }
+                            AppLog.d(
+                                "notify",
+                                "raw unread " + unread.map { it.toString().take(800) }
+                                    .getOrElse { "ERR ${it.message}" },
+                            )
+                            val list = runCatching {
+                                apiClient.get(
+                                    "message/notice/list",
+                                    buildJsonObject {
+                                        put("pageNum", JsonPrimitive(1))
+                                        put("pageSize", JsonPrimitive(10))
+                                    },
+                                    current.token,
+                                )
+                            }
+                            AppLog.d(
+                                "notify",
+                                "raw list " + list.map { it.toString().take(4000) }
+                                    .getOrElse { "ERR ${it.message}" },
+                            )
+                        }
                         "orgs" -> showOrganizations = true
                         "all_orgs" -> showAllOrgs = true
                         "org_detail" -> orgDetailTarget =

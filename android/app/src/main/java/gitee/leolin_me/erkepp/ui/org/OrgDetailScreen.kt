@@ -51,6 +51,7 @@ import gitee.leolin_me.erkepp.data.OrganizationRepository
 import gitee.leolin_me.erkepp.data.toUserMessage
 import gitee.leolin_me.erkepp.ui.CollapsibleItems
 import gitee.leolin_me.erkepp.ui.ExpandableText
+import gitee.leolin_me.erkepp.ui.LocalPageSettled
 import gitee.leolin_me.erkepp.ui.profile.AvatarImage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -100,7 +101,11 @@ fun OrgDetailScreen(
         null
     }
 
-    LaunchedEffect(organizationId, tick) {
+    val pageSettled = LocalPageSettled.current
+
+    LaunchedEffect(organizationId, tick, pageSettled) {
+        // 等入场动画走完再拉：详情 + 成员 + 活动三个请求一起回来会把首帧压垮
+        if (!pageSettled) return@LaunchedEffect
         loading = true
         try {
             detail = repository.detail(token, organizationId)
