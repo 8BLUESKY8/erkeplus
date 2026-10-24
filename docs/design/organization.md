@@ -49,6 +49,18 @@ status = 待审核(1) / 已通过(2) / 已驳回(3)
 
 数据走 `organization/page/organization/list`，不是「我的组织」那族接口。
 
+### 三个 tab
+
+| tab | 接口 | 卡片角标 |
+| --- | --- | --- |
+| 未申请 | `page/organization/list` | 申请加入 / 已加入 |
+| 已申请 | `my-apply-list1` | 待审核 / 已通过 / 已驳回 |
+| 已加入 | `my-list`（按分类） | 已加入 |
+
+判重：`my-apply-list1` 里通过之后记录仍在，所以同一个组织会同时出现在「已申请」和
+「已加入」。这不是 bug，官方也是这样；「已申请」用 `applyStatus` 显示结果，
+「已加入」只用来看我进了哪些。
+
 ### 分类与排序
 
 - **分类**来自字典 `dict/organization/choice-sort` 的 `filterArray`：

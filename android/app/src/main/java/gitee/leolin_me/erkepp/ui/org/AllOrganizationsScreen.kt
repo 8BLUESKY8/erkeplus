@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -41,7 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,7 +50,6 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import gitee.leolin_me.erkepp.AppLog
 import gitee.leolin_me.erkepp.R
-import gitee.leolin_me.erkepp.data.OrgCatalogItem
 import gitee.leolin_me.erkepp.data.OrgChoices
 import gitee.leolin_me.erkepp.data.OrgNature
 import gitee.leolin_me.erkepp.data.OrganizationRepository
@@ -62,15 +62,39 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/** 目录页的三个 tab，和官方一致：未申请（全部组织）/ 已申请 / 已加入。 */
+private enum class OrgTab(val label: String) {
+    ALL("未申请"),
+    APPLIED("已申请"),
+    JOINED("已加入"),
+}
+
+/** 角标的语气，颜色在 Composable 里查（fetch 不是 Composable，拿不到主题）。 */
+private enum class BadgeKind { NORMAL, PENDING, DANGER }
+
+/** 三个接口的返回长得都不一样，统一成卡片要的东西。 */
+private data class OrgCell(
+    val id: Long,
+    val name: String,
+    val avatar: String?,
+    val meta: String,
+    val intro: String,
+    val badge: String?,
+    val badgeKind: BadgeKind,
+)
+
 /**
  * 所有组织，对应官方 `#/service/organize`（页面标题「校园组织」）。
  *
- * 版式照发现页：药丸搜索框 + 一行分类 chip + 一行排序 chip + 双列卡片。
- * 数据走 `organization/page/organization/list`（分类、排序、分页），
- * 只有搜索是本地做的——**服务端不认 `search`**（实测传「协会」和「人工智能」都还是 140 条），
- * 所以搜的时候把当前分类的整份目录拉下来再匹配，结果按「分类|排序」缓存。
+ * 版式照发现页：药丸搜索框、chip 行、双列卡片网格。三个 tab 对应官方那三个：
+ * - 未申请：`organization/page/organization/list`（分类 + 排序 + 分页）
+ * - 已申请：`organization/my-apply-list1`
+ * - 已加入：`organization/my-list`（按分类，不带 status）
  *
- * 翻页听「预加载下一页」：开着时剩 8 条就开始取下一页并预取图片，关掉剩 2 条才取。
+ * 搜索是本地做的：服务端不认 `search`（实测传「协会」「人工智能」都还是 140 条），
+ * 所以搜的时候把当前 tab + 分类的整份列表拉完再匹配，结果按「tab|分类|排序」缓存。
+ *
+ * 翻页听「预加载下一页」：开着时剩 8 条就取下一页并预取图片，关掉剩 2 条才取。
  */
 @Composable
 fun AllOrganizationsScreen(
@@ -81,17 +105,18 @@ fun AllOrganizationsScreen(
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val coverWidthDp = gridCardWidthDp()
 
     var choices by remember { mutableStateOf(OrgChoices.FALLBACK) }
+    var tab by remember { mutableStateOf(OrgTab.ALL) }
     var nature by remember { mutableIntStateOf(0) }
     // 0 = 最新、1 = 最热：官方下拉就是这么发给接口的
     var sortType by remember { mutableIntStateOf(0) }
     var search by remember { mutableStateOf("") }
     var query by remember { mutableStateOf("") }
 
-    var items by remember { mutableStateOf<List<OrgCatalogItem>>(emptyList()) }
+    var items by remember { mutableStateOf<List<OrgCell>>(emptyList()) }
     var total by remember { mutableIntStateOf(0) }
     var page by remember { mutableIntStateOf(0) }
     var lastPage by remember { mutableStateOf(true) }
@@ -99,9 +124,71 @@ fun AllOrganizationsScreen(
     var loadingMore by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    var matches by remember { mutableStateOf<List<OrgCatalogItem>?>(null) }
+    var matches by remember { mutableStateOf<List<OrgCell>?>(null) }
     var searching by remember { mutableStateOf(false) }
-    val catalogCache = remember { mutableMapOf<String, List<OrgCatalogItem>>() }
+    val listCache = remember { mutableMapOf<String, List<OrgCell>>() }
+
+    suspend fun fetch(current: OrgTab, target: Int): Pair<List<OrgCell>, Pair<Int, Boolean>> = when (current) {
+        OrgTab.ALL -> {
+            val result = repository.catalog(token, "", nature, sortType, target)
+            result.list.map { item ->
+                OrgCell(
+                    id = item.id,
+                    name = item.name,
+                    avatar = item.avatar,
+                    meta = "成员 ${item.memberCount} · 活跃 ${orgNumberText(item.energy)}",
+                    intro = item.introduce,
+                    badge = when {
+                        item.joined -> "已加入"
+                        item.canApply -> "申请加入"
+                        else -> null
+                    },
+                    badgeKind = BadgeKind.NORMAL,
+                )
+            } to (result.total to result.lastPage)
+        }
+
+        OrgTab.APPLIED -> {
+            val result = repository.applied(token, nature, target)
+            result.list.map { item ->
+                OrgCell(
+                    id = item.organizationId,
+                    name = item.name,
+                    avatar = item.avatar,
+                    meta = buildString {
+                        append("成员 ${item.memberCount}")
+                        if (item.applyTime.isNotBlank()) append(" · ${item.applyTime} 申请")
+                    },
+                    intro = if (item.refuseReason.isNotBlank()) "驳回理由：${item.refuseReason}" else "",
+                    badge = when (item.applyStatus) {
+                        2 -> "已通过"
+                        3 -> "已驳回"
+                        else -> "待审核"
+                    },
+                    badgeKind = when (item.applyStatus) {
+                        2 -> BadgeKind.NORMAL
+                        3 -> BadgeKind.DANGER
+                        else -> BadgeKind.PENDING
+                    },
+                )
+            } to (result.total to result.lastPage)
+        }
+
+        OrgTab.JOINED -> {
+            val result = repository.joined(token, nature, target)
+            result.list.map { item ->
+                OrgCell(
+                    id = item.id,
+                    name = item.name,
+                    avatar = item.avatar,
+                    meta = "成员 ${item.memberCount} · 活跃 ${orgNumberText(item.energy)}",
+                    intro = item.introduce,
+                    badge = "已加入",
+                    badgeKind = BadgeKind.NORMAL,
+                )
+            } to (result.total to result.lastPage)
+        }
+    }
 
     suspend fun load(target: Int) {
         if (target == 1) {
@@ -111,15 +198,15 @@ fun AllOrganizationsScreen(
             loadingMore = true
         }
         try {
-            val result = repository.catalog(token, "", nature, sortType, target)
-            items = if (target == 1) result.list else items + result.list
-            total = result.total
+            val (cells, meta) = fetch(tab, target)
+            items = if (target == 1) cells else items + cells
+            total = meta.first
+            lastPage = meta.second
             page = target
-            lastPage = result.lastPage
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Throwable) {
-            AppLog.d("org", "catalog load failed page=$target ${failure.message}")
+            AppLog.d("org", "catalog load failed tab=${tab.name} page=$target ${failure.message}")
             if (target == 1) error = failure.toUserMessage()
         } finally {
             loading = false
@@ -127,26 +214,26 @@ fun AllOrganizationsScreen(
         }
     }
 
-    /** 拉整份目录（按分类 + 排序缓存），给本地搜索用。 */
-    suspend fun fullCatalog(): List<OrgCatalogItem> {
-        val key = "$nature|$sortType"
-        catalogCache[key]?.let { return it }
-        val collected = mutableListOf<OrgCatalogItem>()
+    /** 拉当前 tab + 分类的整份列表（分页到底），给本地搜索用。 */
+    suspend fun fullList(current: OrgTab): List<OrgCell> {
+        val key = "${current.name}|$nature|$sortType"
+        listCache[key]?.let { return it }
+        val collected = mutableListOf<OrgCell>()
         var cursor = 1
         while (cursor <= 40) {
-            val result = try {
-                repository.catalog(token, "", nature, sortType, cursor)
+            val (cells, meta) = try {
+                fetch(current, cursor)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Throwable) {
-                AppLog.d("org", "catalog pages failed at $cursor ${failure.message}")
+                AppLog.d("org", "search pages failed at $cursor ${failure.message}")
                 break
             }
-            collected += result.list
-            if (result.lastPage || result.list.isEmpty()) break
+            collected += cells
+            if (meta.second || cells.isEmpty()) break
             cursor++
         }
-        catalogCache[key] = collected
+        listCache[key] = collected
         return collected
     }
 
@@ -158,7 +245,7 @@ fun AllOrganizationsScreen(
         query = search.trim()
     }
 
-    LaunchedEffect(nature, sortType, query) {
+    LaunchedEffect(tab, nature, sortType, query) {
         if (query.isEmpty()) {
             matches = null
             searching = false
@@ -169,13 +256,13 @@ fun AllOrganizationsScreen(
             return@LaunchedEffect
         }
         searching = true
-        val all = fullCatalog()
+        val all = fullList(tab)
         val lowered = query.lowercase()
         matches = all.filter {
-            it.name.lowercase().contains(lowered) || it.introduce.lowercase().contains(lowered)
+            it.name.lowercase().contains(lowered) || it.intro.lowercase().contains(lowered)
         }
         searching = false
-        AppLog.d("org", "search \"$query\" hits=${matches?.size} of ${all.size}")
+        AppLog.d("org", "search \"$query\" tab=${tab.name} hits=${matches?.size} of ${all.size}")
     }
 
     val shown = matches ?: items
@@ -250,6 +337,22 @@ fun AllOrganizationsScreen(
             shape = RoundedCornerShape(22.dp),
         )
 
+        // 三个 tab：未申请 / 已申请 / 已加入
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OrgTab.entries.forEach { option ->
+                FilterChip(
+                    selected = tab == option,
+                    onClick = { tab = option },
+                    label = { Text(option.label, style = MaterialTheme.typography.bodySmall) },
+                )
+            }
+        }
+
         // 分类：用官方字典给的顺序和名字
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
@@ -266,35 +369,40 @@ fun AllOrganizationsScreen(
             }
         }
 
-        // 排序：最新 / 最热
-        LazyRow(
+        // 排序只对「未申请」有意义；另两个 tab 是我自己的记录，顺序由时间决定
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 4.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            items(choices.sorts.size) { index ->
-                val option = choices.sorts[index]
-                FilterChip(
-                    selected = sortType == option.id,
-                    onClick = { sortType = option.id },
-                    label = { Text(option.name, style = MaterialTheme.typography.bodySmall) },
-                )
+            Text(
+                text = when {
+                    searching -> "正在翻整份列表比对…"
+                    matches != null -> "本地匹配到 ${matches!!.size} 个组织（服务端不认搜索词）"
+                    total > 0 -> "共 $total 个组织"
+                    else -> "校园里的组织都在这儿"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            if (tab == OrgTab.ALL) {
+                choices.sorts.forEach { option ->
+                    TextButton(onClick = { sortType = option.id }) {
+                        Text(
+                            text = option.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (sortType == option.id) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                }
             }
         }
-
-        Text(
-            text = when {
-                searching -> "正在翻整份目录比对…"
-                matches != null -> "本地匹配到 ${matches!!.size} 个组织（服务端不认搜索词）"
-                total > 0 -> "共 $total 个组织"
-                else -> "校园里的组织都在这儿"
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-        )
 
         when {
             (loading || searching) && shown.isEmpty() -> Box(
@@ -310,7 +418,12 @@ fun AllOrganizationsScreen(
                 verticalArrangement = Arrangement.Center,
             ) {
                 Text(
-                    text = error ?: if (query.isNotEmpty()) "没搜到这个组织" else "还没有组织",
+                    text = error ?: when {
+                        query.isNotEmpty() -> "没搜到这个组织"
+                        tab == OrgTab.APPLIED -> "还没申请过任何组织"
+                        tab == OrgTab.JOINED -> "还没加入任何组织"
+                        else -> "还没有组织"
+                    },
                     color = if (error != null) {
                         MaterialTheme.colorScheme.error
                     } else {
@@ -329,12 +442,8 @@ fun AllOrganizationsScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                items(shown, key = { it.id }, contentType = { "org" }) { item ->
-                    OrgCard(
-                        item = item,
-                        coverWidthDp = coverWidthDp,
-                        onClick = { onOpenOrg(item.id, item.name) },
-                    )
+                items(shown, key = { it.id }, contentType = { "org" }) { cell ->
+                    OrgCard(cell, coverWidthDp) { onOpenOrg(cell.id, cell.name) }
                 }
                 if (matches == null && !lastPage) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
@@ -360,10 +469,12 @@ fun AllOrganizationsScreen(
 }
 
 @Composable
-private fun OrgCard(item: OrgCatalogItem, coverWidthDp: Int, onClick: () -> Unit) {
-    val coverRequest = rememberCoverRequest(item.avatar, coverWidthDp)
+private fun OrgCard(cell: OrgCell, coverWidthDp: Int, onClick: () -> Unit) {
+    val coverRequest = rememberCoverRequest(cell.avatar, coverWidthDp)
     Column(modifier = Modifier.clickable(onClick = onClick)) {
-        Box(modifier = Modifier.fillMaxWidth().aspectRatio(4f / 3f)) {
+        Box(modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(4f / 3f)) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -371,7 +482,7 @@ private fun OrgCard(item: OrgCatalogItem, coverWidthDp: Int, onClick: () -> Unit
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
-                if (item.avatar != null) {
+                if (cell.avatar != null) {
                     // 组织头像是方形 logo，用 Fit 而不是 Crop，别把字切掉
                     AsyncImage(
                         model = coverRequest,
@@ -382,21 +493,35 @@ private fun OrgCard(item: OrgCatalogItem, coverWidthDp: Int, onClick: () -> Unit
                             .padding(20.dp),
                     )
                 } else {
-                    Text(
-                        text = item.name.take(1),
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    // 没有头像时用实心色块 + 首字：和底部导航一样是「填充」的观感，
+                    // 不要留一块灰底配灰字，看起来像没加载出来
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = cell.name.take(1),
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
                 }
             }
-            when {
-                item.joined -> OrgBadge("已加入", MaterialTheme.colorScheme.primary, Modifier.align(Alignment.TopEnd).padding(8.dp))
-                item.canApply -> OrgBadge("申请加入", MaterialTheme.colorScheme.primary, Modifier.align(Alignment.TopEnd).padding(8.dp))
+            if (cell.badge != null) {
+                val tint = when (cell.badgeKind) {
+                    BadgeKind.NORMAL -> MaterialTheme.colorScheme.primary
+                    BadgeKind.PENDING -> MaterialTheme.colorScheme.tertiary
+                    BadgeKind.DANGER -> MaterialTheme.colorScheme.error
+                }
+                OrgBadge(cell.badge, tint, Modifier.align(Alignment.TopEnd).padding(8.dp))
             }
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            text = item.name,
+            text = cell.name,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
             maxLines = 2,
@@ -404,18 +529,15 @@ private fun OrgCard(item: OrgCatalogItem, coverWidthDp: Int, onClick: () -> Unit
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = buildString {
-                append("成员 ${item.memberCount}")
-                if (item.energy > 0) append(" · 活跃 ${orgNumberText(item.energy)}")
-            },
+            text = cell.meta,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        if (item.introduce.isNotBlank()) {
+        if (cell.intro.isNotBlank()) {
             Text(
-                text = item.introduce,
+                text = cell.intro,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
@@ -426,7 +548,7 @@ private fun OrgCard(item: OrgCatalogItem, coverWidthDp: Int, onClick: () -> Unit
 }
 
 @Composable
-private fun OrgBadge(text: String, color: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
+private fun OrgBadge(text: String, color: Color, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))

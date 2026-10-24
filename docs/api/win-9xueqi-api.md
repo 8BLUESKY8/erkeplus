@@ -516,6 +516,33 @@ score = hours × 0.025        // 我校 40 学时 = 1 学分
 
 `memberCount` 在目录里经常是 0（和详情、`all-list` 对不上），显示时不要当权威。
 
+### 目录页另外两个 tab（2026-10-24 实测）
+
+官方 `#/service/organize` 顶部（下拉）的三个 tab 对应三个接口，参数都只有
+`search`、`nature`、`pageNum`、`pageSize`：
+
+| tab | 接口 |
+| --- | --- |
+| 未申请 | `organization/page/organization/list`（就是上一节那个） |
+| 已申请 | `organization/my-apply-list1`（**结尾带 1**） |
+| 已加入 | `organization/my-list`（按分类，不带 `status`） |
+
+`my-apply-list1` 的字段名和别处都不一样：
+
+```json
+{"code":0,"data":{"total":2,"pageSize":3,"pageNum":1,"list":[
+  {"organizationId":39261,"organizationName":"人工智能协会","memberCount":441,
+   "organizationAvatar":"","applyRefuseReason":"","id":1072528,
+   "applyTime":1792803677000,"applyStatus":1,"energy":925.0}
+]},"msg":"ok"}
+```
+
+- 组织 id 是 `organizationId`；`id` 是这条申请记录自己的 id，别拿混。
+- `applyStatus`：1 待审核、2 已通过、3 已驳回（驳回理由在 `applyRefuseReason`）。
+- 通过之后这条记录仍留在「已申请」里，同时组织出现在「已加入」。实测：
+  化学与火药纹画社 `applyStatus=2` → 两个 tab 都有它；人工智能协会 `applyStatus=1` →
+  只在「已申请」。
+
 ## 作业（2026-10-21 实测）
 
 | 场景 | 路由 | 接口 |

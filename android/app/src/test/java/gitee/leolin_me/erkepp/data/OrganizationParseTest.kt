@@ -189,4 +189,39 @@ class OrganizationParseTest {
         // 字典拉不到时至少还有「全部」
         assertEquals(listOf("全部"), OrgChoices.FALLBACK.natures.map { it.name })
     }
+
+    // ---- 「已申请」用的是另一个接口，字段名全都不一样 ----
+
+    @Test
+    fun `applied list maps organization fields and status`() {
+        val page = parseOrgAppliedPage(
+            Json.parseToJsonElement(
+                """
+                {"total":2,"pageSize":3,"pageNum":1,"list":[
+                  {"organizationId":39261,"organizationName":"人工智能协会","memberCount":441,
+                   "organizationAvatar":"","applyRefuseReason":"","id":1072528,
+                   "applyTime":1792803677000,"applyStatus":1,"energy":925.0},
+                  {"organizationId":17054,"organizationName":"化学与火药纹画社","memberCount":119,
+                   "organizationAvatar":"","applyRefuseReason":"材料不全","id":1072658,
+                   "applyTime":1792804049000,"applyStatus":3,"energy":772.0}
+                ]}
+                """.trimIndent(),
+            ),
+            page = 1,
+            pageSize = 3,
+        )
+        assertEquals(2, page.total)
+        assertTrue(page.lastPage)
+        val pending = page.list.first()
+        // 组织的 id 用 organizationId，不是申请记录自己的 id
+        assertEquals(39261L, pending.organizationId)
+        assertEquals("人工智能协会", pending.name)
+        assertEquals(1, pending.applyStatus)
+        assertEquals("2026-10-24", pending.applyTime)
+        assertNull(pending.avatar)
+
+        val rejected = page.list.last()
+        assertEquals(3, rejected.applyStatus)
+        assertEquals("材料不全", rejected.refuseReason)
+    }
 }

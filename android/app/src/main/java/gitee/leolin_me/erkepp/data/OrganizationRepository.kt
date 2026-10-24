@@ -150,6 +150,27 @@ data class OrgCatalogItem(
 
 data class OrgCatalogPage(val total: Int, val list: List<OrgCatalogItem>, val lastPage: Boolean)
 
+/**
+ * 「已申请」列表的一条（官方 `organization/my-apply-list1`）。
+ *
+ * 字段名和别的组织接口都不一样：组织名是 `organizationName`、头像是 `organizationAvatar`，
+ * 申请记录自己的 `id` 跟组织 `organizationId` 不是一个东西。
+ */
+data class OrgAppliedItem(
+    val organizationId: Long,
+    val name: String,
+    val avatar: String?,
+    val memberCount: Int,
+    val energy: Double,
+    /** 申请的审核状态：1 待审核、2 已通过、其它按未通过处理。 */
+    val applyStatus: Int,
+    /** 申请时间，已格式化。 */
+    val applyTime: String,
+    val refuseReason: String,
+)
+
+data class OrgAppliedPage(val total: Int, val list: List<OrgAppliedItem>, val lastPage: Boolean)
+
 data class OrgDetail(    val id: Long,
     val name: String,
     val avatar: String?,
@@ -276,6 +297,58 @@ class OrganizationRepository(private val api: ApiClient) {
         }
     }
 
+    /**
+     * 「已申请」：官方 `organization/my-apply-list1`（注意结尾的 1）。
+     *
+     * 只带 `search / nature / pageNum / pageSize`，没有 `status`。
+     */
+    suspend fun applied(
+        token: String,
+        nature: Int,
+        page: Int,
+        pageSize: Int = PAGE_SIZE,
+    ): OrgAppliedPage {
+        val response = api.get(
+            path = "organization/my-apply-list1",
+            params = buildJsonObject {
+                put("search", JsonPrimitive(""))
+                put("nature", JsonPrimitive(nature))
+                put("pageNum", JsonPrimitive(page))
+                put("pageSize", JsonPrimitive(pageSize))
+            },
+            token = token,
+        )
+        response.requireSuccess()
+        val data = response.jsonObject["data"] ?: return OrgAppliedPage(0, emptyList(), true)
+        val parsed = parseOrgAppliedPage(data, page, pageSize)
+        AppLog.d("org", "applied nature=$nature page=$page size=${parsed.list.size} total=${parsed.total}")
+        return parsed
+    }
+
+    /** 「已加入」：`organization/my-list` 的按分类版本（不带 `status`）。 */
+    suspend fun joined(
+        token: String,
+        nature: Int,
+        page: Int,
+        pageSize: Int = PAGE_SIZE,
+    ): OrgPage {
+        val response = api.get(
+            path = "organization/my-list",
+            params = buildJsonObject {
+                put("search", JsonPrimitive(""))
+                put("nature", JsonPrimitive(nature))
+                put("pageNum", JsonPrimitive(page))
+                put("pageSize", JsonPrimitive(pageSize))
+            },
+            token = token,
+        )
+        response.requireSuccess()
+        val data = response.jsonObject["data"] ?: return OrgPage(0, emptyList(), true)
+        val parsed = parseOrgPage(data, page, pageSize)
+        AppLog.d("org", "joined nature=$nature page=$page size=${parsed.list.size} total=${parsed.total}")
+        return parsed
+    }
+
     suspend fun detail(token: String, id: Long): OrgDetail {
         val response = api.get(
             path = "organization/detail",
@@ -386,6 +459,20 @@ class OrganizationRepository(private val api: ApiClient) {
         }
         // 官方「服务 → 组织」那一页真正用的接口与分类字典
         dump("nature", "dict/organization/choice-sort", buildJsonObject {}, 3000)
+        // 「已申请 / 已加入」两个 tab 真正调的接口
+        for (path in listOf("organization/my-list", "organization/my-apply-list1")) {
+            dump(
+                "tab $path",
+                path,
+                buildJsonObject {
+                    put("search", JsonPrimitive(""))
+                    put("pageNum", JsonPrimitive(1))
+                    put("pageSize", JsonPrimitive(3))
+                    put("nature", JsonPrimitive(0))
+                },
+                2500,
+            )
+        }
         // 服务端搜索：确认 search 参数真的在过滤
         for (term in listOf("人工智能", "协会")) {
             dump(
@@ -469,8 +556,39 @@ class OrganizationRepository(private val api: ApiClient) {
     }
 }
 
-internal fun parseOrgCatalogPage(
+internal fun parseOrgAppliedPage(
     data: JsonElement,
+    page: Int = 1,
+    pageSize: Int = OrganizationRepository.PAGE_SIZE,
+): OrgAppliedPage {
+    val obj = data as? JsonObject ?: return OrgAppliedPage(0, emptyList(), true)
+    val list = (obj["list"] as? JsonArray)?.mapNotNull { parseOrgAppliedItem(it) }.orEmpty()
+    val rawTotal = obj.orgInt("total")
+    val lastPage = if (rawTotal > 0) page * pageSize >= rawTotal else list.size < pageSize
+    return OrgAppliedPage(
+        total = if (rawTotal > 0) rawTotal else list.size,
+        list = list,
+        lastPage = lastPage,
+    )
+}
+
+internal fun parseOrgAppliedItem(element: JsonElement?): OrgAppliedItem? {
+    val item = element as? JsonObject ?: return null
+    val organizationId = item.orgLong("organizationId")
+    if (organizationId <= 0) return null
+    return OrgAppliedItem(
+        organizationId = organizationId,
+        name = item.orgStr("organizationName"),
+        avatar = item.orgStr("organizationAvatar").takeIf { it.isNotBlank() },
+        memberCount = item.orgInt("memberCount"),
+        energy = item.orgDbl("energy"),
+        applyStatus = item.orgInt("applyStatus"),
+        applyTime = item.orgTime("applyTime"),
+        refuseReason = item.orgStr("applyRefuseReason"),
+    )
+}
+
+internal fun parseOrgCatalogPage(    data: JsonElement,
     page: Int = 1,
     pageSize: Int = OrganizationRepository.PAGE_SIZE,
 ): OrgCatalogPage {

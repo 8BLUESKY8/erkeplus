@@ -22,6 +22,7 @@
 | 所有组织 | 全校组织目录，官方 `#/service/organize`，页面标题「校园组织」 | 2026-10-24 实测 140 个（`nature=0`）；分类来自 `dict/organization/choice-sort` 的 `filterArray`，排序「最新/最热」对应 `sortType` 0/1；`search` 服务端不生效，客户端本地匹配 |
 | 组织分类 | 目录页的筛选项：全部 0、学生会组织 3、社团与协会 2、志愿组织 5、其他 19 | 字典 `filterArray`，客户端不写死，拉不到时只留「全部」 |
 | 组织排序 | 目录页的排序：最新 `sortType=0`、最热 `sortType=1` | 字典里的 `sortArray`（1 最热、2 最活跃）不属于这一页，别混用 |
+| 目录三 tab | 目录页顶部的 未申请 / 已申请 / 已加入 | 分别是 `page/organization/list`、`my-apply-list1`、`my-list`；「已通过」的组织会同时出现在后两个里，这不是重复数据 |
 | 组织详情 | 单个组织的信息页，官方 `#/orgDetail/<id>` | 扫组织码、点组织目录、点「我的组织」都进这里 |
 | 申请加入 | `POST organization/user-apply/add {id, applyInfo}` | `applyInfo` 必填；官方提示「申请加入组织后无法退出」 |
 | 组织状态 | 组织自身的生命周期，字段 `orgProcessStatus`，是**字符串码** | `re1` 待注册、`re2` 注册中、`re3` 已注册、`ap2` 评优中、`ya1~3` 年审、`ct1` 换届中、`cw1~3` 注销 |
