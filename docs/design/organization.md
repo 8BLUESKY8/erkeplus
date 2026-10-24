@@ -34,6 +34,14 @@ status = 待审核(1) / 已通过(2) / 已驳回(3)
 - 服务端已按 `status` 过滤，客户端不再二次筛；列表项缺 `status` 字段时按当前筛选标签显示。
 - 分页按 `total` 收尾（响应里没有 `lastPage`）。
 
+### 翻页踩过的两个坑
+
+1. 触发加载的 `LaunchedEffect` 的 key 里**不能**放 `loadingMore`：它在效果自己发起的请求里被改写，
+   key 一变组合就取消这次请求，然后重进效果再发一次——列表卡在「一直转圈、永远没有第二页」。
+   请求用 `rememberCoroutineScope()` 发出去，key 只放 `nearEnd / items.size / lastPage`。
+2. `catch (Throwable)` 会把 `CancellationException` 也吃下去，界面上看起来是「加载失败」，
+   实际是正常取消。取消要原样抛出去，只处理真正的失败。
+
 ## 所有组织
 
 只读目录：全校 131 个组织，按活力值排，一行一条（头像、名称、一句话简介、成员数、活跃值），

@@ -45,6 +45,7 @@ import gitee.leolin_me.erkepp.data.OrgDetail
 import gitee.leolin_me.erkepp.data.OrganizationRepository
 import gitee.leolin_me.erkepp.data.toUserMessage
 import gitee.leolin_me.erkepp.ui.profile.AvatarImage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -83,11 +84,22 @@ fun OrgDetailScreen(
 
     LaunchedEffect(organizationId, tick) {
         loading = true
-        runCatching { repository.detail(token, organizationId) }
-            .onSuccess { detail = it; error = null }
-            .onFailure { error = it.toUserMessage() }
+        try {
+            detail = repository.detail(token, organizationId)
+            error = null
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Throwable) {
+            error = failure.toUserMessage()
+        }
         // 活动列表是附加信息，拉失败不影响详情
-        val activityPage = runCatching { repository.activities(token, organizationId, 1) }.getOrNull()
+        val activityPage = try {
+            repository.activities(token, organizationId, 1)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Throwable) {
+            null
+        }
         activities = activityPage?.items.orEmpty()
         activityTotal = activityPage?.total?.takeIf { it > 0 } ?: activities.size
         loading = false

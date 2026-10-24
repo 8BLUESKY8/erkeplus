@@ -43,7 +43,9 @@ import gitee.leolin_me.erkepp.data.OrgListItem
 import gitee.leolin_me.erkepp.data.OrgListKind
 import gitee.leolin_me.erkepp.data.OrganizationRepository
 import gitee.leolin_me.erkepp.data.toUserMessage
+import gitee.leolin_me.erkepp.AppLog
 import gitee.leolin_me.erkepp.ui.profile.AvatarImage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -85,7 +87,15 @@ fun OrganizationScreen(
             items = if (target == 1) result.list else items + result.list
             page = target
             lastPage = result.lastPage
+        } catch (failure: CancellationException) {
+            // 组合被销毁时的正常取消，不能当失败处理，更不能吞掉
+            throw failure
         } catch (failure: Throwable) {
+            // 第二页失败以前是静默的，界面上只剩一个转圈；这里留一行日志好查
+            AppLog.d(
+                "org",
+                "list load failed kind=${kind.name} status=${status.value} page=$target ${failure.message}",
+            )
             if (target == 1) error = failure.toUserMessage()
         } finally {
             loading = false
@@ -108,9 +118,11 @@ fun OrganizationScreen(
             info.totalItemsCount > 0 && last >= info.totalItemsCount - 3
         }
     }
-    LaunchedEffect(nearEnd, items.size, lastPage, loadingMore) {
+    // key 里不能放 loadingMore：它在本效果发起的请求里被改写，一改 key 就取消刚发的请求，
+    // 然后重进效果再发一次，最后卡在无限循环里（所有组织页就是这么抽的）。
+    LaunchedEffect(nearEnd, items.size, lastPage) {
         if (!nearEnd || loadingMore || lastPage || items.isEmpty()) return@LaunchedEffect
-        load(page + 1)
+        scope.launch { load(page + 1) }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {

@@ -40,7 +40,9 @@ import androidx.compose.ui.unit.dp
 import gitee.leolin_me.erkepp.data.OrgListItem
 import gitee.leolin_me.erkepp.data.OrganizationRepository
 import gitee.leolin_me.erkepp.data.toUserMessage
+import gitee.leolin_me.erkepp.AppLog
 import gitee.leolin_me.erkepp.ui.profile.AvatarImage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -78,7 +80,11 @@ fun AllOrganizationsScreen(
             total = result.total
             page = target
             lastPage = result.lastPage
+        } catch (failure: CancellationException) {
+            // 组合被销毁时的正常取消，不能当失败处理，更不能吞掉
+            throw failure
         } catch (failure: Throwable) {
+            AppLog.d("org", "all load failed page=$target ${failure.message}")
             if (target == 1) error = failure.toUserMessage()
         } finally {
             loading = false
@@ -96,9 +102,12 @@ fun AllOrganizationsScreen(
             info.totalItemsCount > 0 && last >= info.totalItemsCount - 3
         }
     }
-    LaunchedEffect(nearEnd, items.size, lastPage, loadingMore) {
+    // 注意：key 里**不能**放 loadingMore。它在本效果发起的请求里被改写，
+    // 一改 key 就会取消刚发出的请求，然后重进效果再发一次，最后卡在无限循环里。
+    LaunchedEffect(nearEnd, items.size, lastPage) {
         if (!nearEnd || loadingMore || lastPage || items.isEmpty()) return@LaunchedEffect
-        load(page + 1)
+        // 用 rememberCoroutineScope 发，别让这次加载挂在会被重启的组合效果上
+        scope.launch { load(page + 1) }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {

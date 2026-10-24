@@ -274,6 +274,19 @@ class OrganizationRepository(private val api: ApiClient) {
                 },
             )
         }
+        // 第二页：客户端翻页到底行不行，直接看返回码和条数
+        for (page in 1..2) {
+            dump(
+                "allp$page",
+                "organization/all-list",
+                buildJsonObject {
+                    put("pageNum", JsonPrimitive(page))
+                    put("pageSize", JsonPrimitive(20))
+                    put("type", JsonPrimitive(1))
+                },
+                600,
+            )
+        }
         for (id in listOf(orgId, 17085L)) {
             val raw = runCatching {
                 api.get("organization/detail", buildJsonObject { put("id", JsonPrimitive(id)) }, token)

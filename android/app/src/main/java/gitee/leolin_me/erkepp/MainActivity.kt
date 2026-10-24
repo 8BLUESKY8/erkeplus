@@ -7,7 +7,7 @@ import android.os.SystemClock
 import android.webkit.ValueCallback
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -111,8 +111,11 @@ import gitee.leolin_me.erkepp.ui.sign.decodeQrFromBitmap
 import gitee.leolin_me.erkepp.data.parseSignCode
 import gitee.leolin_me.erkepp.data.SignOutcome
 import gitee.leolin_me.erkepp.data.SignTicket
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class MainTab(val label: String, val iconRes: Int) {
     DISCOVER("发现", R.drawable.ic_explore),
@@ -734,14 +737,17 @@ class MainActivity : ComponentActivity() {
 
                             // 头像 / 年级这些字段在旧会话里没有：进「我的」时补拉一次并落盘，
                             // 之后就一直用缓存，只有点「刷新资料」才会再取
+                            // 刷新会话里缓存的资料。
+                            // 落盘要在 IO 线程做：写的是 SharedPreferences + AndroidKeyStore 加密，
+                            // 放在主线程上会让「点开详细资料」先卡一下。
                             fun reloadProfile() {
                                 val s = session ?: return
                                 scope.launch {
                                     runCatching { authRepository.fetchProfile(s.token) }
                                         .onSuccess { (profile, raw) ->
                                             val updated = s.copy(profile = profile, rawProfile = raw)
-                                            sessionStore.save(updated)
                                             session = updated
+                                            withContext(Dispatchers.IO) { sessionStore.save(updated) }
                                             preferences.profileSchema = PROFILE_SCHEMA
                                         }
                                 }
@@ -753,8 +759,8 @@ class MainActivity : ComponentActivity() {
                                     runCatching { authRepository.fetchProfile(s.token) }
                                         .onSuccess { (profile, raw) ->
                                             val updated = s.copy(profile = profile, rawProfile = raw)
-                                            sessionStore.save(updated)
                                             session = updated
+                                            withContext(Dispatchers.IO) { sessionStore.save(updated) }
                                             preferences.profileSchema = PROFILE_SCHEMA
                                         }
                                 }
@@ -770,9 +776,20 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
-                            // 根页面返回交给系统直接退出；只有不在「发现」页时才拦截
-                            BackHandler(enabled = tab != MainTab.DISCOVER) {
-                                goTab(MainTab.DISCOVER)
+                            // 底部 tab 的返回：不在「发现」页时先回发现页。
+                            //
+                            // 这里必须用 PredictiveBackHandler 而不是 BackHandler：后者在系统眼里
+                            // 「没有动画」，手势一开始系统就会放它自己那套「退出应用」的预览——
+                            // 画面往右下缩、后面露黑，跟实际结果（只是切个 tab）对不上。
+                            // 注册成动画回调后系统不再插手，拖动期间画面保持不动，松手才滑回发现页。
+                            PredictiveBackHandler(enabled = tab != MainTab.DISCOVER) { events ->
+                                try {
+                                    events.collect { }
+                                    goTab(MainTab.DISCOVER)
+                                } catch (cancelled: CancellationException) {
+                                    // 手势中途松手：什么都不用做，页没动过
+                                    throw cancelled
+                                }
                             }
 
                             Box(modifier = Modifier.fillMaxSize()) {
