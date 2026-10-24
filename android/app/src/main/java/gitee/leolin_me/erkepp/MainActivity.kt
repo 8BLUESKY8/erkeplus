@@ -51,6 +51,8 @@ import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.CreditDetail
 import gitee.leolin_me.erkepp.data.CreditRepository
 import gitee.leolin_me.erkepp.data.ProfileRepository
+import gitee.leolin_me.erkepp.data.RankRepository
+import gitee.leolin_me.erkepp.data.RankScope
 import gitee.leolin_me.erkepp.data.SignSandboxStore
 import gitee.leolin_me.erkepp.data.sandboxSubmit
 import gitee.leolin_me.erkepp.data.AttachmentStorage
@@ -83,6 +85,7 @@ import gitee.leolin_me.erkepp.ui.profile.ChangeMobileScreen
 import gitee.leolin_me.erkepp.ui.profile.ChangePasswordScreen
 import gitee.leolin_me.erkepp.ui.profile.CreditScreen
 import gitee.leolin_me.erkepp.ui.profile.PersonalInfoScreen
+import gitee.leolin_me.erkepp.ui.profile.RankScreen
 import gitee.leolin_me.erkepp.ui.profile.TagsScreen
 import gitee.leolin_me.erkepp.ui.school.SchoolPickerScreen
 import gitee.leolin_me.erkepp.ui.settings.BlockRulesScreen
@@ -151,6 +154,7 @@ class MainActivity : ComponentActivity() {
         val activityRepository = ActivityRepository(apiClient)
         val activityActions = ActivityActions(apiClient)
         val creditRepository = CreditRepository(apiClient)
+        val rankRepository = RankRepository(apiClient)
         val profileRepository = ProfileRepository(apiClient)
         Startup.mark("repositories")
 
@@ -185,6 +189,9 @@ class MainActivity : ComponentActivity() {
 
                 var settingsSection by remember { mutableStateOf(SettingsSection.ROOT) }
                 var showCredit by remember { mutableStateOf(false) }
+                var showRank by remember { mutableStateOf(false) }
+                // 调试用：`--es probe rank_page --es level 6` 直接开指定范围的榜单
+                var rankLevel by remember { mutableIntStateOf(10) }
                 var showPersonalInfo by remember { mutableStateOf(false) }
                 var showChangePassword by remember { mutableStateOf(false) }
                 var showChangeMobile by remember { mutableStateOf(false) }
@@ -394,6 +401,21 @@ class MainActivity : ComponentActivity() {
                             if (detailId > 0) detailActivityId = detailId
                         }
                         "block_rules" -> settingsSection = SettingsSection.BLOCK_RULES
+                        "rank_page" -> {
+                            rankLevel = intent.getStringExtra("level")?.toIntOrNull() ?: 10
+                            showRank = true
+                        }
+                        "rank_all" -> rankRepository.dumpAll(
+                            token = current.token,
+                            scope = RankScope.of(intent.getStringExtra("level")?.toIntOrNull() ?: 10),
+                        )
+                        // 排行榜原始响应：只看字段，方便核对解析
+                        "rank_raw" -> rankRepository.rawDump(
+                            token = current.token,
+                            level = intent.getStringExtra("level")?.toIntOrNull() ?: 10,
+                            page = intent.getStringExtra("page")?.toIntOrNull() ?: 1,
+                            pageSize = intent.getStringExtra("size")?.toIntOrNull() ?: 20,
+                        )
                         "preview_image" -> {
                             attachmentFiles = AttachmentStorage.list(activity)
                             val name = intent.getStringExtra("name")
@@ -576,6 +598,7 @@ class MainActivity : ComponentActivity() {
                                                 reloadProfile()
                                             },
                                             onOpenCredit = { showCredit = true },
+                                            onOpenRank = { showRank = true },
                                             onOpenAttachments = { attachmentsVisible = true },
                                             onOpenWeb = { webUrl = AppConfig.HOME_URL },
                                         )
@@ -1057,6 +1080,20 @@ class MainActivity : ComponentActivity() {
                                             detailActivityId = id
                                         },
                                         onBack = { showCredit = false },
+                                    )
+                                }
+                            }
+
+                            // 成绩排行榜：对应官方 #/reportRank，只读。入口是「我的」上的学分卡片
+                            if (showRank) {
+                                SecondaryPage(onBack = { showRank = false }) {
+                                    RankScreen(
+                                        token = current.token,
+                                        repository = rankRepository,
+                                        myStudentNo = current.profile.studentNo,
+                                        preloadEnabled = preferences.preloadEnabled,
+                                        initialScope = RankScope.of(rankLevel),
+                                        onBack = { showRank = false },
                                     )
                                 }
                             }

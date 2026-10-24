@@ -41,6 +41,7 @@ fun ProfileScreen(
     credit: CreditDetail?,
     onOpenPersonalInfo: () -> Unit,
     onOpenCredit: () -> Unit,
+    onOpenRank: () -> Unit,
     onOpenAttachments: () -> Unit,
     onOpenWeb: () -> Unit,
 ) {
@@ -99,7 +100,13 @@ fun ProfileScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            StatCard("学分", format(profile.score), Modifier.weight(1f))
+            StatCard(
+                label = "学分",
+                value = format(profile.score),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClick = onOpenRank),
+            )
             StatCard("学时", format(profile.hours), Modifier.weight(1f))
             StatCard(
                 label = "诚信值",

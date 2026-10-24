@@ -109,7 +109,7 @@ fun SettingsScreen(
             )
             SettingSwitchRow(
                 title = "预加载下一页",
-                subtitle = "滚动接近底部前就提前请求，翻页更顺滑",
+                subtitle = "滚动接近底部前就提前请求；发现页和排行榜都生效",
                 checked = preferences.preloadEnabled,
                 onCheckedChange = { preferences.preloadEnabled = it },
             )
