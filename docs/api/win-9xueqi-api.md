@@ -364,8 +364,11 @@ adb shell am start -n gitee.leolin_me.erkepp.debug/gitee.leolin_me.erkepp.MainAc
 
 | 端点 | 参数 | 返回 |
 | --- | --- | --- |
-| `GET student/achievement/rank` | `pageNum`、`pageSize`、`level` | `{total, list[{rownum, hours, score, name, code, className, majorName, collegeName, grade, campusName, avatar, gender}]}` |
-| `GET student/achievement/self/rank` | `level` | 同名次的单条记录（本人） |
+| `GET student/achievement/rank` | `pageNum`、`pageSize`、`level` | `{total, pageSize, pageNum, list[{rownum, hours, score, name, code, className, majorName, collegeName, grade, campusName, avatar, gender}]}` |
+| `GET student/achievement/self/rank` | `level` | 本人的单条记录，字段同上 |
+
+`level` 的取值来自官方 H5（`reportRank` 页）：**6 全校、8 院系、9 专业、10 班级**，
+进去默认看班级，右上角下拉切换。官方 `pageSize` 固定 10，本项目用 20。
 
 **排行榜里的「成绩」就是学分**，不是学时也不是诚信值：
 
@@ -379,9 +382,30 @@ score = hours × 0.025        // 我校 40 学时 = 1 学分
 （我的页「学分」显示的也是它）。规则来自学校的学时折算学分配置（`ways-convert` 返回
 `waysConvert=1`，即启用折算），客户端只展示服务端算好的 `score`，不要自己乘。
 
-- `rownum` 是名次，并列同名次（例如 2、2、3、3、3、4）。
-- `level` 实测：`10` 是本班（全班同学）；`1`~`4` 都返回同一批 100 条、首名相同，
-  看来要配合院系 / 专业 / 班级 id 才能收窄，映射尚未核实。
+字段上的坑（都是实测）：
+
+- `rownum` 是名次，**并列同名次**（例如 2、2、3、3、3、4）；**也可能是空串**：
+  一次都没上榜的同学就是 `""`，解析时按 0 处理，界面显示「—」。
+- `score` 与 `hours` 都是 double（`0.175`、`7.0`），按 int 读会拿到 0。
+- `grade` 是数字 `2026`，不是「2026级」。
+- `avatar` 是完整 URL，可能是空串。
+- **响应里没有 `lastPage`**：`data` 只有 `total` / `pageSize` / `pageNum` / `list`。
+  官方 H5 读的 `a.lastPage` 永远是 `undefined`，实际靠 `list.length === total` 收尾。
+  本项目按 `pageNum × pageSize >= total` 判断是否到底（班级 39 人两页、全校 100 人五页都准）。
+- **全校与院系只给前 100 条**：`total` 就是 100，第 6 页返回空数组。这是服务端上限，
+  官方页面同样只翻到 100 条，不是客户端翻页写错。
+- 名次完全由服务端算：0 学时的我在班级里并列第 4，在全校园里报第 58，客户端照显示。
+
+样本（`level=10&pageNum=1&pageSize=2`，2026-10-24）：
+
+```json
+{"code":0,"data":{"total":39,"pageSize":2,"pageNum":1,"list":[
+  {"hours":7.0,"code":"2026306614","gender":1,"campusName":"淮南校区","className":"信计26-3",
+   "avatar":"https://gytx-2ketang.oss-cn-hangzhou.aliyuncs.com/...jpg","rownum":1,"score":0.175,
+   "collegeName":"数学与大数据学院","grade":2026,"name":"王俊文","id":2497513,
+   "majorName":"信息与计算科学"}
+]},"msg":"ok"}
+```
 
 ## 作业（2026-10-21 实测）
 
