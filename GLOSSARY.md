@@ -19,7 +19,9 @@
 | 组织 | 活动的主办单位，字段 `organizationName`，可能是学院、团支部或学生组织 | 「承办单位」在官方页面另有字段，客户端统一显示为组织 |
 | 组织码 | 加入组织用的二维码，内容是 `qutuo://joinOrganization?id=<组织id>`，官方扫码后补一段 `?yiban=yiban_scan_result` | 包里 `Encrypt` / `Decrypt` 都是恒等函数，所以码是明文；`id` 就是组织的 `id` |
 | 我的组织 | 本人与组织的关系，官方 `#/myOrganization` | 三个列表：我加入的 / 我创建的 / 我退出的；每个列表再按审核状态分 |
-| 所有组织 | 全校组织目录，官方 `#/service/organize`，页面标题「校园组织」 | 2026-10-24 实测 131 个，按活力值排；本应用只做只读目录 |
+| 所有组织 | 全校组织目录，官方 `#/service/organize`，页面标题「校园组织」 | 2026-10-24 实测 140 个（`nature=0`）；分类来自 `dict/organization/choice-sort` 的 `filterArray`，排序「最新/最热」对应 `sortType` 0/1；`search` 服务端不生效，客户端本地匹配 |
+| 组织分类 | 目录页的筛选项：全部 0、学生会组织 3、社团与协会 2、志愿组织 5、其他 19 | 字典 `filterArray`，客户端不写死，拉不到时只留「全部」 |
+| 组织排序 | 目录页的排序：最新 `sortType=0`、最热 `sortType=1` | 字典里的 `sortArray`（1 最热、2 最活跃）不属于这一页，别混用 |
 | 组织详情 | 单个组织的信息页，官方 `#/orgDetail/<id>` | 扫组织码、点组织目录、点「我的组织」都进这里 |
 | 申请加入 | `POST organization/user-apply/add {id, applyInfo}` | `applyInfo` 必填；官方提示「申请加入组织后无法退出」 |
 | 组织状态 | 组织自身的生命周期，字段 `orgProcessStatus`，是**字符串码** | `re1` 待注册、`re2` 注册中、`re3` 已注册、`ap2` 评优中、`ya1~3` 年审、`ct1` 换届中、`cw1~3` 注销 |

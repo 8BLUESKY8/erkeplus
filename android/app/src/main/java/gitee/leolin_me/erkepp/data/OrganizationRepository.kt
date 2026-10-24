@@ -91,8 +91,66 @@ data class OrgListItem(
 
 data class OrgPage(val total: Int, val list: List<OrgListItem>, val lastPage: Boolean)
 
-data class OrgDetail(
+/** 组织目录里的一个分类（官方 `dict/organization/choice-sort` 的 `filterArray`）。 */
+data class OrgNature(val id: Int, val name: String)
+
+/**
+ * 排序方式。
+ *
+ * 官方页面里的下拉是写死的 `最新 / 最热`，但发给接口的值是 **0 / 1**
+ * （`popClick`: 最新 → sortType=0、最热 → sortType=1，见 chunk 17）。
+ * 字典里那个 `sortArray`（1 最热、2 最活跃）是给别的页面用的，这里不能拿来当本页的排序。
+ */
+data class OrgSort(val id: Int, val name: String)
+
+data class OrgChoices(
+    val natures: List<OrgNature>,
+    val sorts: List<OrgSort>,
+) {
+    companion object {
+        val SORTS = listOf(OrgSort(0, "最新"), OrgSort(1, "最热"))
+
+        /** 字典拉不到时的兜底：只给「全部」，至少页面还能用。 */
+        val FALLBACK = OrgChoices(natures = listOf(OrgNature(0, "全部")), sorts = SORTS)
+    }
+}
+
+/**
+ * 组织目录的一条（官方 `organization/page/organization/list`）。
+ *
+ * 和 `organization/all-list` 不是同一个接口：这一版带分类、排序、搜索，
+ * 也是官方「服务 → 组织」页真正在用的那个。
+ */
+data class OrgCatalogItem(
     val id: Long,
+    val name: String,
+    val avatar: String?,
+    val memberCount: Int,
+    val energy: Double,
+    val introduce: String,
+    /** 我在这个组织里的身份：3 管理员、2 负责人、0 没加入。 */
+    val identity: Int,
+    /** 加入规则，`3` 表示不接受自己申请。 */
+    val rule: Int,
+    /** 是否开放加入。 */
+    val isAdd: Int,
+    /**
+     * 官方条目的 `isElect`。实测 2026-10-24 这一页 **100 条全是 1**，
+     * 所以官方模板那套「isElect==1 → 换届中」在目录里等于给每条都挂同一块牌子，
+     * 客户端不拿它当「正在换届」用，只在详情里参考。
+     */
+    val isElect: Int,
+) {
+    /** 能申请：接受申请（`rule != 3`）且开放加入。 */
+    val canApply: Boolean
+        get() = rule != 3 && isAdd == 1
+
+    val joined: Boolean get() = identity != 0
+}
+
+data class OrgCatalogPage(val total: Int, val list: List<OrgCatalogItem>, val lastPage: Boolean)
+
+data class OrgDetail(    val id: Long,
     val name: String,
     val avatar: String?,
     val memberCount: Int,
@@ -158,25 +216,64 @@ class OrganizationRepository(private val api: ApiClient) {
     }
 
     /**
-     * 组织目录（官方 `#/service/organize`，页面标题「校园组织」）。
+     * 组织目录（官方 `#/service/organize`）。
      *
-     * `type` 在实测里传 1 和 2 返回的是同一批（都是 131 个），所以固定传 1。
+     * 参数与官方一致：`search`（服务端搜索）、`nature`（分类，0 = 全部）、
+     * `sortType`（1 最热、2 最活跃）、`pageNum`、`pageSize`。
      */
-    suspend fun all(token: String, page: Int, pageSize: Int = PAGE_SIZE): OrgPage {
+    suspend fun catalog(
+        token: String,
+        search: String,
+        nature: Int,
+        sortType: Int,
+        page: Int,
+        pageSize: Int = PAGE_SIZE,
+    ): OrgCatalogPage {
         val response = api.get(
-            path = "organization/all-list",
+            path = "organization/page/organization/list",
             params = buildJsonObject {
+                put("search", JsonPrimitive(search))
+                put("nature", JsonPrimitive(nature))
+                put("sortType", JsonPrimitive(sortType))
                 put("pageNum", JsonPrimitive(page))
                 put("pageSize", JsonPrimitive(pageSize))
-                put("type", JsonPrimitive(1))
             },
             token = token,
         )
         response.requireSuccess()
-        val data = response.jsonObject["data"] ?: return OrgPage(0, emptyList(), true)
-        val parsed = parseOrgPage(data, page, pageSize)
-        AppLog.d("org", "all page=$page size=${parsed.list.size} total=${parsed.total}")
+        val data = response.jsonObject["data"] ?: return OrgCatalogPage(0, emptyList(), true)
+        val parsed = parseOrgCatalogPage(data, page, pageSize)
+        AppLog.d(
+            "org",
+            "catalog search=${search.take(20)} nature=$nature sort=$sortType page=$page " +
+                "size=${parsed.list.size} total=${parsed.total}",
+        )
         return parsed
+    }
+
+    /**
+     * 分类字典（`filterArray`：全部 / 学生会组织 / 社团与协会 / 志愿组织 / 其他）。
+     *
+     * 排序**不取**字典里的 `sortArray`：那是给别的页面用的（1 最热、2 最活跃），
+     * 本页排序是写死的「最新 / 最热」，接口值是 0 / 1，见 [OrgSort]。
+     */
+    suspend fun choices(token: String): OrgChoices {
+        val response = runCatching {
+            api.get(path = "dict/organization/choice-sort", params = buildJsonObject {}, token = token)
+        }.getOrNull() ?: return OrgChoices.FALLBACK
+        val data = (response as? JsonObject)?.get("data") as? JsonObject ?: return OrgChoices.FALLBACK
+        val natures = (data["filterArray"] as? JsonArray)
+            ?.mapNotNull { item ->
+                val obj = item as? JsonObject ?: return@mapNotNull null
+                OrgNature(obj.orgInt("id"), obj.orgStr("name"))
+            }
+            .orEmpty()
+        AppLog.d("org", "choices natures=${natures.map { "${it.id}:${it.name}" }}")
+        return if (natures.isEmpty()) {
+            OrgChoices.FALLBACK
+        } else {
+            OrgChoices(natures = natures, sorts = OrgChoices.SORTS)
+        }
     }
 
     suspend fun detail(token: String, id: Long): OrgDetail {
@@ -287,6 +384,52 @@ class OrganizationRepository(private val api: ApiClient) {
                 600,
             )
         }
+        // 官方「服务 → 组织」那一页真正用的接口与分类字典
+        dump("nature", "dict/organization/choice-sort", buildJsonObject {}, 3000)
+        // 服务端搜索：确认 search 参数真的在过滤
+        for (term in listOf("人工智能", "协会")) {
+            dump(
+                "catalog search=$term",
+                "organization/page/organization/list",
+                buildJsonObject {
+                    put("search", JsonPrimitive(term))
+                    put("pageSize", JsonPrimitive(3))
+                    put("nature", JsonPrimitive(0))
+                    put("sortType", JsonPrimitive(1))
+                    put("pageNum", JsonPrimitive(1))
+                },
+                700,
+            )
+        }
+        // 一页 100 条，用来统计 isElect / isAdd / rule 的分布
+        dump(
+            "catalog100",
+            "organization/page/organization/list",
+            buildJsonObject {
+                put("search", JsonPrimitive(""))
+                put("pageSize", JsonPrimitive(100))
+                put("nature", JsonPrimitive(0))
+                put("sortType", JsonPrimitive(1))
+                put("pageNum", JsonPrimitive(1))
+            },
+            40000,
+        )
+        for (nature in listOf(-1, 0, 2, 3, 5, 19)) {
+            for (sort in 1..2) {
+                dump(
+                    "catalog n=$nature s=$sort",
+                    "organization/page/organization/list",
+                    buildJsonObject {
+                        put("search", JsonPrimitive(""))
+                        put("pageSize", JsonPrimitive(2))
+                        put("nature", JsonPrimitive(nature))
+                        put("sortType", JsonPrimitive(sort))
+                        put("pageNum", JsonPrimitive(1))
+                    },
+                    900,
+                )
+            }
+        }
         for (id in listOf(orgId, 17085L)) {
             val raw = runCatching {
                 api.get("organization/detail", buildJsonObject { put("id", JsonPrimitive(id)) }, token)
@@ -324,6 +467,40 @@ class OrganizationRepository(private val api: ApiClient) {
             },
         )
     }
+}
+
+internal fun parseOrgCatalogPage(
+    data: JsonElement,
+    page: Int = 1,
+    pageSize: Int = OrganizationRepository.PAGE_SIZE,
+): OrgCatalogPage {
+    val obj = data as? JsonObject ?: return OrgCatalogPage(0, emptyList(), true)
+    val list = (obj["list"] as? JsonArray)?.mapNotNull { parseOrgCatalogItem(it) }.orEmpty()
+    val rawTotal = obj.orgInt("total")
+    val lastPage = if (rawTotal > 0) page * pageSize >= rawTotal else list.size < pageSize
+    return OrgCatalogPage(
+        total = if (rawTotal > 0) rawTotal else list.size,
+        list = list,
+        lastPage = lastPage,
+    )
+}
+
+internal fun parseOrgCatalogItem(element: JsonElement?): OrgCatalogItem? {
+    val item = element as? JsonObject ?: return null
+    val id = item.orgLong("id")
+    if (id <= 0) return null
+    return OrgCatalogItem(
+        id = id,
+        name = item.orgStr("name"),
+        avatar = item.orgStr("avatar").takeIf { it.isNotBlank() },
+        memberCount = item.orgInt("memberCount"),
+        energy = item.orgDbl("energy"),
+        introduce = item.orgStr("introduce"),
+        identity = item.orgInt("identity"),
+        rule = item.orgInt("rule"),
+        isAdd = item.orgInt("isAdd"),
+        isElect = item.orgInt("isElect"),
+    )
 }
 
 internal fun parseOrgPage(data: JsonElement, page: Int = 1, pageSize: Int = OrganizationRepository.PAGE_SIZE): OrgPage {

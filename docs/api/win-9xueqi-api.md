@@ -472,6 +472,50 @@ score = hours × 0.025        // 我校 40 学时 = 1 学分
 
 真机样本：`qutuo://joinOrganization?id=39261?yiban=yiban_scan_result`（注意第二个问号）。
 
+### 组织目录（`#/service/organize`，2026-10-24 实测）
+
+官方那一页用的**不是** `organization/all-list`，而是这一对：
+
+| 用途 | 接口 | 参数 |
+| --- | --- | --- |
+| 分类字典 | `GET dict/organization/choice-sort` | 无 |
+| 目录列表 | `GET organization/page/organization/list` | `search`、`nature`、`sortType`、`pageNum`、`pageSize` |
+
+分类字典返回 `data.filterArray`（`[{id,name}]`）和 `data.sortArray`。实测：
+
+```json
+{"code":0,"data":{
+  "sortArray":[{"id":"1","name":"最热"},{"id":"2","name":"最活跃"}],
+  "filterArray":[{"name":"全部","id":0},{"name":"学生会组织","id":3},
+                 {"name":"社团与协会","id":2},{"name":"志愿组织","id":5},{"name":"其他","id":19}]
+},"msg":"ok"}
+```
+
+- `nature` 用 `filterArray` 的 `id`，0 = 全部。实测总数：全部 140、社团与协会 99、
+  学生会组织 37、志愿组织 0、其他 1。
+- **`sortType` 是 0 / 1，不是 1 / 2**：官方页面的下拉写死「最新 / 最热」，但 `popClick`
+  里 最新 → `sortType=0`、最热 → `sortType=1`。字典里那个 `sortArray`（1 最热、2 最活跃）
+  是别的页面用的，照它发会把排序弄错。
+- **`search` 服务端不认**：传「协会」「人工智能」和传空字符串返回的总数都是 140，
+  列表也不变。官方那个搜索框实际上筛不出东西，客户端要搜只能自己拉全量再匹配。
+- 目录条目字段：`id`、`name`、`avatar`、`introduce`、`memberCount`、`energy`、
+  `identity`、`rule`、`isAdd`、`isElect`。其中 **`isElect` 实测 100 条全是 1**、
+  `isAdd` 全是 1，所以官方模板里「isElect==1 → 换届中」在目录里等于给每条都挂同一块牌子，
+  客户端不拿它当「正在换届」用。
+- 申请条件：`rule != 3`（3 = 不接受自己申请）且 `isAdd == 1`。
+
+样本（`nature=0&sortType=0&pageNum=1&pageSize=1`）：
+
+```json
+{"code":0,"data":{"total":140,"pageSize":1,"pageNum":1,"list":[
+  {"chatGroupId":"O10361_17072","introduce":"青年志愿者协会","identity":0,
+   "chairmaId":1555530,"memberCount":0,"name":"青年志愿者协会","rule":3,
+   "id":17072,"avatar":"","isAdd":1,"energy":4800.0,"isElect":1}
+]},"msg":"ok"}
+```
+
+`memberCount` 在目录里经常是 0（和详情、`all-list` 对不上），显示时不要当权威。
+
 ## 作业（2026-10-21 实测）
 
 | 场景 | 路由 | 接口 |

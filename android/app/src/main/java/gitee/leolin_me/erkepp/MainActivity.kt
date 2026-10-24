@@ -1261,6 +1261,7 @@ class MainActivity : ComponentActivity() {
                                     AllOrganizationsScreen(
                                         token = current.token,
                                         repository = organizationRepository,
+                                        preloadEnabled = preferences.preloadEnabled,
                                         onOpenOrg = { id, name -> orgDetailTarget = id to name },
                                         onBack = { showAllOrgs = false },
                                     )

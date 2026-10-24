@@ -113,8 +113,7 @@ class OrganizationParseTest {
     }
 
     @Test
-    fun `closed or invite-only organizations hide apply`() {
-        val closed = parseOrgDetail(
+    fun `closed or invite-only organizations hide apply`() {        val closed = parseOrgDetail(
             Json.parseToJsonElement(
                 """{"id":1,"name":"x","applyStatus":0,"isJoin":0,"isAdd":0,"rule":1}""",
             ),
@@ -134,5 +133,60 @@ class OrganizationParseTest {
             ),
         )
         assertTrue(open.canApply)
+    }
+
+    // ---- 组织目录（#/service/organize 用的那套接口） ----
+
+    private val catalogItem = """
+        {"chatGroupId":"O10361_17085","introduce":"大学生机器人协会","identity":0,
+         "chairmaId":1555513,"memberCount":874,"name":"机器人协会","rule":2,"id":17085,
+         "avatar":"","isAdd":1,"energy":3505.0,"isElect":1}
+    """.trimIndent()
+
+    @Test
+    fun `catalog page reads total and last page`() {
+        val page = parseOrgCatalogPage(
+            Json.parseToJsonElement("""{"total":140,"pageSize":20,"pageNum":1,"list":[$catalogItem]}"""),
+            page = 1,
+            pageSize = 20,
+        )
+        assertEquals(140, page.total)
+        assertFalse(page.lastPage)
+        val item = page.list.single()
+        assertEquals(17085L, item.id)
+        assertEquals("机器人协会", item.name)
+        assertEquals(874, item.memberCount)
+        assertEquals(3505.0, item.energy, 0.001)
+        // 目录里 isElect 实测恒为 1，不能因此把每条都标成「换届中」，也不能挡掉申请
+        assertEquals(1, item.isElect)
+        assertTrue(item.canApply)
+        assertFalse(item.joined)
+    }
+
+    @Test
+    fun `catalog item without rule cannot apply`() {
+        val closed = parseOrgCatalogItem(
+            Json.parseToJsonElement("""{"id":1,"name":"a","rule":3,"isAdd":1,"identity":0}"""),
+        )!!
+        assertFalse(closed.canApply)
+
+        val notOpen = parseOrgCatalogItem(
+            Json.parseToJsonElement("""{"id":2,"name":"b","rule":1,"isAdd":0,"identity":0}"""),
+        )!!
+        assertFalse(notOpen.canApply)
+
+        val joined = parseOrgCatalogItem(
+            Json.parseToJsonElement("""{"id":3,"name":"c","rule":1,"isAdd":1,"identity":2}"""),
+        )!!
+        assertTrue(joined.joined)
+    }
+
+    @Test
+    fun `sort options match what the site sends`() {
+        // 官方下拉是「最新 / 最热」，发给接口的值是 0 / 1；字典里的 1 最热、2 最活跃不属于这一页
+        assertEquals(listOf(0 to "最新", 1 to "最热"), OrgChoices.SORTS.map { it.id to it.name })
+        assertEquals(0, OrgChoices.SORTS.first().id)
+        // 字典拉不到时至少还有「全部」
+        assertEquals(listOf("全部"), OrgChoices.FALLBACK.natures.map { it.name })
     }
 }
