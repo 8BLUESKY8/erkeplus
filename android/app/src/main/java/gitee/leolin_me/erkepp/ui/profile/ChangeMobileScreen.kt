@@ -13,7 +13,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import gitee.leolin_me.erkepp.ui.InlineLoading
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -182,7 +182,7 @@ fun ChangeMobileScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 if (submitting) {
-                    CircularProgressIndicator(Modifier.height(18.dp), strokeWidth = 2.dp)
+                    InlineLoading(size = 18.dp)
                 } else {
                     Text("更换手机号")
                 }

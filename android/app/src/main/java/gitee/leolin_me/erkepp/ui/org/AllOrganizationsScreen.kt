@@ -21,7 +21,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
+import gitee.leolin_me.erkepp.ui.InlineLoading
+import gitee.leolin_me.erkepp.ui.PageLoading
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -408,7 +409,7 @@ fun AllOrganizationsScreen(
             (loading || searching) && shown.isEmpty() -> Box(
                 Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
-            ) { CircularProgressIndicator() }
+            ) { PageLoading() }
 
             shown.isEmpty() -> Column(
                 modifier = Modifier
@@ -454,7 +455,7 @@ fun AllOrganizationsScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             if (loadingMore) {
-                                CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                                InlineLoading(size = 22.dp)
                             } else {
                                 TextButton(onClick = { scope.launch { load(page + 1) } }) {
                                     Text("加载更多")

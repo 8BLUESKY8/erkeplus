@@ -17,7 +17,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
+import gitee.leolin_me.erkepp.ui.InlineLoading
+import gitee.leolin_me.erkepp.ui.PageLoading
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -197,7 +198,7 @@ fun RankScreen(
                 loading && entries.isEmpty() -> Box(
                     Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
-                ) { CircularProgressIndicator() }
+                ) { PageLoading() }
 
                 entries.isEmpty() -> Column(
                     modifier = Modifier
@@ -232,7 +233,7 @@ fun RankScreen(
                                     .fillMaxWidth()
                                     .padding(16.dp),
                                 contentAlignment = Alignment.Center,
-                            ) { CircularProgressIndicator(Modifier.size(20.dp)) }
+                            ) { InlineLoading(size = 20.dp) }
                         }
                     }
                     item { Spacer(Modifier.height(24.dp)) }

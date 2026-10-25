@@ -21,7 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import gitee.leolin_me.erkepp.ui.InlineLoading
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -254,11 +254,7 @@ fun LoginScreen(
             colors = ButtonDefaults.buttonColors(),
         ) {
             if (loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                )
+                InlineLoading(size = 20.dp, color = MaterialTheme.colorScheme.onPrimary)
             } else {
                 Text("登录", style = MaterialTheme.typography.titleMedium)
             }

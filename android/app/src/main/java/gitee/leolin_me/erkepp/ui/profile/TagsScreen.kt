@@ -14,7 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import gitee.leolin_me.erkepp.ui.InlineLoading
+import gitee.leolin_me.erkepp.ui.PageLoading
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -86,7 +87,7 @@ fun TagsScreen(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
-            ) { CircularProgressIndicator() }
+            ) { PageLoading() }
 
             tags.isEmpty() -> Column(
                 modifier = Modifier
@@ -159,7 +160,7 @@ fun TagsScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     if (saving) {
-                        CircularProgressIndicator(Modifier.height(18.dp), strokeWidth = 2.dp)
+                        InlineLoading(size = 18.dp)
                     } else {
                         Text("保存标签")
                     }

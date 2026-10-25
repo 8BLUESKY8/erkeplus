@@ -16,7 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import gitee.leolin_me.erkepp.ui.InlineLoading
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -210,10 +210,7 @@ fun ForgotPasswordScreen(
                 Spacer(Modifier.width(8.dp))
                 TextButton(onClick = { sendCode() }, enabled = countdown == 0 && !sending) {
                     when {
-                        sending -> CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                        )
+                        sending -> InlineLoading(size = 16.dp)
 
                         countdown > 0 -> Text("${countdown}s")
                         else -> Text("获取验证码")
@@ -266,11 +263,7 @@ fun ForgotPasswordScreen(
                 enabled = !submitting,
             ) {
                 if (submitting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
+                    InlineLoading(size = 20.dp, color = MaterialTheme.colorScheme.onPrimary)
                 } else {
                     Text("完成", style = MaterialTheme.typography.titleMedium)
                 }

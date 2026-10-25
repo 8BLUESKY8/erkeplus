@@ -24,7 +24,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import gitee.leolin_me.erkepp.ui.InlineLoading
+import gitee.leolin_me.erkepp.ui.PageLoading
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -572,10 +573,7 @@ fun DiscoverScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (scanning) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(12.dp),
-                        strokeWidth = 1.5.dp,
-                    )
+                    InlineLoading(size = 12.dp, strokeWidth = 1.5.dp)
                 }
                 Text(
                     text = if (scanning) {
@@ -590,9 +588,7 @@ fun DiscoverScreen(
         }
 
         when {
-            loading && items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
+            loading && items.isEmpty() -> PageLoading()
 
             error != null && items.isEmpty() -> Column(
                 modifier = Modifier
@@ -612,7 +608,7 @@ fun DiscoverScreen(
 
             scanning && visibleItems.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator()
+                    PageLoading(Modifier.size(40.dp))
                     Spacer(Modifier.height(12.dp))
                     Text("正在搜索…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -662,7 +658,7 @@ fun DiscoverScreen(
                                 .padding(16.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            InlineLoading(size = 24.dp)
                         }
                     }
                 }

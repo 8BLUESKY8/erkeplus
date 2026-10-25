@@ -18,7 +18,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
+import gitee.leolin_me.erkepp.ui.InlineLoading
+import gitee.leolin_me.erkepp.ui.PageLoading
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -183,7 +184,7 @@ fun OrganizationScreen(
                 loading && items.isEmpty() -> Box(
                     Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
-                ) { CircularProgressIndicator() }
+                ) { PageLoading() }
 
                 items.isEmpty() -> Column(
                     modifier = Modifier
@@ -223,7 +224,7 @@ fun OrganizationScreen(
                                 contentAlignment = Alignment.Center,
                             ) {
                                 if (loadingMore) {
-                                    CircularProgressIndicator(Modifier.size(20.dp))
+                                    InlineLoading(size = 20.dp)
                                 } else {
                                     TextButton(onClick = { scope.launch { load(page + 1) } }) {
                                         Text("加载更多")
