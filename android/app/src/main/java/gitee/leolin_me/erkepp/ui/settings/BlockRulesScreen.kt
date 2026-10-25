@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -63,6 +64,28 @@ fun BlockRulesScreen(preferences: AppPreferences, onBack: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
             )
+
+            // 已报名的活动默认免疫：自己报过的活动被关键词藏起来是最气人的那种
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "已报名的活动也应用屏蔽词",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = "默认关闭：待审核、已通过的活动不会被关键词藏起来",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = preferences.blockEnrolledToo,
+                    onCheckedChange = { preferences.blockEnrolledToo = it },
+                )
+            }
 
             OutlinedTextField(
                 value = preferences.blockedKeywords,

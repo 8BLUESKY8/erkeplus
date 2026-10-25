@@ -71,6 +71,7 @@ import gitee.leolin_me.erkepp.data.ActivityQuery
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.ActivitySearch
 import gitee.leolin_me.erkepp.data.AppPreferences
+import gitee.leolin_me.erkepp.data.blocks
 import gitee.leolin_me.erkepp.data.BlockRules
 import gitee.leolin_me.erkepp.data.ReenterBehavior
 import gitee.leolin_me.erkepp.data.phase
@@ -387,8 +388,9 @@ fun DiscoverScreen(
     val blockRules = remember(blockedKeywords, blockedRegexes) {
         BlockRules.parse(blockedKeywords, blockedRegexes)
     }
-    val blockedByRules = remember(items, blockRules) {
-        if (blockRules.isEmpty) 0 else items.count { blockRules.isBlocked(it.name) }
+    val blockedByRules = remember(items, blockRules, preferences.blockEnrolledToo) {
+        if (blockRules.isEmpty) 0
+        else items.count { blockRules.blocks(it, preferences.blockEnrolledToo) }
     }
     val searchTerms = remember(debouncedSearch) { ActivitySearch.terms(debouncedSearch) }
     // 用 derivedStateOf 而不是普通局部变量：下面的滚动监听在 snapshotFlow 里读这个数量，
@@ -396,12 +398,12 @@ fun DiscoverScreen(
     val matchedItems by remember(searchTerms) {
         derivedStateOf { ActivitySearch.filter(items, searchTerms) }
     }
-    val visibleItems by remember(searchTerms, blockRules) {
+    val visibleItems by remember(searchTerms, blockRules, preferences.blockEnrolledToo) {
         derivedStateOf {
             matchedItems
                 .filter { hoursMin == null || it.hours >= hoursMin!! }
                 .filter { hoursMax == null || it.hours <= hoursMax!! }
-                .filterNot { blockRules.isBlocked(it.name) }
+                .filterNot { blockRules.blocks(it, preferences.blockEnrolledToo) }
         }
     }
 

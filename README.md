@@ -82,7 +82,7 @@
 
 - [ ] 一键设置日程/闹钟提醒
 - [ ] 把官方「待处理消息」（`#/needDealt`）做成系统通知，规划见 [docs/plan/notifications.md](docs/plan/notifications.md)
-- [ ] 已报名的活动默认不套用屏蔽词，可手动开启（记在 [docs/plan/backlog.md](docs/plan/backlog.md)）
+- [ ] 人物卡片点进人物详情（排行榜、组织负责人等），需要先做人物详情页（[待办](docs/plan/backlog.md)）
 - [ ] 按特定学院/诚信分限制筛选
 - [ ] 补齐官方没做的「活动收藏」功能
 - [ ] 加入官方没用过的定位签到功能（当然如果活动没开启定位签到就用不了这个）

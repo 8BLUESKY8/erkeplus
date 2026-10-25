@@ -35,6 +35,13 @@ class AppPreferences(context: Context) {
     /** 屏蔽正则原文（换行/逗号分隔）。 */
     var blockedRegexes: String by prefString(KEY_BLOCKED_REGEXES, "")
 
+    /**
+     * 屏蔽词是否也作用于**已报名**的活动。默认关闭。
+     *
+     * 默认关掉是有意的：报了名之后回到列表，自己报的活动被关键词藏起来是最气人的那种。
+     */
+    var blockEnrolledToo: Boolean by prefBoolean(KEY_BLOCK_ENROLLED_TOO, false)
+
     /** 是否提前预加载下一页。 */
     var preloadEnabled: Boolean by prefBoolean(KEY_PRELOAD, true)
 
@@ -108,6 +115,7 @@ class AppPreferences(context: Context) {
         selectedCategoryIds = DEFAULT_CATEGORIES
         blockedKeywords = ""
         blockedRegexes = ""
+        blockEnrolledToo = false
         preloadEnabled = true
         showCover = true
         titleLines = 2
@@ -199,6 +207,7 @@ class AppPreferences(context: Context) {
         const val KEY_SELECTED_CATEGORIES = "selected_categories"
         const val KEY_BLOCKED_KEYWORDS = "blocked_keywords"
         const val KEY_BLOCKED_REGEXES = "blocked_regexes"
+        const val KEY_BLOCK_ENROLLED_TOO = "block_enrolled_too"
         const val KEY_PRELOAD = "preload_enabled"
         const val KEY_REENTER_BEHAVIOR = "reenter_behavior"
         const val KEY_SHOW_COVER = "show_cover"

@@ -39,3 +39,17 @@ class BlockRules(
         }
     }
 }
+
+/** `applyStatus` 里算「我报过名」的取值：1 待审核、2 已通过。 */
+private val ENROLLED_STATUS = 1..2
+
+/**
+ * 这条活动要不要被屏蔽。
+ *
+ * 已报名的活动**默认不套用**屏蔽词：报名之后回到列表，自己报的活动被关键词藏起来是最气人的那种。
+ * 用户打开「已报名的活动也应用屏蔽词」后，规则对它们同样生效。
+ */
+fun BlockRules.blocks(item: ActivityItem, blockEnrolledToo: Boolean = false): Boolean {
+    if (!blockEnrolledToo && item.applyStatus in ENROLLED_STATUS) return false
+    return isBlocked(item.name)
+}

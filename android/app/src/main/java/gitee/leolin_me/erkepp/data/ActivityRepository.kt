@@ -37,6 +37,8 @@ data class ActivityItem(
     val recommended: Boolean,
     val limitType: Int,
     val full: Boolean,
+    /** 我的报名状态：0 未申请、1 待审核、2 已通过、3 已驳回。 */
+    val applyStatus: Int = 0,
 )
 
 data class ActivityPage(
@@ -309,6 +311,8 @@ internal fun parseActivityPage(response: kotlinx.serialization.json.JsonElement,
             recommended = (item["isRecommend"]?.jsonPrimitive?.intOrNull ?: 0) == 1,
             limitType = item["limitType"]?.jsonPrimitive?.intOrNull ?: 0,
             full = (item["isfull"]?.jsonPrimitive?.intOrNull ?: 0) != 0,
+            // 我的报名状态：0 未申请、1 待审核、2 通过、3 驳回。屏蔽规则靠它放过自己报过的活动
+            applyStatus = item["applyStatus"]?.jsonPrimitive?.intOrNull ?: 0,
         )
     }
     return ActivityPage(total = total, pageNum = pageNum, items = items)
