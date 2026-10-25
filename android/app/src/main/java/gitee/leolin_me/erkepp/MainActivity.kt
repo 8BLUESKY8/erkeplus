@@ -50,12 +50,14 @@ import gitee.leolin_me.erkepp.data.attachmentTypeOf
 import gitee.leolin_me.erkepp.data.ActivityAttachment
 import gitee.leolin_me.erkepp.data.ActivityDetail
 import gitee.leolin_me.erkepp.data.ActivityQuery
+import gitee.leolin_me.erkepp.data.ActivityPrefetch
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.CreditDetail
 import gitee.leolin_me.erkepp.data.CreditRepository
 import gitee.leolin_me.erkepp.data.ProfileRepository
 import gitee.leolin_me.erkepp.data.RankRepository
 import gitee.leolin_me.erkepp.data.RankScope
+import gitee.leolin_me.erkepp.data.OrgDetailPrefetch
 import gitee.leolin_me.erkepp.data.OrganizationRepository
 import gitee.leolin_me.erkepp.data.SignSandboxStore
 import gitee.leolin_me.erkepp.data.sandboxSubmit
@@ -678,6 +680,22 @@ class MainActivity : ComponentActivity() {
 
                         else -> {
                             val scope = rememberCoroutineScope()
+                            // 预取：点下去那一刻就把详情请求发出去，入场动画那 180ms 正好用来跑网络。
+                            // 页面就位后先看有没有现成数据，有就直接画出来
+                            val openActivity: (Long) -> Unit = { id ->
+                                scope.launch {
+                                    runCatching { activityRepository.detail(current.token, id) }
+                                        .onSuccess { ActivityPrefetch.put(id, it) }
+                                }
+                                detailActivityId = id
+                            }
+                            val openOrg: (Long, String) -> Unit = { id, name ->
+                                scope.launch {
+                                    runCatching { organizationRepository.detail(current.token, id) }
+                                        .onSuccess { OrgDetailPrefetch.put(id, it) }
+                                }
+                                orgDetailTarget = id to name
+                            }
                             val pagerState = rememberPagerState { MainTab.entries.size }
                             var discoverRefreshTick by remember { mutableIntStateOf(0) }
                             var discoverReenterTick by remember { mutableIntStateOf(0) }
@@ -839,7 +857,7 @@ class MainActivity : ComponentActivity() {
                                             refreshTick = discoverRefreshTick,
                                             reenterTick = discoverReenterTick,
                                             initialSearch = debugSearch,
-                                            onOpenActivity = { id -> detailActivityId = id },
+                                            onOpenActivity = { id -> openActivity(id) },
                                             onOpenBlockRules = {
                                                 settingsSection = SettingsSection.BLOCK_RULES
                                                 // 必须走 goTab：只改 tab 的话 pager 还停在发现页，
@@ -953,13 +971,13 @@ class MainActivity : ComponentActivity() {
                                         when {
                                             id != null -> {
                                                 showHomeScan = false
-                                                detailActivityId = id
+                                                openActivity(id)
                                                 true
                                             }
 
                                             orgId != null -> {
                                                 showHomeScan = false
-                                                orgDetailTarget = orgId to ""
+                                                openOrg(orgId, "")
                                                 true
                                             }
 
@@ -1090,7 +1108,7 @@ class MainActivity : ComponentActivity() {
                                         token = current.token,
                                         repository = organizationRepository,
                                         preloadEnabled = preferences.preloadEnabled,
-                                        onOpenOrg = { id, name -> orgDetailTarget = id to name },
+                                        onOpenOrg = { id, name -> openOrg(id, name) },
                                         onBack = { showAllOrgs = false },
                                     )
                                 }
@@ -1103,7 +1121,7 @@ class MainActivity : ComponentActivity() {
                                         token = current.token,
                                         repository = organizationRepository,
                                         refreshKey = orgListTick,
-                                        onOpenOrg = { id, name -> orgDetailTarget = id to name },
+                                        onOpenOrg = { id, name -> openOrg(id, name) },
                                         onJoinScan = { showJoinScan = true },
                                         onBack = { showOrganizations = false },
                                     )
@@ -1124,7 +1142,7 @@ class MainActivity : ComponentActivity() {
                                         val orgId = ScanRouter.organizationId(text)
                                         if (orgId != null) {
                                             showJoinScan = false
-                                            orgDetailTarget = orgId to ""
+                                            openOrg(orgId, "")
                                             true
                                         } else {
                                             false
@@ -1144,7 +1162,7 @@ class MainActivity : ComponentActivity() {
                                         repository = organizationRepository,
                                         organizationId = orgTarget.first,
                                         initialName = orgTarget.second,
-                                        onOpenActivity = { id -> detailActivityId = id },
+                                        onOpenActivity = { id -> openActivity(id) },
                                         // 申请交上去后让「我的组织」重新拉，才能看到新的待审核
                                         onApplied = { orgListTick++ },
                                         onBack = { orgDetailTarget = null },
@@ -1442,7 +1460,7 @@ class MainActivity : ComponentActivity() {
                                         repository = creditRepository,
                                         onOpenActivity = { id ->
                                             showCredit = false
-                                            detailActivityId = id
+                                            openActivity(id)
                                         },
                                         onBack = { showCredit = false },
                                     )

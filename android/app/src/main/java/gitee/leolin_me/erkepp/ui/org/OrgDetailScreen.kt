@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import gitee.leolin_me.erkepp.data.ActivityItem
 import gitee.leolin_me.erkepp.data.OrgDetail
+import gitee.leolin_me.erkepp.data.OrgDetailPrefetch
 import gitee.leolin_me.erkepp.data.OrgMember
 import gitee.leolin_me.erkepp.data.OrgMembers
 import gitee.leolin_me.erkepp.data.OrganizationRepository
@@ -103,7 +104,9 @@ fun OrgDetailScreen(
     LaunchedEffect(organizationId, tick) {
         loading = true
         try {
-            detail = repository.detail(token, organizationId)
+            // 点下去那一刻已经预取过，入场动画期间网络就跑完了
+            detail = OrgDetailPrefetch.take(organizationId)
+                ?: repository.detail(token, organizationId)
             error = null
         } catch (cancelled: CancellationException) {
             throw cancelled

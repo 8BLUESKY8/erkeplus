@@ -79,6 +79,7 @@ import gitee.leolin_me.erkepp.data.ActivityAttachment
 import gitee.leolin_me.erkepp.data.ActivityDetail
 import gitee.leolin_me.erkepp.data.ActivityNotice
 import gitee.leolin_me.erkepp.data.ActivityPhase
+import gitee.leolin_me.erkepp.data.ActivityPrefetch
 import gitee.leolin_me.erkepp.data.ActivityRepository
 import gitee.leolin_me.erkepp.data.ActivityShare
 import gitee.leolin_me.erkepp.data.SignRecord
@@ -174,7 +175,9 @@ fun ActivityDetailScreen(
         }
         loading = true
         error = null
-        runCatching { repository.detail(token, activityId) }
+        // 点下去那一刻已经预取过：入场那 180ms 里网络就跑完了，这里直接拿结果
+        val cached = ActivityPrefetch.take(activityId)
+        runCatching { cached ?: repository.detail(token, activityId) }
             .onSuccess { loaded ->
                 detail = loaded
                 // 公告失败不影响详情：拿不到就当没有公告
@@ -715,10 +718,12 @@ private fun DetailContent(
                     )
                     Spacer(Modifier.height(8.dp))
                     if (looksLikeHtml(detail.introduceHtml)) {
-                        HtmlBlock(
-                            html = detail.introduceHtml,
-                            textColor = MaterialTheme.colorScheme.onSurface,
-                            onOpenLink = onOpenWeb,
+                        // 原生渲染富文本：以前这里是只读 WebView，创建 + 加载 + 量高度要 150～200ms，
+                        // 打开详情「卡一帧」就是它
+                        Text(
+                            text = htmlToAnnotated(detail.introduceHtml),
+                            style = MaterialTheme.typography.bodyMedium,
+                            lineHeight = 24.sp,
                         )
                     } else {
                         Text(
@@ -1289,60 +1294,9 @@ private fun InfoLine(label: String, value: String) {
     }
 }
 
-/** 富文本介绍：只读 WebView，高度按内容撑开，滚动交给外层。 */
-@SuppressLint("SetJavaScriptEnabled")
-@Composable
-private fun HtmlBlock(html: String, textColor: Color, onOpenLink: () -> Unit) {
-    var contentHeight by remember(html) { mutableIntStateOf(0) }
-    val density = LocalDensity.current
-    val colorHex = String.format("#%06X", textColor.toArgb() and 0xFFFFFF)
-
-    AndroidView(
-        factory = { context ->
-            WebView(context).apply {
-                setBackgroundColor(AndroidColor.TRANSPARENT)
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = false
-                isVerticalScrollBarEnabled = false
-                isHorizontalScrollBarEnabled = false
-                overScrollMode = View.OVER_SCROLL_NEVER
-                setOnTouchListener { _, _ -> true }
-                webViewClient = object : WebViewClient() {
-                    override fun onPageFinished(view: WebView, url: String) {
-                        view.evaluateJavascript("document.documentElement.scrollHeight") { value ->
-                            val height = value?.trim('"')?.toFloatOrNull()?.toInt() ?: 0
-                            if (height > 0) contentHeight = height
-                        }
-                    }
-
-                    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                        onOpenLink()
-                        return true
-                    }
-                }
-                loadDataWithBaseURL("https://win.9xueqi.com/", wrapHtml(html, colorHex), "text/html", "utf-8", null)
-            }
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(with(density) { contentHeight.coerceAtLeast(1).toDp() }),
-    )
-}
-
-/** 介绍字段多数是纯文本，只有带标签的才需要走 WebView。 */
+/** 介绍字段多数是纯文本，只有带标签的才需要按富文本渲染。 */
 private fun looksLikeHtml(text: String): Boolean =
     Regex("<\\s*[a-zA-Z][^>]*>").containsMatchIn(text)
-
-private fun wrapHtml(html: String, textColor: String): String = """
-    <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-      body { margin: 0; padding: 0; font-size: 15px; line-height: 1.75;
-             color: $textColor; word-wrap: break-word; background: transparent; }
-      img, video, iframe { max-width: 100% !important; height: auto !important; border-radius: 10px; }
-      table { width: 100% !important; border-collapse: collapse; }
-      * { max-width: 100% !important; }
-    </style></head><body>$html</body></html>
-""".trimIndent()
 
 private fun formatRange(start: Long, end: Long): String = when {
     start > 0 && end > 0 -> "${formatTime(start)} ~ ${formatTime(end)}"
