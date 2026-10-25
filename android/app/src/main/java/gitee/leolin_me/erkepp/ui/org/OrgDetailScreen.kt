@@ -74,6 +74,8 @@ fun OrgDetailScreen(
     repository: OrganizationRepository,
     organizationId: Long,
     initialName: String = "",
+    /** 点负责人进他的主页。 */
+    onOpenPerson: (Long) -> Unit = {},
     onOpenActivity: (Long) -> Unit,
     onApplied: () -> Unit,
     onBack: () -> Unit,
@@ -195,7 +197,7 @@ fun OrgDetailScreen(
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                             ) {
                                 CollapsibleItems(count = leaders.size, collapsedCount = 4) { index ->
-                                    LeaderRow(leaders[index])
+                                    LeaderRow(leaders[index], onOpenPerson)
                                 }
                             }
                         }
@@ -426,10 +428,11 @@ private fun OrgInfoCard(detail: OrgDetail) {
 }
 
 @Composable
-private fun LeaderRow(member: OrgMember) {
+private fun LeaderRow(member: OrgMember, onOpenPerson: (Long) -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(enabled = member.id > 0) { onOpenPerson(member.id) }
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

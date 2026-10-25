@@ -1,6 +1,7 @@
 package gitee.leolin_me.erkepp.ui.profile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,6 +72,8 @@ fun RankScreen(
     /** 用用户的「预加载」开关决定提前翻页与预取头像。 */
     preloadEnabled: Boolean,
     initialScope: RankScope = RankScope.DEFAULT,
+    /** 点某个人进他的主页；`id <= 0` 的条目不响应。 */
+    onOpenPerson: (Long) -> Unit = {},
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -218,12 +221,13 @@ fun RankScreen(
                 }
 
                 else -> LazyColumn(state = listState) {
-                    item { Podium(entries.take(3), current) }
+                    item { Podium(entries.take(3), current, onOpenPerson) }
                     items(entries.drop(3)) { entry ->
                         RankRow(
                             entry = entry,
                             scope = current,
                             isMe = myStudentNo.isNotBlank() && entry.studentNo == myStudentNo,
+                            onOpenPerson = onOpenPerson,
                         )
                     }
                     if (!lastPage) {
@@ -247,7 +251,7 @@ fun RankScreen(
 
 /** 前三名：2-1-3 排开，冠军大一号。 */
 @Composable
-private fun Podium(entries: List<RankEntry>, scope: RankScope) {
+private fun Podium(entries: List<RankEntry>, scope: RankScope, onOpenPerson: (Long) -> Unit) {
     if (entries.isEmpty()) return
     val order = listOfNotNull(entries.getOrNull(1), entries.getOrNull(0), entries.getOrNull(2))
     Surface(
@@ -268,6 +272,7 @@ private fun Podium(entries: List<RankEntry>, scope: RankScope) {
                 PodiumItem(
                     entry = entry,
                     scope = scope,
+                    onOpenPerson = onOpenPerson,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -276,10 +281,17 @@ private fun Podium(entries: List<RankEntry>, scope: RankScope) {
 }
 
 @Composable
-private fun PodiumItem(entry: RankEntry, scope: RankScope, modifier: Modifier = Modifier) {
+private fun PodiumItem(
+    entry: RankEntry,
+    scope: RankScope,
+    onOpenPerson: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val champion = entry.rownum == 1
     Column(
-        modifier = modifier.padding(horizontal = 4.dp),
+        modifier = modifier
+            .padding(horizontal = 4.dp)
+            .clickable(enabled = entry.userId > 0) { onOpenPerson(entry.userId) },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // 冠军头像大一号，给他多出来的 12dp 由两侧补在上方，名字和三行才会对齐
@@ -345,12 +357,18 @@ private fun RankBadge(rank: Int) {
 }
 
 @Composable
-private fun RankRow(entry: RankEntry, scope: RankScope, isMe: Boolean) {
+private fun RankRow(
+    entry: RankEntry,
+    scope: RankScope,
+    isMe: Boolean,
+    onOpenPerson: (Long) -> Unit = {},
+) {
     val background = if (isMe) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else Color.Transparent
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(background)
+            .clickable(enabled = entry.userId > 0) { onOpenPerson(entry.userId) }
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

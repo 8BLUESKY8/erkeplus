@@ -1195,6 +1195,21 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
+                            // 排行榜要压在「我的」之上，同时**在人物主页之下**（点人名进主页）
+                            if (showRank) {
+                                SecondaryPage(onBack = { showRank = false }) {
+                                    RankScreen(
+                                        token = current.token,
+                                        repository = rankRepository,
+                                        myStudentNo = current.profile.studentNo,
+                                        preloadEnabled = preferences.preloadEnabled,
+                                        initialScope = RankScope.of(rankLevel),
+                                        onOpenPerson = { id -> userPageTarget = id },
+                                        onBack = { showRank = false },
+                                    )
+                                }
+                            }
+
                             // 组织详情：扫组织码进来的、从「我的组织」点进来的都在这里。
                             // 点主办活动时**不清 orgDetailTarget**，详情压在组织页上面，
                             // 返回时组织页原样还在，不会退回首页
@@ -1206,6 +1221,7 @@ class MainActivity : ComponentActivity() {
                                         repository = organizationRepository,
                                         organizationId = orgTarget.first,
                                         initialName = orgTarget.second,
+                                        onOpenPerson = { id -> userPageTarget = id },
                                         onOpenActivity = { id -> openActivity(id) },
                                         // 申请交上去后让「我的组织」重新拉，才能看到新的待审核
                                         onApplied = { orgListTick++ },
@@ -1540,20 +1556,6 @@ class MainActivity : ComponentActivity() {
                                             openActivity(id)
                                         },
                                         onBack = { showCredit = false },
-                                    )
-                                }
-                            }
-
-                            // 成绩排行榜：对应官方 #/reportRank，只读。入口是「我的」上的学分卡片
-                            if (showRank) {
-                                SecondaryPage(onBack = { showRank = false }) {
-                                    RankScreen(
-                                        token = current.token,
-                                        repository = rankRepository,
-                                        myStudentNo = current.profile.studentNo,
-                                        preloadEnabled = preferences.preloadEnabled,
-                                        initialScope = RankScope.of(rankLevel),
-                                        onBack = { showRank = false },
                                     )
                                 }
                             }

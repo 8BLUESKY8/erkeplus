@@ -40,6 +40,8 @@ enum class RankScope(val level: Int, val label: String) {
 /** 榜单里的一条。`rownum` 是名次，并列同名次。 */
 data class RankEntry(
     val rownum: Int,
+    /** 用户 id，点进人物主页用；接口字段名就是 `id`。 */
+    val userId: Long,
     val name: String,
     val avatar: String?,
     /** 1 男、2 女；其它值当未知。 */
@@ -175,6 +177,7 @@ internal fun parseRankEntry(element: JsonElement?): RankEntry? {
     val item = element as? JsonObject ?: return null
     return RankEntry(
         rownum = item.int("rownum").let { if (it > 0) it else item.int("rank") },
+        userId = item.str("id").toLongOrNull() ?: 0L,
         name = item.str("name"),
         avatar = item.str("avatar").takeIf { it.isNotBlank() },
         gender = item.int("gender"),

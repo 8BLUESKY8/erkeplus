@@ -29,6 +29,7 @@ class RankParseTest {
         klass: String = "信计26-3",
     ) = RankEntry(
         rownum = rownum.toIntOrNull() ?: 0,
+        userId = 0L,
         name = name,
         avatar = null,
         gender = 1,
@@ -62,6 +63,8 @@ class RankParseTest {
 
         val first = page.list.first()
         assertEquals(1, first.rownum)
+        // 点人名进人物主页靠这个 id，不能丢
+        assertEquals(2497513L, first.userId)
         assertEquals("王俊文", first.name)
         assertEquals("2026306614", first.studentNo)
         assertEquals(0.175, first.score, 0.0001)
