@@ -59,6 +59,7 @@ import gitee.leolin_me.erkepp.data.RankRepository
 import gitee.leolin_me.erkepp.data.RankScope
 import gitee.leolin_me.erkepp.data.OrgDetailPrefetch
 import gitee.leolin_me.erkepp.data.OrganizationRepository
+import gitee.leolin_me.erkepp.data.UserRepository
 import gitee.leolin_me.erkepp.data.SignSandboxStore
 import gitee.leolin_me.erkepp.data.sandboxSubmit
 import gitee.leolin_me.erkepp.data.AttachmentStorage
@@ -98,6 +99,7 @@ import gitee.leolin_me.erkepp.ui.profile.ChangeMobileScreen
 import gitee.leolin_me.erkepp.ui.profile.ChangePasswordScreen
 import gitee.leolin_me.erkepp.ui.profile.CreditScreen
 import gitee.leolin_me.erkepp.ui.profile.PersonalInfoScreen
+import gitee.leolin_me.erkepp.ui.profile.UserProfileScreen
 import gitee.leolin_me.erkepp.ui.profile.RankScreen
 import gitee.leolin_me.erkepp.ui.profile.TagsScreen
 import gitee.leolin_me.erkepp.ui.school.SchoolPickerScreen
@@ -221,6 +223,7 @@ class MainActivity : ComponentActivity() {
         val rankRepository = RankRepository(apiClient)
         val organizationRepository = OrganizationRepository(apiClient)
         val profileRepository = ProfileRepository(apiClient)
+        val userRepository = UserRepository(apiClient)
         val storageRepository = StorageRepository()
         val ossUploader = OssUploader(apiClient)
         Startup.mark("repositories")
@@ -270,6 +273,8 @@ class MainActivity : ComponentActivity() {
                 // 「我的」里的我的组织，和它点开的详情
                 var showOrganizations by remember { mutableStateOf(false) }
                 var orgDetailTarget by remember { mutableStateOf<Pair<Long, String>?>(null) }
+                // 别人的主页（官方 #/userShows/<id>）
+                var userPageTarget by remember { mutableStateOf<Long?>(null) }
                 // 申请提交后让「我的组织」重新拉，才能看到新的待审核
                 var orgListTick by remember { mutableIntStateOf(0) }
                 var pendingTagIds by remember { mutableStateOf<List<Int>>(emptyList()) }
@@ -610,7 +615,24 @@ class MainActivity : ComponentActivity() {
                                     .getOrElse { "ERR ${it.message}" },
                             )
                         }
+                        // 人物详情：官方 #/userShows/<id> 用的那一个接口，先只看字段
+                        "user_probe" -> {
+                            val userId = intent.getLongExtra("user_id", 1908337L)
+                            val raw = runCatching {
+                                apiClient.get(
+                                    "message/chat/follow/user/info",
+                                    buildJsonObject { put("id", JsonPrimitive(userId)) },
+                                    current.token,
+                                )
+                            }
+                            AppLog.d(
+                                "user",
+                                "raw id=$userId " + raw.map { it.toString().take(3000) }
+                                    .getOrElse { "ERR ${it.message}" },
+                            )
+                        }
                         "orgs" -> showOrganizations = true
+                        "user_page" -> userPageTarget = intent.getLongExtra("user_id", 1908337L)
                         "all_orgs" -> showAllOrgs = true
                         "org_detail" -> orgDetailTarget =
                             intent.getLongExtra("org_id", 39261L) to
@@ -1166,6 +1188,20 @@ class MainActivity : ComponentActivity() {
                                         // 申请交上去后让「我的组织」重新拉，才能看到新的待审核
                                         onApplied = { orgListTick++ },
                                         onBack = { orgDetailTarget = null },
+                                    )
+                                }
+                            }
+
+                            // 人物主页：官方 #/userShows/<id>，从排行榜、组织成员等处的头像点进来
+                            val userTarget = userPageTarget
+                            if (userTarget != null) {
+                                SecondaryPage(onBack = { userPageTarget = null }) {
+                                    UserProfileScreen(
+                                        token = current.token,
+                                        repository = userRepository,
+                                        userId = userTarget,
+                                        isSelf = userTarget == current.profile.userId,
+                                        onBack = { userPageTarget = null },
                                     )
                                 }
                             }

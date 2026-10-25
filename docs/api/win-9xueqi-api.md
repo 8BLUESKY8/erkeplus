@@ -642,6 +642,35 @@ score = hours × 0.025        // 我校 40 学时 = 1 学分
   `attachment` 里 `url` 可有多个（H5 传原图 + 压缩图，逗号分隔），取第一个即可。
 - 客户端提交前有二次确认，请求与响应写 `[action]` 日志。
 
+## 人物主页（2026-10-25 实测）
+
+官方 `#/userShows/<id>` 只调一个接口，外加关注/取关两个写接口：
+
+| 用途 | 接口 | 参数 | 实测 |
+| --- | --- | --- | --- |
+| 主页数据 | `GET message/chat/follow/user/info` | `id`（用户 id） | 已实测（样本 1908337） |
+| 关注 | `POST message/chat/follow/add` | `id` | 已接，未实测返回 |
+| 取关 | `POST message/chat/follow/delete` | `id` | 同上 |
+
+响应样本（头像 URL 已缩短，其余原样）：
+
+```json
+{"code":0,"data":{
+  "politics":0,"politicsName":"","hours":273.5,"gender":1,
+  "organizationName":"","avatar":"https://.../1784864580174.jpeg",
+  "dynamicCount":0,"organizationCount":3,"activityCount":32,
+  "collegeName":"化工与爆破学院","isFollow":0,"identity":1,"schoolId":10361,
+  "name":"程子涛","id":1908337,"majorName":"弹药工程与爆炸技术",
+  "personTag":[{"name":"电竞·游戏","id":2},{"name":"电影","id":3}]}}
+```
+
+- `identity`：1 学生（页面显示「学院 - 专业」）、2 组织账号（显示「学院 - 组织名」）
+- `gender`：1 男、2 女，其它表示没填
+- `isFollow`：1 已关注、0 未关注；`activityCount` / `organizationCount` / `dynamicCount` 是页面上的三个计数
+- `personTag` 是对象数组，取 `name`
+- `hours` 是**学时**，官方页面没摆出来，客户端也不摆（见 `docs/design/person.md`）
+- 组织账号的 `identity=2` 只在模板里出现，实测样本是学生，未验证
+
 ## 尚未验证
 
 - 报名、取消、签到等**写操作**（未验证，禁止先行接入）
