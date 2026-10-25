@@ -92,44 +92,13 @@ fun SecondaryPage(onBack: () -> Unit, content: @Composable () -> Unit) {
             color = MaterialTheme.colorScheme.background,
         ) {
             if (settled) {
-                // 正文等入场动画结束才组合，但直接出现太硬；淡入 160ms，
-                // 转圈同步淡出，从「等」过渡到「有」，中间不留空白帧
-                var shown by remember { mutableStateOf(false) }
-                val contentAlpha by animateFloatAsState(
-                    targetValue = if (shown) 1f else 0f,
-                    animationSpec = tween(durationMillis = 160),
-                    label = "secondaryPageContent",
-                )
-                LaunchedEffect(Unit) { shown = true }
-
-                if (contentAlpha < 1f) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer { alpha = 1f - contentAlpha },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(28.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    }
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { alpha = contentAlpha },
-                ) {
-                    content()
-                }
+                // 正文等入场动画结束才组合：页面一上来就联网、解析、铺列表，会和动画抢同一帧。
+                // 这里不再画第二个转圈——页面自己的加载态用的也是 PageLoading，形状一致，
+                // 但两个实例各转各的，画两个反而会被看成「转圈重启了一次」
+                content()
             } else {
                 // 动画期间只放一个转圈，别让正文的请求和布局跟动画抢帧
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(28.dp),
-                        strokeWidth = 2.dp,
-                    )
-                }
+                PageLoading()
             }
         }
     }
