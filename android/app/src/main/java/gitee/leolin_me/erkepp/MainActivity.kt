@@ -99,6 +99,7 @@ import gitee.leolin_me.erkepp.ui.profile.ChangeMobileScreen
 import gitee.leolin_me.erkepp.ui.profile.ChangePasswordScreen
 import gitee.leolin_me.erkepp.ui.profile.CreditScreen
 import gitee.leolin_me.erkepp.ui.profile.PersonalInfoScreen
+import gitee.leolin_me.erkepp.ui.profile.PersonActivitiesScreen
 import gitee.leolin_me.erkepp.ui.profile.UserProfileScreen
 import gitee.leolin_me.erkepp.ui.profile.RankScreen
 import gitee.leolin_me.erkepp.ui.profile.TagsScreen
@@ -273,8 +274,9 @@ class MainActivity : ComponentActivity() {
                 // 「我的」里的我的组织，和它点开的详情
                 var showOrganizations by remember { mutableStateOf(false) }
                 var orgDetailTarget by remember { mutableStateOf<Pair<Long, String>?>(null) }
-                // 别人的主页（官方 #/userShows/<id>）
+                // 别人的主页（官方 #/userShows/<id>），以及它点开的「参加的活动」
                 var userPageTarget by remember { mutableStateOf<Long?>(null) }
+                var personActivitiesTarget by remember { mutableStateOf<Pair<Long, String>?>(null) }
                 // 申请提交后让「我的组织」重新拉，才能看到新的待审核
                 var orgListTick by remember { mutableIntStateOf(0) }
                 var pendingTagIds by remember { mutableStateOf<List<Int>>(emptyList()) }
@@ -633,6 +635,26 @@ class MainActivity : ComponentActivity() {
                         }
                         "orgs" -> showOrganizations = true
                         "user_page" -> userPageTarget = intent.getLongExtra("user_id", 1908337L)
+                        // 别人的活动列表：官方 #/myAcitive/:id 用的接口
+                        "user_acts" -> {
+                            val userId = intent.getLongExtra("user_id", 1908337L)
+                            val raw = runCatching {
+                                apiClient.get(
+                                    "activity/other-list",
+                                    buildJsonObject {
+                                        put("pageNum", JsonPrimitive(1))
+                                        put("pageSize", JsonPrimitive(5))
+                                        put("userId", JsonPrimitive(userId))
+                                    },
+                                    current.token,
+                                )
+                            }
+                            AppLog.d(
+                                "user",
+                                "acts id=$userId " + raw.map { it.toString().take(2500) }
+                                    .getOrElse { "ERR ${it.message}" },
+                            )
+                        }
                         "all_orgs" -> showAllOrgs = true
                         "org_detail" -> orgDetailTarget =
                             intent.getLongExtra("org_id", 39261L) to
@@ -1201,7 +1223,26 @@ class MainActivity : ComponentActivity() {
                                         repository = userRepository,
                                         userId = userTarget,
                                         isSelf = userTarget == current.profile.userId,
+                                        onOpenActivities = { id, name ->
+                                            personActivitiesTarget = id to name
+                                        },
                                         onBack = { userPageTarget = null },
+                                    )
+                                }
+                            }
+
+                            // 别人参加过的活动：压在人物主页之上，返回时回到人物主页
+                            val personActs = personActivitiesTarget
+                            if (personActs != null) {
+                                SecondaryPage(onBack = { personActivitiesTarget = null }) {
+                                    PersonActivitiesScreen(
+                                        token = current.token,
+                                        repository = userRepository,
+                                        userId = personActs.first,
+                                        personName = personActs.second,
+                                        preloadEnabled = preferences.preloadEnabled,
+                                        onOpenActivity = { id -> openActivity(id) },
+                                        onBack = { personActivitiesTarget = null },
                                     )
                                 }
                             }

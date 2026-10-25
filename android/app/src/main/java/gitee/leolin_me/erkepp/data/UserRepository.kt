@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -33,6 +34,11 @@ data class PersonProfile(
     val activityCount: Int,
     val organizationCount: Int,
     val dynamicCount: Int,
+    /**
+     * 学时。接口给了，官方页面没摆，所以界面上也不显示。
+     * 先解析出来，是为了以后要展示时不用再改数据层（也避免以后误以为接口没给）。
+     */
+    val hours: Double,
     val isFollow: Boolean,
     val tags: List<String>,
 ) {
@@ -64,6 +70,7 @@ internal fun parsePersonProfile(data: JsonElement): PersonProfile {
         activityCount = item["activityCount"]?.jsonPrimitive?.intOrNull ?: 0,
         organizationCount = item["organizationCount"]?.jsonPrimitive?.intOrNull ?: 0,
         dynamicCount = item["dynamicCount"]?.jsonPrimitive?.intOrNull ?: 0,
+        hours = item["hours"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
         isFollow = (item["isFollow"]?.jsonPrimitive?.intOrNull ?: 0) == 1,
         tags = tags,
     )
@@ -85,6 +92,32 @@ class UserRepository(private val api: ApiClient) {
     }
 
     /**
+     * 别人参加过的活动，官方 `#/myAcitive/:id`。
+     *
+     * 返回项和活动列表同族（`logo/name/hours/startTime/endTime/status`），直接复用 [parseActivityPage]。
+     */
+    suspend fun activities(
+        token: String,
+        userId: Long,
+        page: Int,
+        pageSize: Int = ACTIVITY_PAGE_SIZE,
+    ): ActivityPage {
+        val response = api.get(
+            path = "activity/other-list",
+            params = buildJsonObject {
+                put("pageNum", JsonPrimitive(page))
+                put("pageSize", JsonPrimitive(pageSize))
+                put("userId", JsonPrimitive(userId))
+            },
+            token = token,
+        )
+        response.requireSuccess()
+        val parsed = parseActivityPage(response, page)
+        AppLog.d("user", "acts id=$userId page=$page got=${parsed.items.size} total=${parsed.total}")
+        return parsed
+    }
+
+    /**
      * 关注 / 取消关注。写操作，只由用户点按钮触发。
      *
      * 官方接口分两个：`follow/add` 与 `follow/delete`，参数都只有 `id`。
@@ -98,5 +131,9 @@ class UserRepository(private val api: ApiClient) {
         )
         response.requireSuccess()
         AppLog.d("user", "follow id=$userId set=$follow ok")
+    }
+
+    companion object {
+        const val ACTIVITY_PAGE_SIZE = 10
     }
 }

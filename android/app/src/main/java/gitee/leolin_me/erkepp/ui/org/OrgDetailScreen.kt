@@ -50,6 +50,7 @@ import gitee.leolin_me.erkepp.data.OrgMember
 import gitee.leolin_me.erkepp.data.OrgMembers
 import gitee.leolin_me.erkepp.data.OrganizationRepository
 import gitee.leolin_me.erkepp.data.toUserMessage
+import gitee.leolin_me.erkepp.ui.ActivityRow
 import gitee.leolin_me.erkepp.ui.CollapsibleItems
 import gitee.leolin_me.erkepp.ui.ExpandableText
 import gitee.leolin_me.erkepp.ui.InfoRow
@@ -215,7 +216,7 @@ fun OrgDetailScreen(
                             } else {
                                 CollapsibleItems(count = activities.size, collapsedCount = 3) { index ->
                                     val activity = activities[index]
-                                    ActivityRow(activity) { onOpenActivity(activity.id) }
+                                    ActivityRow(activity, onClick = { onOpenActivity(activity.id) })
                                 }
                             }
                         }
@@ -470,51 +471,7 @@ private fun LeaderRow(member: OrgMember) {
 }
 
 // ---- 主办活动 ----
-
-@Composable
-private fun ActivityRow(item: ActivityItem, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 6.dp, horizontal = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        AvatarImage(
-            url = item.cover,
-            name = item.name,
-            contentDescription = null,
-            modifier = Modifier
-                .size(46.dp)
-                .clip(RoundedCornerShape(10.dp)),
-        )
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = item.name,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            val whenText = orgActivityTime(item.startTime, item.endTime)
-            val sub = buildList {
-                if (whenText.isNotBlank()) add(whenText)
-                if (item.hours > 0) add("${orgNumberText(item.hours)} 学时")
-                if (item.classifyName.isNotBlank()) add(item.classifyName)
-            }.joinToString(" · ")
-            if (sub.isNotEmpty()) {
-                Text(
-                    text = sub,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-}
+// 行样式在 ui/ActivityRow.kt，组织详情和人物主页共用
 
 // ---- 底部操作条 ----
 

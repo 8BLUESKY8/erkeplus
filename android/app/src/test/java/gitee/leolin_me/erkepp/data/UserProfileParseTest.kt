@@ -33,6 +33,8 @@ class UserProfileParseTest {
         assertEquals(32, profile.activityCount)
         assertEquals(3, profile.organizationCount)
         assertFalse(profile.isFollow)
+        // 学时解析出来但不显示（官方页面也没摆）
+        assertEquals(273.5, profile.hours, 0.001)
         assertEquals(listOf("电竞·游戏", "电影"), profile.tags)
     }
 

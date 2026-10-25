@@ -1,6 +1,7 @@
 package gitee.leolin_me.erkepp.ui.profile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,6 +63,8 @@ fun UserProfileScreen(
     userId: Long,
     /** 是不是我自己；自己就不显示关注按钮。 */
     isSelf: Boolean = false,
+    /** 点「参加活动」进别人的活动列表。 */
+    onOpenActivities: (Long, String) -> Unit = { _, _ -> },
     onBack: () -> Unit,
 ) {
     var profile by remember(userId) { mutableStateOf<PersonProfile?>(null) }
@@ -130,7 +133,11 @@ fun UserProfileScreen(
                             title = "概况",
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                         ) {
-                            InfoRow("参加活动", "共 ${current.activityCount} 次")
+                            ClickableInfoRow(
+                                label = "参加活动",
+                                value = "共 ${current.activityCount} 次",
+                                onClick = { onOpenActivities(current.id, current.name) },
+                            )
                             InfoRow("加入组织", "共 ${current.organizationCount} 个")
                             InfoRow("广场动态", "共 ${current.dynamicCount} 个")
                         }
@@ -199,6 +206,34 @@ fun UserProfileScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ClickableInfoRow(label: String, value: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(76.dp),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = "›",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
