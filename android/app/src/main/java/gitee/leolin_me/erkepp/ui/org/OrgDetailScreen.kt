@@ -52,6 +52,8 @@ import gitee.leolin_me.erkepp.data.OrganizationRepository
 import gitee.leolin_me.erkepp.data.toUserMessage
 import gitee.leolin_me.erkepp.ui.CollapsibleItems
 import gitee.leolin_me.erkepp.ui.ExpandableText
+import gitee.leolin_me.erkepp.ui.InfoRow
+import gitee.leolin_me.erkepp.ui.SectionCard
 import gitee.leolin_me.erkepp.ui.profile.AvatarImage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -173,7 +175,10 @@ fun OrgDetailScreen(
 
                     if (current.intro.isNotBlank()) {
                         item {
-                            SectionCard("简介") {
+                            SectionCard(
+                                title = "简介",
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                            ) {
                                 ExpandableText(text = current.intro, collapsedMaxLines = 6)
                             }
                         }
@@ -183,7 +188,11 @@ fun OrgDetailScreen(
 
                     if (leaders.isNotEmpty()) {
                         item {
-                            SectionCard("负责人", trailing = "共 ${leaders.size} 位") {
+                            SectionCard(
+                                title = "负责人",
+                                trailing = "共 ${leaders.size} 位",
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                            ) {
                                 CollapsibleItems(count = leaders.size, collapsedCount = 4) { index ->
                                     LeaderRow(leaders[index])
                                 }
@@ -195,6 +204,7 @@ fun OrgDetailScreen(
                         SectionCard(
                             title = "主办活动",
                             trailing = if (activityTotal > 0) "共 $activityTotal 个" else null,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                         ) {
                             if (activities.isEmpty()) {
                                 Text(
@@ -392,41 +402,6 @@ private fun Stat(label: String, value: String) {
 
 // ---- 分区卡片 ----
 
-@Composable
-private fun SectionCard(
-    title: String,
-    trailing: String? = null,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.weight(1f),
-                )
-                if (trailing != null) {
-                    Text(
-                        text = trailing,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            content()
-        }
-    }
-}
-
 /** 组织档案：官方「简介」tab 里那一组「组织归属 / 组织性质 / 指导老师 / 成立时间」。 */
 @Composable
 private fun OrgInfoCard(detail: OrgDetail) {
@@ -441,29 +416,11 @@ private fun OrgInfoCard(detail: OrgDetail) {
     }
     if (rows.isEmpty()) return
 
-    SectionCard("组织信息") {
-        rows.forEach { (label, value) -> InfoRow(label, value) }
-    }
-}
-
-@Composable
-private fun InfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 3.dp),
+    SectionCard(
+        title = "组织信息",
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(76.dp),
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1f),
-        )
+        rows.forEach { (label, value) -> InfoRow(label, value) }
     }
 }
 

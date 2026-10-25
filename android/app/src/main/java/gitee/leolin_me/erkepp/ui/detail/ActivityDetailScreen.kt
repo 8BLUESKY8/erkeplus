@@ -36,7 +36,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import gitee.leolin_me.erkepp.ui.InfoRow
 import gitee.leolin_me.erkepp.ui.PageLoading
+import gitee.leolin_me.erkepp.ui.SectionCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -1223,19 +1225,8 @@ private fun Pill(text: String, color: Color, textColor: Color = Color.White) {
 
 @Composable
 private fun Card(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(18.dp),
-            )
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        content = content,
-    )
+    // 卡片样式统一在 ui/Common.kt，这边只保留一个短名字给本页的十几处调用点用
+    SectionCard(content = content)
 }
 
 @Composable
@@ -1279,19 +1270,8 @@ private fun AttachmentRow(attachment: ActivityAttachment, onClick: () -> Unit) {
 
 @Composable
 private fun InfoLine(label: String, value: String) {
-    Row(modifier = Modifier.padding(vertical = 4.dp)) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(64.dp),
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1f),
-        )
-    }
+    // 本页的标签列窄一点，其余样式走公用组件
+    InfoRow(label = label, value = value, labelWidth = 64.dp, modifier = Modifier.padding(vertical = 1.dp))
 }
 
 /** 介绍字段多数是纯文本，只有带标签的才需要按富文本渲染。 */
