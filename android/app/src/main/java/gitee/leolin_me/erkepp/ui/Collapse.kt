@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,6 +30,23 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ExpandableText(
     text: String,
+    modifier: Modifier = Modifier,
+    collapsedMaxLines: Int = 6,
+    style: TextStyle = MaterialTheme.typography.bodyMedium,
+    color: Color = Color.Unspecified,
+) {
+    ExpandableText(
+        text = AnnotatedString(text),
+        modifier = modifier,
+        collapsedMaxLines = collapsedMaxLines,
+        style = style,
+        color = color,
+    )
+}
+
+@Composable
+fun ExpandableText(
+    text: AnnotatedString,
     modifier: Modifier = Modifier,
     collapsedMaxLines: Int = 6,
     style: TextStyle = MaterialTheme.typography.bodyMedium,

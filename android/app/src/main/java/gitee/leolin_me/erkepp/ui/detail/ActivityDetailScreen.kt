@@ -32,10 +32,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import gitee.leolin_me.erkepp.ui.ExpandableText
 import gitee.leolin_me.erkepp.ui.InfoRow
 import gitee.leolin_me.erkepp.ui.PageLoading
 import gitee.leolin_me.erkepp.ui.SectionCard
@@ -68,6 +70,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -573,13 +576,13 @@ private fun DetailContent(
     onOpenSignScan: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-        ) {
-            CoverHeader(detail)
+        // 分区懒加载：整页一次性组合时，首次显示要 150～230ms；改成一块一个 item，
+        // 首帧只组合屏幕内的两三块，滚动时才组合后面的
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            item { CoverHeader(detail) }
 
+            // 标题区：状态、分类、活动名、主办组织、倒计时
+            item {
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 Spacer(Modifier.height(14.dp))
 
@@ -637,25 +640,44 @@ private fun DetailContent(
                     Spacer(Modifier.height(10.dp))
                     CountdownChip(detail.enrollEndTime)
                 }
+            }
+            }
 
-                Spacer(Modifier.height(16.dp))
-                StatsCard(detail)
-                Spacer(Modifier.height(12.dp))
-                ScheduleCard(detail)
-
-                if (detail.identity == 1 && detail.attendanceType != 0) {
-                    Spacer(Modifier.height(12.dp))
-                    SignCard(
-                        detail = detail,
-                        signWayNames = signWayNames,
-                        onScan = onOpenSignScan,
-                        onOpenHistory = onOpenSignHistory,
-                    )
+            // 学时 / 报名人数 / 结束时间
+            item {
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Spacer(Modifier.height(16.dp))
+                    StatsCard(detail)
                 }
+            }
 
-                if (noticePreview != null) {
+            // 报名时间、活动时间、地点、联系方式
+            item {
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                     Spacer(Modifier.height(12.dp))
-                    Card {
+                    ScheduleCard(detail)
+                }
+            }
+
+            if (detail.identity == 1 && detail.attendanceType != 0) {
+                item {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Spacer(Modifier.height(12.dp))
+                        SignCard(
+                            detail = detail,
+                            signWayNames = signWayNames,
+                            onScan = onOpenSignScan,
+                            onOpenHistory = onOpenSignHistory,
+                        )
+                    }
+                }
+            }
+
+            if (noticePreview != null) {
+                item {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Spacer(Modifier.height(12.dp))
+                        Card {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -684,11 +706,15 @@ private fun DetailContent(
                             )
                         }
                     }
+                    }
                 }
+            }
 
-                if (detail.hasRestriction) {
-                    Spacer(Modifier.height(12.dp))
-                    Card {
+            if (detail.hasRestriction) {
+                item {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Spacer(Modifier.height(12.dp))
+                        Card {
                         Text(
                             text = "参与限制",
                             style = MaterialTheme.typography.titleSmall,
@@ -709,70 +735,74 @@ private fun DetailContent(
                             InfoLine(label = "诚信值", value = "不低于 ${formatHours(detail.honestLimit)}")
                         }
                     }
-                }
-
-                if (detail.introduceHtml.isNotBlank()) {
-                    Spacer(Modifier.height(20.dp))
-                    Text(
-                        text = "活动介绍",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    if (looksLikeHtml(detail.introduceHtml)) {
-                        // 原生渲染富文本：以前这里是只读 WebView，创建 + 加载 + 量高度要 150～200ms，
-                        // 打开详情「卡一帧」就是它
-                        Text(
-                            text = htmlToAnnotated(detail.introduceHtml),
-                            style = MaterialTheme.typography.bodyMedium,
-                            lineHeight = 24.sp,
-                        )
-                    } else {
-                        Text(
-                            text = detail.introduceHtml.trim(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            lineHeight = 24.sp,
-                        )
                     }
                 }
-
-                if (detail.attachments.isNotEmpty()) {
-                    Spacer(Modifier.height(16.dp))
-                    Card {
-                        Text(
-                            text = "附件",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        val images = detail.attachments.filter { it.type == 1 }
-                        if (images.isNotEmpty()) {
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                images.forEach { image ->
-                                    AsyncImage(
-                                        model = rememberCoverRequest(image.url, 84, maxWidthPx = 336),
-                                        contentDescription = image.name,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .size(84.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .clickable { onOpenAttachment(image) },
-                                    )
-                                }
-                            }
-                            if (detail.attachments.any { it.type != 1 }) Spacer(Modifier.height(8.dp))
-                        }
-                        detail.attachments.filterNot { it.type == 1 }.forEach { attachment ->
-                            AttachmentRow(
-                                attachment = attachment,
-                                onClick = { onOpenAttachment(attachment) },
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(28.dp))
             }
+
+            if (detail.introduceHtml.isNotBlank()) {
+                item {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Spacer(Modifier.height(20.dp))
+                        Text(
+                            text = "活动介绍",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        // 介绍默认折到 8 行：整段一次性排出来既占地，也让首帧要光栅化几百个汉字
+                        ExpandableText(
+                            text = if (looksLikeHtml(detail.introduceHtml)) {
+                                htmlToAnnotated(detail.introduceHtml)
+                            } else {
+                                AnnotatedString(detail.introduceHtml.trim())
+                            },
+                            collapsedMaxLines = 8,
+                            style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 24.sp),
+                        )
+                    }
+                }
+            }
+
+            if (detail.attachments.isNotEmpty()) {
+                item {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Spacer(Modifier.height(16.dp))
+                        Card {
+                            Text(
+                                text = "附件",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            val images = detail.attachments.filter { it.type == 1 }
+                            if (images.isNotEmpty()) {
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    images.forEach { image ->
+                                        AsyncImage(
+                                            model = rememberCoverRequest(image.url, 84, maxWidthPx = 336),
+                                            contentDescription = image.name,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .size(84.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .clickable { onOpenAttachment(image) },
+                                        )
+                                    }
+                                }
+                                if (detail.attachments.any { it.type != 1 }) Spacer(Modifier.height(8.dp))
+                            }
+                            detail.attachments.filterNot { it.type == 1 }.forEach { attachment ->
+                                AttachmentRow(
+                                    attachment = attachment,
+                                    onClick = { onOpenAttachment(attachment) },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item { Spacer(Modifier.height(28.dp)) }
         }
 
         // 沙盒不显示底部动作条：那两个按钮都会联网
