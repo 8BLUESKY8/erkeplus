@@ -1,0 +1,23 @@
+erke++（二课++）
+Copyright 2026 LeoLin_ME
+
+本仓库以 Apache License 2.0 授权，全文见同目录 LICENSE。
+
+本项目是安徽理工大学「第二课堂」平台（https://win.9xueqi.com）的第三方非官方客户端，
+使用官方公开接口，不伪造、不绕过官方数据。本项目与安徽理工大学、平台运营方
+以及任何学校机构没有隶属、合作或背书关系。
+
+Apache License 2.0 只授权代码与文档，**不授权本项目名称、图标与徽记**
+（见许可证第 6 条）。二次分发或做衍生项目时，请使用你自己的名称与图标，
+并在说明中注明「基于 erke++」，不要让人误以为你是本项目或官方。
+
+---
+
+Third-party components bundled with this application:
+
+- AndroidX / Jetpack Compose、OkHttp、kotlinx.serialization、kotlinx.coroutines、
+  Coil、ZXing：均为 Apache License 2.0，其许可证全文可随依赖获取。
+- Kotlin 标准库与编译器：Apache License 2.0。
+- JUnit（仅测试）：Eclipse Public License 1.0。
+
+各组件版权归其各自作者所有。
