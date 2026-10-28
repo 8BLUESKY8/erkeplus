@@ -1,0 +1,77 @@
+#!/bin/sh
+# pre-push: protected branches advance only through merges or release commits,
+# and are never deleted or force-pushed.
+#
+# stdin, one line per ref: <local ref> <local sha> <remote ref> <remote sha>
+# args:  $1 remote name   $2 remote url
+#
+# Escape hatches: ALLOW_FORCE_PUSH=1 (history rewrite)
+# Rules live in docs/conventions.md.
+
+# Branches that may only advance through merges / release commits.
+PROTECTED="master"
+
+zero="0000000000000000000000000000000000000000"
+remote="$1"
+status=0
+
+is_protected() {
+  case " $PROTECTED " in
+    *" $1 "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+while read -r lref lsha rref rsha; do
+  [ -n "$rref" ] || continue
+
+  case "$rref" in
+    refs/heads/*) ;;
+    *) continue ;;
+  esac
+
+  branch=${rref#refs/heads/}
+  is_protected "$branch" || continue
+
+  if [ "$lsha" = "$zero" ]; then
+    echo "pre-push: refusing to delete '$branch' on '$remote'." >&2
+    echo "  Deleting a protected branch is deliberate; use --no-verify if intended." >&2
+    status=1
+    continue
+  fi
+
+  # New remote branch: nothing to compare against.
+  [ "$rsha" = "$zero" ] && continue
+
+  if ! git merge-base --is-ancestor "$rsha" "$lsha" </dev/null >/dev/null 2>&1; then
+    if [ "$ALLOW_FORCE_PUSH" != "1" ]; then
+      echo "pre-push: '$branch' would be force-pushed to '$remote' (not fast-forward)." >&2
+      echo "  Set ALLOW_FORCE_PUSH=1 if rewriting history is intended." >&2
+      status=1
+      continue
+    fi
+  fi
+
+  found=0
+  for c in $(git rev-list --first-parent --no-merges "$rsha..$lsha" </dev/null 2>/dev/null); do
+    subj=$(git log -1 --format=%s "$c" </dev/null 2>/dev/null)
+    case "$subj" in
+      "Merge "* | "chore(release):"* ) ;;
+      *)
+        if [ "$found" = 0 ]; then
+          echo "pre-push: '$branch' would receive commits made directly on it:" >&2
+          found=1
+        fi
+        echo "  - $(git log -1 --format='%h %s' "$c" </dev/null 2>/dev/null)" >&2
+        ;;
+    esac
+  done
+
+  if [ "$found" = 1 ]; then
+    echo "  Merge a topic branch instead, or commit with ALLOW_PROTECTED_COMMIT=1," >&2
+    echo "  or use 'chore(release): <version>' for a version bump." >&2
+    status=1
+  fi
+done
+
+exit "$status"

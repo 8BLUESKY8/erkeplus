@@ -1,0 +1,64 @@
+#!/bin/sh
+# pre-commit: no direct commits on protected branches, and no accidental
+# commits of secrets / build output / local-only material.
+#
+# Escape hatch: ALLOW_PROTECTED_COMMIT=1 git commit ...   (release bumps only)
+# Rules live in docs/conventions.md.
+
+# Branches that may only advance through merges / release commits.
+PROTECTED="master"
+
+is_protected() {
+  case " $PROTECTED " in
+    *" $1 "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null)
+
+if [ -n "$branch" ] && is_protected "$branch"; then
+  if [ "$ALLOW_PROTECTED_COMMIT" != "1" ]; then
+    echo "pre-commit: direct commits on '$branch' are not allowed." >&2
+    echo "" >&2
+    echo "  Create a topic branch first:" >&2
+    echo "    git switch -c feat/<slug>" >&2
+    echo "" >&2
+    echo "  Merge it back with: git switch $branch && git merge --no-ff <branch>" >&2
+    echo "  Release version bumps: ALLOW_PROTECTED_COMMIT=1 git commit ..." >&2
+    echo "  See docs/conventions.md." >&2
+    exit 1
+  fi
+fi
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+bad=""
+for f in $staged; do
+  case "$f" in
+    tem/* ) bad="$bad
+  - $f  (local reference material, not tracked)" ;;
+    .tools/* ) bad="$bad
+  - $f  (local tooling / secrets, not tracked)" ;;
+    docs/_local/* ) bad="$bad
+  - $f  (private notes, not tracked)" ;;
+    *.jks | *.keystore | *.p12 ) bad="$bad
+  - $f  (signing material)" ;;
+    *.apk | *.aab ) bad="$bad
+  - $f  (build output)" ;;
+    *.log ) bad="$bad
+  - $f  (log file)" ;;
+    local.properties | */local.properties ) bad="$bad
+  - $f  (machine specific)" ;;
+  esac
+done
+
+if [ -n "$bad" ]; then
+  echo "pre-commit: these staged paths must not be committed:" >&2
+  printf '%s\n' "$bad" >&2
+  echo "" >&2
+  echo "  Unstage with: git restore --staged <path>" >&2
+  exit 1
+fi
+
+exit 0
