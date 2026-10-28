@@ -909,6 +909,15 @@ class MainActivity : ComponentActivity() {
                                                 goTab(MainTab.SETTINGS)
                                             },
                                             onOpenScan = { showHomeScan = true },
+                                            adsActive = pagerState.settledPage == MainTab.DISCOVER.ordinal && webUrl == null,
+                                            onOpenAd = { target ->
+                                                // 外部广告不经过会注入官方登录态的 WebShell。
+                                                runCatching {
+                                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(target)))
+                                                }.onFailure {
+                                                    Toast.makeText(this@MainActivity, "无法打开链接，请安装浏览器后重试", Toast.LENGTH_SHORT).show()
+                                                }
+                                            },
                                         )
 
                                         MainTab.PROFILE -> ProfileScreen(

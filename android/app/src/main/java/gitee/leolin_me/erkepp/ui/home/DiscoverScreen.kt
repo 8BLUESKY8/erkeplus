@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -84,6 +85,10 @@ import gitee.leolin_me.erkepp.ui.prefetchCovers
 import gitee.leolin_me.erkepp.ui.rememberCoverRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import gitee.leolin_me.erkepp.data.DiscoverAds
+import gitee.leolin_me.erkepp.data.parseDiscoverAds
 
 private val StatusOptions = listOf(
     // 只有状态 5 是学生端可报名的；1 和 3 是未审核，官方页面底部写「未审核」，学时也未结算
@@ -156,6 +161,8 @@ fun DiscoverScreen(
     onOpenActivity: (Long) -> Unit,
     onOpenBlockRules: () -> Unit = {},
     onOpenScan: () -> Unit = {},
+    adsActive: Boolean = true,
+    onOpenAd: (String) -> Unit = {},
 ) {
     val categoriesEnabled = preferences.categoriesEnabled
     val showCategoryTags = preferences.showCategoryTags
@@ -174,6 +181,13 @@ fun DiscoverScreen(
     val gridState = rememberLazyGridState()
     val coverWidthDp = gridCardWidthDp()
     val context = LocalContext.current
+    var ads by remember { mutableStateOf(DiscoverAds()) }
+    LaunchedEffect(context) {
+        ads = withContext(Dispatchers.IO) {
+            runCatching { context.assets.open("ads.json").bufferedReader().use { parseDiscoverAds(it.readText()) } }
+                .getOrDefault(DiscoverAds())
+        }
+    }
     val prefetchedCovers = remember { mutableSetOf<String>() }
 
     var search by rememberSaveable { mutableStateOf(initialSearch) }
@@ -426,7 +440,9 @@ fun DiscoverScreen(
     LaunchedEffect(gridState) {
         snapshotFlow {
             val info = gridState.layoutInfo
-            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            // 广告和加载提示不参与活动分页的索引计算。
+            val last = info.visibleItemsInfo.lastOrNull { it.contentType == "activity" }?.index
+                ?.minus(if (ads.top.isNotEmpty() || ads.showPlaceholders) 1 else 0) ?: -1
             last to visibleItems.size
         }.collect { (last, count) ->
             val threshold = if (preloadEnabled) 8 else 2
@@ -589,80 +605,97 @@ fun DiscoverScreen(
             }
         }
 
-        when {
-            loading && items.isEmpty() -> PageLoading()
-
-            error != null && items.isEmpty() -> Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text(error.orEmpty(), color = MaterialTheme.colorScheme.error)
-                Spacer(Modifier.height(12.dp))
-                TextButton(onClick = { reload() }) { Text("重试") }
-            }
-
-            items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("没有符合条件的活动", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-
-            scanning && visibleItems.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    PageLoading(Modifier.size(40.dp))
-                    Spacer(Modifier.height(12.dp))
-                    Text("正在搜索…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LazyVerticalGrid(
+            state = gridState,
+            columns = GridCells.Fixed(2),
+            contentPadding = PaddingValues(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+        ) {
+            if (ads.top.isNotEmpty() || ads.showPlaceholders) {
+                item(key = "ad-top", contentType = "ad", span = { GridItemSpan(maxLineSpan) }) {
+                    AdCarousel(ads.top, bottom = false, active = adsActive,
+                        showPlaceholder = ads.showPlaceholders, onOpen = onOpenAd)
                 }
             }
+            if (visibleItems.isEmpty()) {
+                item(key = "activity-state", contentType = "state", span = { GridItemSpan(maxLineSpan) }) {
+                    Box(Modifier.fillMaxWidth().height(240.dp), contentAlignment = Alignment.Center) {
+                        when {
+                            loading && items.isEmpty() -> PageLoading()
 
-            visibleItems.isEmpty() && searchTerms.isNotEmpty() ->
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "没有找到与「${debouncedSearch.trim()}」相关的活动",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                            error != null && items.isEmpty() -> Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                Text(error.orEmpty(), color = MaterialTheme.colorScheme.error)
+                                Spacer(Modifier.height(12.dp))
+                                TextButton(onClick = { reload() }) { Text("重试") }
+                            }
 
-            visibleItems.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("没有匹配的活动（被屏蔽规则过滤了）", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+                            items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("没有符合条件的活动", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
 
-            else -> LazyVerticalGrid(
-                state = gridState,
-                columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                items(visibleItems, key = { it.id }, contentType = { "activity" }) { item ->
-                    ActivityCard(
-                        item = item,
-                        showCategoryTags = showCategoryTags,
-                        showHours = showHours,
-                        showCount = showCount,
-                        showOrganization = showOrganization,
-                        showTime = showTime,
-                        customText = customText,
-                        showCover = showCover,
-                        coverWidthDp = coverWidthDp,
-                        // 搜索命中通常只有几条，标题多给一行，别让不同的活动看起来一模一样
-                        titleLines = if (searchTerms.isEmpty()) titleLines else maxOf(titleLines, 2),
-                        onClick = { onOpenActivity(item.id) },
-                    )
-                }
-                if (loadingMore) {
-                    item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            InlineLoading(size = 24.dp)
+                            scanning && visibleItems.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    PageLoading(Modifier.size(40.dp))
+                                    Spacer(Modifier.height(12.dp))
+                                    Text("正在搜索…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+
+                            visibleItems.isEmpty() && searchTerms.isNotEmpty() ->
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = "没有找到与「${debouncedSearch.trim()}」相关的活动",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+
+                            visibleItems.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("没有匹配的活动（被屏蔽规则过滤了）", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
+                }
+            }
+            items(visibleItems, key = { it.id }, contentType = { "activity" }) { item ->
+                ActivityCard(
+                    item = item,
+                    showCategoryTags = showCategoryTags,
+                    showHours = showHours,
+                    showCount = showCount,
+                    showOrganization = showOrganization,
+                    showTime = showTime,
+                    customText = customText,
+                    showCover = showCover,
+                    coverWidthDp = coverWidthDp,
+                    // 搜索命中通常只有几条，标题多给一行，别让不同的活动看起来一模一样
+                    titleLines = if (searchTerms.isEmpty()) titleLines else maxOf(titleLines, 2),
+                    onClick = { onOpenActivity(item.id) },
+                )
+            }
+            if (loadingMore) {
+                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        InlineLoading(size = 24.dp)
+                    }
+                }
+            }
+            if (ads.bottom.isNotEmpty() || ads.showPlaceholders) {
+                item(key = "ad-bottom", contentType = "ad", span = { GridItemSpan(maxLineSpan) }) {
+                    AdCarousel(ads.bottom, bottom = true, active = adsActive,
+                        showPlaceholder = ads.showPlaceholders, onOpen = onOpenAd)
                 }
             }
         }
