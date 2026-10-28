@@ -11,6 +11,12 @@
   [docs/decisions/0004-license.md](docs/decisions/0004-license.md)
 - 许可证只授权代码与文档，**不授权名称与图标**；README 增加「二次开发须知」，
   要求派生项目保留署名、不要沿用「二课++」品牌、接广告后自行重写隐私说明
+- 补齐分支纪律：`master` 只接受合并提交与 `chore(release):`，直接提交由 `.githooks/`
+  （`commit-msg` / `pre-commit` / `pre-push`）拦下。克隆后执行一次
+  `git config core.hooksPath .githooks` 启用。规则写进
+  [docs/conventions.md](docs/conventions.md) 的「分支与合并」
+- 新增 PR 模板（`.gitee/`、`.github/` 各一份）与根目录 [AGENTS.md](AGENTS.md)：
+  前者把完成的定义做成合并前的检查项，后者给接手的 AI 助手一份「怎么在这儿干活」
 
 ## [0.9.0] - 2026-10-25
 
