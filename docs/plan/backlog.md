@@ -23,6 +23,22 @@
 
 **状态**：未开始。
 
+## 2. 人物主页还缺的两张列表
+
+**现状**：人物主页「概况」里的「加入组织」「广场动态」只有计数，点不动。对应的两张列表页
+没做，挂个死箭头比不挂更糟，所以先空着（[docs/design/person.md](../design/person.md) 第 32 行）。
+
+**要做**：
+
+- 两栏分别对应官方 `#/userShows/<id>` 里的哪个分区、走哪个接口，先探明再动手——
+  「参加的活动」是 `activity/other-list`，「加入组织」「广场动态」的路径与接口都还没实测
+- 版式照「参加的活动列表」：顶部共 N 条，行可点，分页听「预加载下一页」开关
+- 官方的 `#/userShows/<id>` 还有没有别的分区没对齐，登录后逐项核对一遍，
+  别只补这两处就宣布页面完成
+- 学时 `PersonProfile.hours` 已经解析好，但官方页面不展示，这里也不展示——除非用户要
+
+**状态**：未开始，接口未探。
+
 ## 已完成
 
 - 2026-10-25 **已报名的活动不被屏蔽词吃掉**：`BlockRules.blocks(item, blockEnrolledToo)`，
@@ -30,4 +46,5 @@
 - 2026-10-25 **排行榜与组织负责人可点进人物主页**：`RankEntry.userId`、`OrgMember.id`，
   `id <= 0` 的行不可点；组织成员列表做出来后同样接这里。
 - 2026-10-25 **人物主页**：`UserProfileScreen`，接口 `message/chat/follow/user/info`，
-  字段说明见 [docs/design/person.md](../design/person.md)。
+  字段说明见 [docs/design/person.md](../design/person.md)。**只做完一半**：入口、参加的活动列表
+  有了，「加入组织」「广场动态」两张列表还没做，见第 2 条。
