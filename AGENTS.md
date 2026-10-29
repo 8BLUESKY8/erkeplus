@@ -103,3 +103,43 @@ release 包不往 logcat 写（`AppLog` 里按 `BuildConfig.DEBUG` 分流），�
   任何接口结论先查 `docs/api/`，没有就自己抓包，别猜。
 - **界面文案少用 emoji**，暗色模式是重点适配对象，改 UI 两个主题都要看。
 - **单元测试只覆盖纯逻辑**（解析、计算、状态映射），涉及 Compose 与网络的走真机走查。
+
+## 七、本机网页抓包与浏览器调试（2026-10-29 实测）
+
+### 两条会让人白折腾半天的坑
+
+1. **系统代理会吞掉 loopback**。`Steam++.Accelerator.exe`（Watt Toolkit）在
+   `127.0.0.1:26561` 开着系统代理，豁免列表里**没有** `127.0.0.1` / `<local>`。
+   后果：任何走系统代理的客户端（PowerShell `Invoke-WebRequest`、.NET `ClientWebSocket`）
+   访问本机调试端口时，表现是 **HTTP 一律 404、WebSocket 卡在 `Connecting`**，看着像端口废了。
+   解法：HTTP 用 `[System.Net.HttpWebRequest]` 并置 `$req.Proxy = $null`；
+   WebSocket 连接前先 `$ws.Options.Proxy = $null`。
+2. **`chrome-devtools` MCP 只认 Chrome**。它走 auto-connect，盯的是
+   `%LOCALAPPDATA%\Google\Chrome\User Data\DevToolsActivePort`：
+   - 必须先有一个**正在运行且开了远程调试的 Chrome**，否则直接报
+     `Could not find DevToolsActivePort for chrome`——这是文件找不到，跟代理无关。
+   - **Edge 顶不上**。Edge 自带的「Remote debugging」开关（`edge://inspect/#remote-debugging`）
+     会占住 9222，但它**不实现 `/json/*` 接口**（全部 404），MCP 也不会去找它。
+   - 排查线索：`~/.cache/chrome-devtools-mcp/` 下只有 `latest.json`、没有 `chrome-profile`
+     目录，说明 MCP 从来没自己拉起过浏览器，一直在连现成的 Chrome。
+
+### 用 Edge 抓包（本次验证可用的路径）
+
+Edge 的调试端点写在 `%LOCALAPPDATA%\Microsoft\Edge\User Data\DevToolsActivePort`：
+第一行端口，第二行 `/devtools/browser/<uuid>`。拿到之后：
+
+1. `ClientWebSocket`（**先关代理**）连 `ws://127.0.0.1:<端口><路径>`
+2. `Target.getTargets` 列页面 → `Target.attachToTarget { targetId, flatten: true }` 取 `sessionId`
+3. 之后命令都带 `sessionId`：`Runtime.evaluate` 取数据；
+   `Network.enable` + 监听 `Network.responseReceived` + `Network.getResponseBody` 抓响应体
+
+可复用脚本在 `tem/cdp.ps1`（不入库）：
+
+```powershell
+cd tem
+powershell -NoProfile -ExecutionPolicy Bypass -File .\cdp.ps1 -Targets
+powershell -NoProfile -ExecutionPolicy Bypass -File .\cdp.ps1 -Expr "location.href"
+```
+
+要抓 `https://win.9xueqi.com` 的接口，前提是**用户已经在该 Edge 里登录**：登录只能由用户自己做，
+不要代填账号密码，也不要把 token 打进任何输出。
